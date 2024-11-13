@@ -1,0 +1,6 @@
+{
+    "board": "arduino:avr:nano",
+    "port": "COM7",
+    "sketch": "tires\\tires.ino",
+    "configuration": "cpu=atmega328"
+}
