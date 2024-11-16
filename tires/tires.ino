@@ -21,7 +21,6 @@
 #define TFT_DC 7
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-//Adafruit_MLX90614 mlxs[] = {Adafruit_MLX90614(), Adafruit_MLX90614(), Adafruit_MLX90614(), Adafruit_MLX90614()};
 
 Adafruit_MLX90614 mlx_0;
 
@@ -32,7 +31,6 @@ float time = 0.0; // Time variable to drive the sine wave oscillation
   // Static array to hold the temperatures of the four tires
   float tireTemps[TIRE_COUNT];
 
-float p = 3.1415926;
 
 // Tire Class Definition
 class Tire
@@ -242,11 +240,6 @@ void setup(void)
   Serial.println("mlx.begin");
   mlx_0.begin();
   
-  for (uint8_t i = 0; i < TIRE_COUNT; i++)
-  {
-    //select_I2C_bus(i);
-    //mlxs[i].begin();
-  }
   
   Serial.println("mlx.begun");
 }
@@ -257,11 +250,10 @@ void loop()
   // Get the temperatures for all 4 tires
   // float *temps = GetTemps(70, 220, 180);
   
-  //float temps[] = {0.0f, 0.0f, 0.0f, 0.0f};
+
   for (uint8_t i = 0; i < TIRE_COUNT; i++)
   {
-    //float temp = 106.0f;//getTemp(i, Null, true);
-    // float temp = getTemp(i, mlxs[i], true);
+
    float temp = getTemp(i, true);
     if (isnan(temp))
       temp = 0.0f;
