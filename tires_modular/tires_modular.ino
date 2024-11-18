@@ -18,6 +18,7 @@
 #define MAGENTA 0xF81F
 #define YELLOW 0xFFE0
 #define WHITE 0xFFFF
+//#define PURPLE 0xE01F//0xD01F
 
 #define TFT_CS 10
 #define TFT_RST 8
@@ -50,7 +51,6 @@ long timeDelta()
 void setup(void)
 {
     Serial.begin(9600);
-    Serial.print(F("Hello! ST77xx TFT Test"));
 
     bluetoothSerial.begin(9600);
     nbp.sendMetadata("NAME", "Tire Temp Reader");
@@ -60,12 +60,14 @@ void setup(void)
 
     tft.setRotation(1);
     tft.fillScreen(ST77XX_BLACK);
-    wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 100.0, 180.0, 'F');
+    //wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 100.0, 120.0, 180.0, 'F');
+        wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 75.0, 85.0, 100.0, 'F');
     tempReader = new TempReader();
 
     // drawTires(WHITE, BLUE);
-    wheels->setTireTemps(200, 200, 200, 200);
-    wheels->draw();
+    //wheels->setTireTemps(200, 200, 200, 200);
+    wheels->setTireTemps(0, 0, 0, 0);
+    wheels->draw(true);
 
     Wire.begin();
 }

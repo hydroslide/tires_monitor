@@ -21,7 +21,7 @@ public:
     Tire(int _x, int _y, int _width, int _height, uint16_t _outlineColor, uint16_t _textColor, char _tempUnit);
     void draw(bool force=false);
     void printTemp();
-    void setTemp(float temp, float minTemp, float maxTemp, uint16_t lowColor, uint16_t normalColor, uint16_t highColor);
+    void setTemp(float temp, float minTemp, float idealTemp, float maxTemp, uint16_t lowColor, uint16_t normalColor, uint16_t idealColor, uint16_t highColor);
 };
 
 #endif

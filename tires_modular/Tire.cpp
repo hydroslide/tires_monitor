@@ -32,13 +32,15 @@ void Tire::printTemp() {
     lastTemp = temperature;
 }
 
-void Tire::setTemp(float temp, float minTemp, float maxTemp, uint16_t lowColor, uint16_t normalColor, uint16_t highColor) {
+void Tire::setTemp(float temp, float minTemp, float idealTemp, float maxTemp, uint16_t lowColor, uint16_t normalColor, uint16_t idealColor, uint16_t highColor) {
     if (isnan(temp)) temp = 0.0f;
     temperature = temp;
 
     uint16_t newColor;
     if (temperature < minTemp) {
         newColor = lowColor;
+    } else if (temperature >= idealTemp && temperature<= maxTemp) {
+        newColor = idealColor;
     } else if (temperature > maxTemp) {
         newColor = highColor;
     } else {
