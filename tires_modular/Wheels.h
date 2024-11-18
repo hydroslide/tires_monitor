@@ -9,7 +9,7 @@ class Wheels {
 public:
     Tire frontLeft, frontRight, rearLeft, rearRight;
     float minTemp, maxTemp;
-    uint16_t lowTempColor, normalTempColor, highTempColor, textColor;
+    uint16_t lowTempColor, normalTempColor, idealTempColor, highTempColor, textColor;
 
     Wheels();
     Wheels(int bufferPix, uint16_t outlineColor, uint16_t _textColor, float _minTemp, float _maxTemp, char tempUnit,
@@ -17,6 +17,11 @@ public:
     void draw(bool force=false);
     void setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp);
     void setup();
+    char getTempUnit();
+    void setTempUnit(char tempUnit);
+
+private:
+    char _tempUnit;
 };
 
 #endif

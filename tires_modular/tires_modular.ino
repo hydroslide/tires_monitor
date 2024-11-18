@@ -1,14 +1,13 @@
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
-//#include <Adafruit_MLX90614.h>
 #include <SPI.h>
 #include <Wire.h>
 
 #include "Tire.h"
 #include "Wheels.h"
 #include "TempReader.h"
-
-
+#include <SoftwareSerial.h>
+#include "NBPProtocol.h"
 
 // Color definitions
 #define BLACK 0x0000
@@ -26,48 +25,76 @@
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
+// HC-05 Bluetooth module connected to pins 10 (RX) and 11 (TX)
+SoftwareSerial bluetoothSerial(3, 2);
+NBPProtocol nbp(bluetoothSerial);
+//NBPProtocol nbp(Serial);
 
+long millisSinceLastUpdate = 0;
+long updateIntervalMillis = 1000;
 
 // Global object of Wheels
 Wheels *wheels;
 
-TempReader* tempReader;
+TempReader *tempReader;
+
+unsigned long previousTime;
+long timeDelta()
+{
+  unsigned long currentTime = millis();
+  long delta = (long)(currentTime - previousTime);
+  previousTime = currentTime;
+  return delta;
+}
 
 void setup(void)
 {
-  Serial.begin(9600);
-  Serial.print(F("Hello! ST77xx TFT Test"));
+    Serial.begin(9600);
+    Serial.print(F("Hello! ST77xx TFT Test"));
 
-  tft.init(240, 280); // Init ST7789 280x240
+    bluetoothSerial.begin(9600);
+    nbp.sendMetadata("NAME", "Tire Temp Reader");
+    nbp.sendMetadata("VERSION", "0.1");
 
-  tft.setRotation(1);
-  tft.fillScreen(ST77XX_BLACK);
-  wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 100.0, 180.0, 'F');
-  tempReader = new TempReader();
+    tft.init(240, 280); // Init ST7789 280x240
 
+    tft.setRotation(1);
+    tft.fillScreen(ST77XX_BLACK);
+    wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 100.0, 180.0, 'F');
+    tempReader = new TempReader();
 
-  // drawTires(WHITE, BLUE);
-  wheels->setTireTemps(200, 200, 200, 200);
-  wheels->draw();
+    // drawTires(WHITE, BLUE);
+    wheels->setTireTemps(200, 200, 200, 200);
+    wheels->draw();
 
-  Wire.begin();
-
+    Wire.begin();
 }
 
 void loop()
 {
-  Serial.println("Top of Loop");
-  // Get the temperatures for all 4 tires
-  // float *temps = GetTemps(70, 220, 180);
-  
+    millisSinceLastUpdate += timeDelta();
 
-  tempReader->readTemps();
+    if (millisSinceLastUpdate >= updateIntervalMillis)
+    {
+       Serial.print("Top of Loop - millisSinceLastUpdate: ");
+       Serial.print(millisSinceLastUpdate);
+        Serial.print(" > updateIntervalMillis: ");
+        Serial.println(updateIntervalMillis);
+        millisSinceLastUpdate = 0;
 
+       
+        // Get the temperatures for all 4 tires
+        // float *temps = GetTemps(70, 220, 180);
 
-  // Set the temperature for each tire based on the returned values
-  wheels->setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3]);
-  wheels->draw();
+        tempReader->readTemps();
 
-  // Small delay to control the update rate
-  delay(1000); // 100 ms delay (adjust as needed for smoothness)
+        nbp.setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3], (wheels->getTempUnit()=='F'));
+
+        // Set the temperature for each tire based on the returned values
+        wheels->setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3]);
+        wheels->draw();
+    }
+
+    // Small delay to control the update rate
+    delay(50);
 }

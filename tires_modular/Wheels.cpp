@@ -18,6 +18,7 @@ Wheels::Wheels(int bufferPix, uint16_t outlineColor, uint16_t _textColor, float 
     int tire_0_y = bufferPix;
     int tire_1_y = tire_0_y + tireHeight + bufferPix;
 
+    _tempUnit = tempUnit;
     frontLeft = Tire(tire_0_x, tire_0_y, tireWidth, tireHeight, outlineColor, _textColor, tempUnit);
     frontRight = Tire(tire_1_x, tire_0_y, tireWidth, tireHeight, outlineColor, _textColor, tempUnit);
     rearLeft = Tire(tire_0_x, tire_1_y, tireWidth, tireHeight, outlineColor, _textColor, tempUnit);
@@ -37,6 +38,15 @@ void Wheels::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearL
     rearLeft.setTemp(rearLeftTemp, minTemp, maxTemp, lowTempColor, normalTempColor, highTempColor);
     rearRight.setTemp(rearRightTemp, minTemp, maxTemp, lowTempColor, normalTempColor, highTempColor);
 }
+
+    char Wheels::getTempUnit(){ return _tempUnit;}
+    void Wheels::setTempUnit(char tempUnit){
+        _tempUnit=tempUnit;
+        frontLeft.tempUnit=tempUnit;
+        frontRight.tempUnit=tempUnit;
+        rearLeft.tempUnit=tempUnit;
+        rearRight.tempUnit=tempUnit;
+    }
 
 void Wheels::setup(){
     
