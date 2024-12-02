@@ -33,9 +33,9 @@
 #define KEY_C 3
 
 // Pins encoder is connected to
-const byte channelA = 2;
-const byte channelB = 3;
-const byte buttonPin = 4;
+const byte channelA = 6;
+const byte channelB = 5;
+const byte buttonPin = 2;
 
 byte chanB = HIGH; // Variable to store Channel B readings
 
@@ -60,29 +60,19 @@ const int keyPressDelay = 1000; // How long to hold key in pressed state to trig
 long keyPressTime = 0; // Variable to hold time of the key press event
 long now; // Variable to hold current time taken with millis() function at the beginning of loop()
 
-/* Uncomment to initialize the I2C address, uncomment only one, if you get a totally blank screen try the other */
-#define i2c_Address 0x3c // Initialize with the I2C addr 0x3C Typically eBay OLED's
-//#define i2c_Address 0x3d // Initialize with the I2C addr 0x3D Typically Adafruit OLED's
 
-// Macro constants (aliases) for display setup
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET -1    //   QT-PY / XIAO
 
 #define TFT_CS 10
 #define TFT_RST 8
 #define TFT_DC 7
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-tft.init(240, 280); // Init ST7789 280x240
 
-tft.setRotation(1);
-tft.fillScreen(ST77XX_BLACK);
 
 // Create variables that will be editable through the menu and assign them initial values
-int minTemp=100;
-int idealTemp= 120;
-int maxTemp = 180;
+byte minTemp=100;
+byte idealTemp= 120;
+byte maxTemp = 180;
 bool useFarenheit = true;
 
 // Create variable that will be editable through option select and create associated option select.
@@ -96,11 +86,17 @@ GEMSelect selectInvert(sizeof(selectInvertOptions)/sizeof(SelectOptionByte), sel
 void applyInvert(); // Forward declaration
 GEMItem menuItemInvert("Chars order:", invert, selectInvert, applyInvert);
 
+
+GEMSpinnerBoundariesByte spinnerByteBoundaries = { .step = 1, .min = 30, .max = 200 };
+GEMSpinner spinnerByte(spinnerByteBoundaries);
+
+void saveCallback(GEMCallbackData callbackData); // Forward declaration of optional callback
+
 // Create two menu item objects of class GEMItem, linked to number and enablePrint variables 
-GEMItem menuItemInt("Min Temp:", minTemp);
-GEMItem menuItemInt("Ideal Temp:", idealTemp);
-GEMItem menuItemInt("Max Temp:", maxTemp);
-GEMItem menuItemBool("Farenheit:", useFarenheit);
+GEMItem menuItemMinTemp("Min Temp:", minTemp, spinnerByte, saveCallback, GEM_VAL_BYTE);
+GEMItem menuItemIdealTemp("Ideal Temp:", idealTemp, spinnerByte, saveCallback, GEM_VAL_BYTE);
+GEMItem menuItemMaxTemp("Max Temp:", maxTemp, spinnerByte, saveCallback, GEM_VAL_BYTE);
+GEMItem menuItemFarenheit("Farenheit:", useFarenheit);
 
 // Create menu button that will trigger printData() function. It will print value of our number variable
 // to Serial monitor if enablePrint is true. We will write (define) this function later. However, we should
@@ -117,11 +113,16 @@ GEMPage menuPageSettings("Settings"); // Settings submenu
 GEMItem menuItemMainSettings("Settings", menuPageSettings);
 
 // Create menu object of class GEM_adafruit_gfx. Supply its constructor with reference to display object we created earlier
-GEM_adafruit_gfx menu(display, GEM_POINTER_ROW, GEM_ITEMS_COUNT_AUTO);
+GEM_adafruit_gfx menu(tft, GEM_POINTER_ROW, GEM_ITEMS_COUNT_AUTO, 30,40,160);
 // Which is equivalent to the following call (you can adjust parameters to better fit your screen if necessary):
 // GEM_adafruit_gfx menu(display, /* menuPointerType= */ GEM_POINTER_ROW, /* menuItemsPerScreen= */ GEM_ITEMS_COUNT_AUTO, /* menuItemHeight= */ 10, /* menuPageScreenTopOffset= */ 10, /* menuValuesLeftOffset= */ 86);
 
 void setup() {
+tft.init(240, 280); // Init ST7789 280x240
+
+tft.setRotation(1);
+tft.fillScreen(ST77XX_BLACK);
+
   // Pin modes
   pinMode(channelA, INPUT_PULLUP);
   pinMode(channelB, INPUT_PULLUP);
@@ -134,17 +135,13 @@ void setup() {
   // Since the buffer is intialized with an Adafruit splashscreen
   // internally, this will display the splashscreen.
   delay(250);                       // Wait for the OLED to power up
-  display.begin(i2c_Address, true); // Address 0x3C default
-  
-  display.display();
-  delay(2000);
 
-  // Clear the buffer
-  display.clearDisplay();
+  
+
 
   // Explicitly set correct colors for monochrome OLED screen
-  menu.setForegroundColor(SH110X_WHITE);
-  menu.setBackgroundColor(SH110X_BLACK);
+  menu.setForegroundColor(ST77XX_YELLOW);
+  menu.setBackgroundColor(ST77XX_BLUE);
 
   // Disable GEM splash (it won't be visible on the screen of buffer-equiped displays such as this one any way)
   menu.setSplashDelay(0);
@@ -152,14 +149,16 @@ void setup() {
   // Turn inverted order of characters during edit mode on (feels more natural when using encoder)
   menu.invertKeysDuringEdit(invert);
   
+  menu.setTextSize(2);
+  menu.setSpriteSize(2);
+
   // Menu init, setup and draw
   menu.init();
   setupMenu();
   menu.drawMenu();
 
-  display.display();
   
-  Serial.println("Initialized");
+  //Serial.println("Initialized");
 }
 
 void setupMenu() {
@@ -168,8 +167,10 @@ void setupMenu() {
 
   // Add menu items to menu page
   menuPageMain.addMenuItem(menuItemMainSettings);
-  menuPageMain.addMenuItem(menuItemInt);
-  menuPageMain.addMenuItem(menuItemBool);
+  menuPageMain.addMenuItem(menuItemMinTemp);
+  menuPageMain.addMenuItem(menuItemIdealTemp);
+  menuPageMain.addMenuItem(menuItemMaxTemp);
+  menuPageMain.addMenuItem(menuItemFarenheit);
   menuPageMain.addMenuItem(menuItemButton);
 
   // Specify parent menu page for the Settings menu page
@@ -259,20 +260,33 @@ void loop() {
       }
     }
     
-    // Necessary to actually draw current state of the menu on screen
-    display.display();
+
   }
 }
 
-void printData() {
-  // If enablePrint flag is set to true (checkbox on screen is checked)...
-  if (enablePrint) {
-    // ...print the number to Serial
-    Serial.print("Number is: ");
-    Serial.println(number);
-  } else {
-    Serial.println("Printing is disabled, sorry:(");
+void saveSettings(){
+  // Do Nothing
+}
+
+void saveCallback(GEMCallbackData callbackData) {
+  // Print variable to Serial
+  Serial.print("Selected value: ");
+  /*
+  switch (callbackData.valInt) {
+    case GEM_VAL_BYTE:
+        Serial.println(byteNumber);
+        break;
+      case GEM_VAL_INTEGER:
+        Serial.println(intNumber);
+        break;
+      case GEM_VAL_FLOAT:
+        Serial.println(floatNumber);
+        break;
+      case GEM_VAL_DOUBLE:
+        Serial.println(doubleNumber);
+        break;
   }
+  */
 }
 
 void applyInvert() {
