@@ -2,6 +2,8 @@
 #include <SPI.h>
 #include <Wire.h>
 
+extern HWCDC USBSerial;
+
 TempReader::TempReader(){}
 
 void TempReader::readTemps(){
@@ -11,21 +13,21 @@ void TempReader::readTemps(){
     float temp = getTemp(i, true);
         if (isnan(temp))
         temp = 0.0f;
-        Serial.print("Temp Read: ");
-        Serial.println(temp);
+        USBSerial.print("Temp Read: ");
+        USBSerial.println(temp);
         tireTemps[i] = temp;
     }
 }
 
 void TempReader::setup(){
-    Serial.println("mlx.begin");
+    USBSerial.println("mlx.begin");
     mlx_0.begin();  
-    Serial.println("mlx.begun");
+    USBSerial.println("mlx.begun");
 }
 
 float TempReader::getTemp(uint8_t index, bool farenheit){
-    Serial.print("Getting temp: ");
-    Serial.println(index);
+    USBSerial.print("Getting temp: ");
+    USBSerial.println(index);
     select_I2C_bus(index);
     mlx_0.begin();
     //return 0.0f;
@@ -42,6 +44,6 @@ void TempReader::select_I2C_bus(uint8_t bus){
     // send byte to select bus
     if (Wire.endTransmission() != 0)
     {
-        Serial.println("I2C error");
+        USBSerial.println("I2C error");
     }
 }

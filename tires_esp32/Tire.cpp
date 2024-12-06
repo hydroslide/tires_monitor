@@ -1,6 +1,7 @@
 #include "Tire.h"
 
 extern Adafruit_ST7789 tft;
+extern HWCDC USBSerial;
 
 Tire::Tire() {}
 
@@ -10,8 +11,11 @@ Tire::Tire(int _x, int _y, int _width, int _height, uint16_t _outlineColor, uint
 void Tire::draw(bool force) {
     if ((int)temperature != (int)lastTemp) {
         int radius = 20;
+        //USBSerial.println("Before fillRect");        
         if (force || crossedThreshold) tft.fillRoundRect(x, y, width, height, radius, fillColor);
+        //USBSerial.println("Before printTemp");
         printTemp();
+        //USBSerial.println("Before drawRoundRect");
         if (force || crossedThreshold) tft.drawRoundRect(x, y, width, height, radius, outlineColor);
     }
 }
@@ -21,8 +25,9 @@ void Tire::printTemp() {
     String tempString = String(tempInt) + (char)0xF7 + tempUnit;
 
     uint16_t textWidth, textHeight;
+    int16_t c_x, c_y;
     tft.setTextSize(4);
-    tft.getTextBounds(tempString, 0, 0, NULL, NULL, &textWidth, &textHeight);
+    tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
     int startX = x + (width - textWidth) / 2;
     tft.setCursor(startX, y + (height / 2) - (textHeight / 2));
