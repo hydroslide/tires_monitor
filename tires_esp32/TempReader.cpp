@@ -42,8 +42,28 @@ void TempReader::select_I2C_bus(uint8_t bus){
     Wire.write(1 << bus);
 
     // send byte to select bus
-    if (Wire.endTransmission() != 0)
+    int result = Wire.endTransmission();
+    if (result != 0)
     {
-        USBSerial.println("I2C error");
+        String err="";
+        switch(result){
+            case 1:
+                err="length to long for buffer";
+                break;
+                            case 2:
+                err="address send, NACK received";
+                break;
+                            case 3:
+                err="data send, NACK received";
+                break;
+                            case 4:
+                err="other twi error (lost bus arbitration, bus error, ..)";
+                break;
+                            case 5:
+                err="timeout";
+                break;
+        }
+        USBSerial.print("I2C error: ");
+        USBSerial.println(err);
     }
 }

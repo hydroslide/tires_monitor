@@ -106,7 +106,8 @@ void setup(void)
 
     USBSerial.println("Before Wire.begin()");    
     // Initialize I2C with custom pins
-    Wire.begin(SDA_PIN, SCL_PIN);
+    Wire.setPins(IIC_SDA, IIC_SCL);
+     Wire.begin();
      USBSerial.println("Bottom of ESP32 Tires Setup");
 
 }
