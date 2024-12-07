@@ -10,13 +10,13 @@
 #include "Tire.h"
 #include "Wheels.h"
 #include "TempReader.h"
-#include "NBPProtocol.h"
-#include "BLESerial.h"
+//#include "NBPProtocol.h"
+//#include "BLESerial.h"
 
 
 
-#define SDA_PIN 21
-#define SCL_PIN 22
+#define SDA_PIN 11//21
+#define SCL_PIN 10//22
 
 // Color definitions
 #define BLACK 0x0000
@@ -30,12 +30,14 @@
 //#define PURPLE 0xE01F//0xD01F
 
 HWCDC USBSerial;
-
-Adafruit_ST7789 tft = Adafruit_ST7789(LCD_CS, LCD_DC, LCD_MOSI, LCD_SCK, LCD_RST); //Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+SPIClass hspi(HSPI);
+Adafruit_ST7789 tft = Adafruit_ST7789(&hspi, LCD_CS, LCD_DC, LCD_RST);
 
 // Create a BluetoothSerial instance
-BLESerial bleSerial;
-NBPProtocol nbp(bleSerial);
+//BLESerial bleSerial;
+//NBPProtocol nbp(bleSerial);
+
+
 //BluetoothSerial bluetoothSerial;
 // NBPProtocol nbp(bluetoothSerial);
 //NBPProtocol nbp(USBSerial);
@@ -66,6 +68,7 @@ void setup(void)
     pinMode(LCD_BL, OUTPUT);
     digitalWrite(LCD_BL, HIGH);
 
+/*
     // Start Bluetooth with the desired device name
          if (!bleSerial.begin("Tire Temp Monito")) {
         USBSerial.println("Failed to start BLE!");
@@ -80,14 +83,18 @@ void setup(void)
     
     nbp.sendMetadata("NAME", "Tire Temp Reader");
     nbp.sendMetadata("VERSION", "0.1");
-
-    tft.init(240, 280); // Init ST7789 280x240
+*/
+    hspi.begin(LCD_SCK, -1, LCD_MOSI, LCD_CS);
+      // 80MHz should work, but you may need lower speeds
+    tft.setSPISpeed(80000000);
+    // this will vary depending on your display
+    tft.init(240, 280, SPI_MODE0);
 
     tft.setRotation(1);
     tft.fillScreen(ST77XX_BLACK);
     //wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 100.0, 120.0, 180.0, 'F');
     wheels = new Wheels(10, ST77XX_YELLOW, ST77XX_WHITE, 75.0, 85.0, 100.0, 'F');
-    //tempReader = new TempReader(); // TODO: Uncomment this
+    tempReader = new TempReader(); // TODO: Uncomment this
 
     // drawTires(WHITE, BLUE);
 
@@ -116,9 +123,10 @@ void loop()
        USBSerial.print(millisSinceLastUpdate);
         USBSerial.print(" > updateIntervalMillis: ");
         USBSerial.println(updateIntervalMillis);
+        long tempMillis = millisSinceLastUpdate;
         millisSinceLastUpdate = 0;
 
-       
+
 
 
         // Get the temperatures for all 4 tires
@@ -126,10 +134,12 @@ void loop()
 
         tempReader->readTemps();
 
-        nbp.setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3], (wheels->getTempUnit()=='F'));
+        //nbp.setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3], (wheels->getTempUnit()=='F'));
 
         // Set the temperature for each tire based on the returned values
         wheels->setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3]);
+        int newTemp = (int)(tempMillis%100);
+        //wheels->setTireTemps(newTemp+1, newTemp+2, newTemp+3, newTemp+4);
         wheels->draw();
 
   
