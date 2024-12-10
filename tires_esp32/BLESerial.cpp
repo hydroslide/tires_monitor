@@ -1,4 +1,5 @@
 #include "BLESerial.h"
+#include "BLEServerCallbacksHandler.h"
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID_TX "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -10,14 +11,9 @@ bool BLESerial::begin(const char* deviceName) {
     // Initialize BLE
     BLEDevice::init(deviceName);
     pServer = BLEDevice::createServer();
-    pServer->setCallbacks(new BLEServerCallbacks());  // Explicit callback assignment
 
-    // Set callback functions manually
-    pServer->setCallbacks(new BLEServerCallbacks());
-    pServer->setCallbacks(new class : public BLEServerCallbacks {
-        void onConnect(BLEServer* pServer) override { BLESerial::onConnect(pServer); }
-        void onDisconnect(BLEServer* pServer) override { BLESerial::onDisconnect(pServer); }
-    });
+    // Set the server's callbacks
+    pServer->setCallbacks(new BLEServerCallbacksHandler(&connected));
 
     // Create BLE Service
     BLEService* pService = pServer->createService(SERVICE_UUID);
@@ -61,11 +57,3 @@ size_t BLESerial::write(uint8_t c) {
 void BLESerial::loop() {
     // Handle BLE events if needed
 }
-
-void BLESerial::onConnect(BLEServer* pServer) {
-    Serial.println("BLE Client connected!");
-}
-
-void BLESerial::onDisconnect(BLEServer* pServer) {
-    Serial.println("BLE Client disconnected!");
-    BLEDevice::startAdver
