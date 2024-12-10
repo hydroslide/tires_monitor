@@ -1,5 +1,9 @@
 #include "WifiSerial.h"
 
+extern HWCDC USBSerial;
+
+#define MAX_BUFFER_LENGTH 1000
+
 WifiSerial::WifiSerial()
     : server(80), port(80) {}
 
@@ -9,11 +13,11 @@ bool WifiSerial::begin(const char* ssid, const char* password, uint16_t port) {
 
     // Start WiFi as an Access Point
     WiFi.softAP(ssid, password);
-    Serial.println("WiFi AP started");
+    USBSerial.println("WiFi AP started");
 
     // Start the server
     server.begin();
-    Serial.println("WiFi server started");
+    USBSerial.println("WiFi server started");
     return true;
 }
 
@@ -35,7 +39,7 @@ void WifiSerial::loop() {
     if (!client || !client.connected()) {
         client = server.available();
         if (client) {
-            Serial.println("New client connected");
+            USBSerial.println("New client connected");
         }
     }
 
@@ -46,4 +50,6 @@ void WifiSerial::loop() {
             buffer = "";  // Clear the buffer after sending
         }
     }
+    else if (buffer.length() > MAX_BUFFER_LENGTH)
+        buffer= ""; // Clear the buffer to prevent out of memory crash
 }

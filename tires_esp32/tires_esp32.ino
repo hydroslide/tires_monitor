@@ -12,11 +12,11 @@
 #include "TempReader.h"
 //#include "NBPProtocol.h"
 //#include "BLESerial.h"
+#include "WifiSerial.h"
 
-
-
-#define SDA_PIN 11//21
-#define SCL_PIN 10//22
+#define WIFI_SSID "TireTempMonitor"
+#define WIFI_PASSWORD "esp32"
+#define WIFI_PORT 8080
 
 // Color definitions
 #define BLACK 0x0000
@@ -41,6 +41,10 @@ Adafruit_ST7789 tft = Adafruit_ST7789(&hspi, LCD_CS, LCD_DC, LCD_RST);
 //BluetoothSerial bluetoothSerial;
 // NBPProtocol nbp(bluetoothSerial);
 //NBPProtocol nbp(USBSerial);
+
+// WifiSerial instance
+WifiSerial wifiSerial;
+NBPProtocol nbp(wifiSerial);
 
 long millisSinceLastUpdate = 0;
 long updateIntervalMillis = 1000;
@@ -80,10 +84,18 @@ void setup(void)
     //     while (1); // Stop further execution if Bluetooth initialization fails
     // }
     USBSerial.println("Bluetooth started. Device is ready to pair.");
-    
+    */
+
+    if (!wifiSerial.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_PORT)) {
+        Serial.println("Failed to start WiFi!");
+        while (1);
+    }
+    Serial.println("WiFi initialized!");
+
     nbp.sendMetadata("NAME", "Tire Temp Reader");
     nbp.sendMetadata("VERSION", "0.1");
-*/
+
+
     hspi.begin(LCD_SCK, -1, LCD_MOSI, LCD_CS);
       // 80MHz should work, but you may need lower speeds
     tft.setSPISpeed(80000000);
@@ -98,7 +110,7 @@ void setup(void)
 
     // drawTires(WHITE, BLUE);
 
-        USBSerial.println("Before setTireTemps");
+    USBSerial.println("Before setTireTemps");
     wheels->setTireTemps(0, 0, 0, 0);
     USBSerial.println("Before draw");
     wheels->draw(true);
@@ -120,22 +132,21 @@ void loop()
 
     if (millisSinceLastUpdate >= updateIntervalMillis)
     {
+        /*
        USBSerial.print("Top of Loop - millisSinceLastUpdate: ");
        USBSerial.print(millisSinceLastUpdate);
         USBSerial.print(" > updateIntervalMillis: ");
         USBSerial.println(updateIntervalMillis);
+        */
         long tempMillis = millisSinceLastUpdate;
         millisSinceLastUpdate = 0;
-
-
-
 
         // Get the temperatures for all 4 tires
         // float *temps = GetTemps(70, 220, 180);
 
         tempReader->readTemps();
 
-        //nbp.setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3], (wheels->getTempUnit()=='F'));
+        nbp.setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3], (wheels->getTempUnit()=='F'));
 
         // Set the temperature for each tire based on the returned values
         wheels->setTireTemps(tempReader->tireTemps[0], tempReader->tireTemps[1], tempReader->tireTemps[2], tempReader->tireTemps[3]);
@@ -143,7 +154,8 @@ void loop()
         //wheels->setTireTemps(newTemp+1, newTemp+2, newTemp+3, newTemp+4);
         wheels->draw();
 
-  
+        // Call the loop function for WifiSerial
+        wifiSerial.loop();
     }
           
 
