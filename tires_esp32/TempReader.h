@@ -17,6 +17,7 @@ class TempReader {
         TempReader();
         void setup();        
         float tireTemps[TIRE_COUNT];
+        uint8_t sensorIndices[TIRE_COUNT];
         void readTemps();
 };
 #endif // TEMPREADER_H
