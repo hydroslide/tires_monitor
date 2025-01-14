@@ -59,7 +59,7 @@
     {
       "parentId": 3,
       "type": "analogItem",
-      "defaultValue": "100",
+      "defaultValue": "60",
       "item": {
         "maxValue": 255,
         "offset": 0,
@@ -79,7 +79,7 @@
     {
       "parentId": 3,
       "type": "analogItem",
-      "defaultValue": "160",
+      "defaultValue": "69",
       "item": {
         "maxValue": 255,
         "offset": 0,
@@ -99,7 +99,7 @@
     {
       "parentId": 3,
       "type": "analogItem",
-      "defaultValue": "180",
+      "defaultValue": "139",
       "item": {
         "maxValue": 255,
         "offset": 0,
@@ -244,7 +244,7 @@
     {
       "parentId": 12,
       "type": "analogItem",
-      "defaultValue": "1",
+      "defaultValue": "0",
       "item": {
         "maxValue": 7,
         "offset": 0,
@@ -264,7 +264,7 @@
     {
       "parentId": 12,
       "type": "analogItem",
-      "defaultValue": "2",
+      "defaultValue": "0",
       "item": {
         "maxValue": 7,
         "offset": 0,
@@ -284,7 +284,7 @@
     {
       "parentId": 12,
       "type": "analogItem",
-      "defaultValue": "3",
+      "defaultValue": "1",
       "item": {
         "maxValue": 7,
         "offset": 0,
@@ -373,20 +373,176 @@
   ],
   "codeOptions": {
     "embeddedPlatform": "ARDUINO_ESP32",
-    "lastDisplayUuid": "",
-    "lastInputUuid": "",
+    "lastDisplayUuid": "4dcb12ec-13d8-4466-b8b6-bd575eae4612",
+    "lastInputUuid": "406a3089-6bc6-491e-9e3b-2cc2ec20a3cb",
     "lastRemoteUuids": [
-      ""
+      "2c101fec-1f7d-4ff3-8d2b-992ad41e7fcb"
     ],
-    "lastThemeUuid": "",
+    "lastThemeUuid": "94D05CB2-952F-4E0C-A402-9F51CAFBD99E",
     "applicationUUID": "4b46c4a2-35ba-4012-b664-7bc18a87fdee",
     "applicationName": "New Device",
-    "lastProperties": [],
+    "lastProperties": [
+      {
+        "name": "DISPLAY_VARIABLE",
+        "latestValue": "gfx",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_TYPE",
+        "latestValue": "Adafruit_ST7789",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_WIDTH",
+        "latestValue": "280",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_HEIGHT",
+        "latestValue": "240",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_RESET_PIN",
+        "latestValue": "-1",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_CS_PIN",
+        "latestValue": "-1",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_RS_PIN",
+        "latestValue": "-1",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_DATA_PIN",
+        "latestValue": "-1",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_CLOCK_PIN",
+        "latestValue": "-1",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "ST7735_TAB_TYPE",
+        "latestValue": "INITR_BLACKTAB",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_ROTATION",
+        "latestValue": "3",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "UPDATES_PER_SEC",
+        "latestValue": "5",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "DISPLAY_BUFFER_SIZE",
+        "latestValue": "0",
+        "subsystem": "DISPLAY"
+      },
+      {
+        "name": "TOUCH_LIBRARY",
+        "latestValue": "Adafruit_FT6206",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "TOUCH_INTERRUPT_PIN",
+        "latestValue": "0xFF",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "TOUCH_CS_PIN",
+        "latestValue": "9",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "HARDWARE_TOUCH_ROTATION",
+        "latestValue": "0",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "ORIENTATION_SEPARATOR",
+        "latestValue": "",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "LIB_TOUCH_SWAP_XY",
+        "latestValue": "false",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "LIB_TOUCH_X_INVERTED",
+        "latestValue": "false",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "LIB_TOUCH_Y_INVERTED",
+        "latestValue": "false",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "CALIB_SEPARATOR",
+        "latestValue": "",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "TOUCH_SCREEN_CALIBRATE",
+        "latestValue": "true",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "TOUCH_CALIBRATION_STORAGE_LOC",
+        "latestValue": "400",
+        "subsystem": "INPUT"
+      },
+      {
+        "name": "ITEM_FONT",
+        "latestValue": "def:,1",
+        "subsystem": "THEME"
+      },
+      {
+        "name": "TITLE_FONT",
+        "latestValue": "def:,1",
+        "subsystem": "THEME"
+      },
+      {
+        "name": "BORDER_FOR_ACTIONS",
+        "latestValue": "0",
+        "subsystem": "THEME"
+      },
+      {
+        "name": "TITLE_SHOW_MODE",
+        "latestValue": "TITLE_FIRST_ROW",
+        "subsystem": "THEME"
+      },
+      {
+        "name": "USE_TC_UNICODE",
+        "latestValue": "false",
+        "subsystem": "THEME"
+      },
+      {
+        "name": "USE_SLIDER_ANALOG",
+        "latestValue": "true",
+        "subsystem": "THEME"
+      },
+      {
+        "name": "NEED_EDITING_ICONS",
+        "latestValue": "false",
+        "subsystem": "THEME"
+      }
+    ],
     "namingRecursive": false,
     "useCppMain": false,
     "saveLocation": "ALL_TO_CURRENT",
     "usingSizedEEPROMStorage": true,
-    "eepromDefinition": "",
+    "eepromDefinition": "eeprom:",
     "authenticatorDefinition": "",
     "projectIoExpanders": [
       "deviceIO:"
