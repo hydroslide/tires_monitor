@@ -10,7 +10,7 @@
 #include "Tire.h"
 #include "Wheels.h"
 #include "TempReader.h"
-//#include "NBPProtocol.h"
+#include "NBPProtocol.h"
 //#include "BLESerial.h"
 #include "WifiSerial.h"
 
@@ -102,7 +102,7 @@ void setup(void)
     // this will vary depending on your display
     tft.init(240, 280, SPI_MODE0);
 
-    tft.setRotation(1);
+    tft.setRotation(3);
     tft.fillScreen(ST77XX_BLACK);
     //wheels = new Wheels(10, ST77XX_WHITE, ST77XX_YELLOW, 100.0, 120.0, 180.0, 'F');
     wheels = new Wheels(10, ST77XX_YELLOW, ST77XX_WHITE, 75.0, 85.0, 100.0, 'F');

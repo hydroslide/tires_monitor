@@ -4,8 +4,8 @@
 
 extern HWCDC USBSerial;
 
-TempReader::TempReader(){
-    sensorIndices = [0,1,2,3];
+TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
+
 }
 
 void TempReader::readTemps(){

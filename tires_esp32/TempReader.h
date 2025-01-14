@@ -1,6 +1,7 @@
 #ifndef TEMPREADER_H
 #define TEMPREADER_H
 
+#include <array>
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_MLX90614.h>
@@ -17,7 +18,7 @@ class TempReader {
         TempReader();
         void setup();        
         float tireTemps[TIRE_COUNT];
-        uint8_t sensorIndices[TIRE_COUNT];
+        std::array<uint8_t, 4> sensorIndices;
         void readTemps();
 };
 #endif // TEMPREADER_H
