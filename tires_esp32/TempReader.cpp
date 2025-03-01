@@ -15,8 +15,8 @@ void TempReader::readTemps(){
     float temp = getTemp(i, true);
         if (isnan(temp))
         temp = 0.0f;
-        USBSerial.print("Temp Read: ");
-        USBSerial.println(temp);
+        //USBSerial.print("Temp Read: ");
+        //USBSerial.println(temp);
         tireTemps[i] = temp;
     }
 }
@@ -29,8 +29,8 @@ void TempReader::setup(){
 
 float TempReader::getTemp(uint8_t index, bool farenheit){
     index = sensorIndices[index];
-    USBSerial.print("Getting temp: ");
-    USBSerial.println(index);
+    //USBSerial.print("Getting temp: ");
+    //USBSerial.println(index);
     select_I2C_bus(index);
     mlx_0.begin();
     //return 0.0f;
