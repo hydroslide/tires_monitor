@@ -10,6 +10,9 @@ Tire::Tire(int _x, int _y, int _width, int _height, uint16_t _outlineColor, uint
 
 void Tire::draw(bool force) {
     if ((int)temperature != (int)lastTemp) {
+        if ((lastTemp>=100 && temperature<100) || (lastTemp<100 && temperature>=100))
+            force=true;
+
         int radius = 20;
         //USBSerial.println("Before fillRect");        
         if (force || crossedThreshold) tft.fillRoundRect(x, y, width, height, radius, fillColor);
