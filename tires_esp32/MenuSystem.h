@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+// define the number of bytes you want to access
+#define EEPROM_SIZE 50
+
 // Menu item types
 typedef enum {
   MENU_ACTION,   // Executes an action when selected

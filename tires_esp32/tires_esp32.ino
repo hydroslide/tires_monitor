@@ -2,7 +2,7 @@
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <SPI.h>
 #include <Wire.h>
-
+#include <EEPROM.h>
 
 #include "Arduino_GFX_Library.h"
 #include "pin_config.h"
@@ -76,19 +76,6 @@ long timeDelta()
   TouchMenuHandler menuHandler(menuSystem, menuRenderer, cstTouch);
 
 
-// // Optional: If you still want to transform gestures for display rotation, adapt them here:
-// static Gesture_t transformGesture(Gesture_t raw)
-// {
-//   // Example mapping if your physical swipes are offset 90 degrees
-//   switch (raw) {
-//     case GESTURE_SWIPE_UP:    return GESTURE_SWIPE_LEFT;
-//     case GESTURE_SWIPE_DOWN:  return GESTURE_SWIPE_RIGHT;
-//     case GESTURE_SWIPE_LEFT:  return GESTURE_SWIPE_DOWN;
-//     case GESTURE_SWIPE_RIGHT: return GESTURE_SWIPE_UP;
-//     default:                  return raw;
-//   }
-// }
-
 // Forward declarations
 static void applyMenuConfig();
 static void cleanupObjects();
@@ -135,6 +122,8 @@ void doRunningMode(int time_delta)
 
 void setup()
 {
+  EEPROM.begin(50);
+
   USBSerial.begin(9600);
   USBSerial.println("Top of ESP32 Tires Setup");
 
@@ -179,6 +168,7 @@ void setup()
 
   // Load config from EEPROM
   menuSystem.loadFromEEPROM();
+  USBSerial.println("EEPROM values loaded");
 
   // Initialize system objects
   initializeSystem();

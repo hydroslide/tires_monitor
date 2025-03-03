@@ -1,5 +1,7 @@
 #include "MenuSystem.h"
 
+extern HWCDC USBSerial;
+
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
 static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count);
@@ -7,6 +9,8 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count);
 MenuSystem::MenuSystem(const MenuItem* rootMenu, uint8_t menuCount)
 : stackDepth(0)
 {
+
+
   // Initialize the root menu context
   menuStack[0].menu = rootMenu;
   menuStack[0].count = menuCount;
@@ -167,6 +171,8 @@ void MenuSystem::reset() {
   menuStack[0].selectedIndex = 0;
 }
 
+
+static uint8_t itemsSaved=0;
 // Recursive helper for saving an entire menu
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
   for (uint8_t i = 0; i < count; i++) {
@@ -180,6 +186,12 @@ static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
       switch (b->valueType) {
         case VALUE_BYTE:
           EEPROM.write(addr, *(uint8_t*)b->valuePtr);
+            USBSerial.print(item->title);
+            USBSerial.print(": ");
+            USBSerial.print((String)*(uint8_t*)b->valuePtr);
+            USBSerial.print(" written to: ");
+            USBSerial.println((String)addr);
+          itemsSaved++;
           break;
         case VALUE_BOOL:
           EEPROM.write(addr, *(bool*)b->valuePtr);
@@ -198,6 +210,7 @@ static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
   }
 }
 
+static uint8_t itemsLoaded=0;
 
 // Recursive helper for loading entire menu
 static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
@@ -211,9 +224,16 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
       uint16_t addr = b->eepromAddress;
       switch (b->valueType) {
         case VALUE_BYTE:
-          uint8_t tVal = EEPROM.read(addr);
-          if (tVal > 0)
-            *(uint8_t*)b->valuePtr = tVal;
+          if (EEPROM.read(addr) > 0 && EEPROM.read(addr) < 255){            
+            *(uint8_t*)b->valuePtr = EEPROM.read(addr);
+            
+            USBSerial.print(item->title);
+            USBSerial.print(": ");
+            USBSerial.print((String)*(uint8_t*)b->valuePtr);
+            USBSerial.print(" read from: ");
+            USBSerial.println((String)addr);
+            itemsLoaded++;
+          }
           break;
         case VALUE_BOOL:
           *(bool*)b->valuePtr = EEPROM.read(addr);
@@ -227,7 +247,7 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
         case VALUE_ENUM:
           *(uint8_t*)b->valuePtr = EEPROM.read(addr);
           break;
-      }
+      }      
     }
     // If it's a submenu, recurse
     else if (item->itemType == MENU_SUBMENU && item->submenu && item->submenuCount > 0) {
@@ -239,16 +259,23 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
 
 // Save all configurable values from the entire menu tree to EEPROM
 void MenuSystem::saveToEEPROM() {
+  itemsSaved=0;
   // The root is always at stackDepth=0
   const MenuContext& rootCtx = menuStack[0];
   saveMenuToEEPROMHelper(rootCtx.menu, rootCtx.count);
   EEPROM.commit();
+  USBSerial.print(String(itemsSaved));
+  USBSerial.println(" items saved into EEPROM");
+  loadFromEEPROM();
 }
 
 // Load all configurable values from the entire menu tree to EEPROM
 void MenuSystem::loadFromEEPROM() {
   const MenuContext& rootCtx = menuStack[0];
+  itemsLoaded=0;
   loadMenuFromEEPROMHelper(rootCtx.menu, rootCtx.count);
+  USBSerial.print(String(itemsLoaded));
+  USBSerial.println(" items loaded from EEPROM");
 }
 
 // Return pointer to the current menu array
