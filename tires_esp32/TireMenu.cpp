@@ -1,4 +1,7 @@
 #include "TireMenu.h"
+#include "MenuRenderer.h"
+
+extern MenuRenderer menuRenderer;
 
 // ----------------------------------------------------
 //  1) Global variables for each setting
@@ -256,14 +259,6 @@ static MenuItem mainMenu[] = {
       nullptr,
       0,
       nullptr
-    },
-    {
-      "Load Config",
-      MENU_ACTION,
-      doLoad,
-      nullptr,
-      0,
-      nullptr
     }
 };
 
@@ -279,6 +274,10 @@ static MenuSystem tireMenuSystem(
 static void doSave()
 {
     tireMenuSystem.saveToEEPROM();
+    // Provide visual feedback
+    menuRenderer.setStatusMessage("Settings Saved!");
+    // Force a re-render if you want immediate update
+    menuRenderer.render();
 }
 
 static void doLoad()

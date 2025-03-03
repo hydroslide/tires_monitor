@@ -1,34 +1,67 @@
+
 #include "MenuRenderer.h"
-//MenuRenderer.cpp
+#include <string.h> // for strncpy
 
 MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
 : menu(menuSystem), display(tft)
 {
     state.dropdownOpen = false;
+    state.numericEditing = false;
     state.dropdownIndex = 0;
     state.dropdownItem = nullptr;
+
+    // Initialize status message as empty
+    statusMessage[0] = '\0';
 }
 
 void MenuRenderer::render() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
 
-    // Retrieve the current menu array, item count, and selected index
+    // Retrieve current menu array, item count, selected index
     const MenuItem* items = menu.getCurrentMenuItems();
     uint8_t itemCount = menu.getCurrentMenuCount();
     uint8_t selectedIndex = menu.getCurrentSelectedIndex();
 
-    // Render each item in the current menu
+    // Render menu items
     for (uint8_t i = 0; i < itemCount; i++) {
         bool isSelected = (i == selectedIndex);
         drawMenuItem(items[i], i, isSelected);
     }
 
-    // If a dropdown is open, draw the overlay on top
+    // If a dropdown is open, draw the overlay
     if (state.dropdownOpen && state.dropdownItem) {
         renderDropdown(*state.dropdownItem);
     }
+
+
+
+    // 3) Draw the status message (if any)
+    if (statusMessage[0] != '\0') {
+        if (millis() - messageSetMillis >= messageDurationMs) {
+            statusMessage[0] = '\\0'; // clear the message
+        } else {
+            // Example: draw near bottom-left
+            display.setCursor(10, SCREEN_HEIGHT - 20);
+            display.setTextColor(ST77XX_WHITE);
+            display.setTextSize(textSize);
+            display.print(statusMessage);
+        }
+    }
 }
+
+void MenuRenderer::setStatusMessage(const char* msg) {
+    if (!msg) {
+        statusMessage[0] = '\\0';
+        return;
+    }
+    strncpy(statusMessage, msg, STATUS_MSG_LEN);
+    statusMessage[STATUS_MSG_LEN] = '\\0';
+    messageSetMillis = millis();
+    messageDurationMs = 2000;//durationMs;
+}
+
+
 
 void MenuRenderer::openDropdown(const MenuItem* item, uint8_t startingIndex) {
     state.dropdownOpen = true;
@@ -84,7 +117,10 @@ void MenuRenderer::drawMenuItem(const MenuItem &item, uint8_t index, bool select
     if (selected) {
         // Draw highlight background
         display.fillRect(0, y, SCREEN_WIDTH, MENU_ITEM_HEIGHT, ST77XX_YELLOW);
-        display.setTextColor(ST77XX_BLACK);
+        if (state.numericEditing)
+            display.setTextColor(ST77XX_RED);
+        else
+            display.setTextColor(ST77XX_BLACK);
     } else {
         display.setTextColor(ST77XX_WHITE);
     }
