@@ -20,5 +20,6 @@ class TempReader {
         float tireTemps[TIRE_COUNT];
         std::array<uint8_t, 4> sensorIndices;
         void readTemps();
+        bool useFarenheit;
 };
 #endif // TEMPREADER_H

@@ -12,7 +12,7 @@ void TempReader::readTemps(){
     for (uint8_t i = 0; i < TIRE_COUNT; i++)
     {
 
-    float temp = getTemp(i, true);
+    float temp = getTemp(i, useFarenheit);
         if (isnan(temp))
         temp = 0.0f;
         //USBSerial.print("Temp Read: ");

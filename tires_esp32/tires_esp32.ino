@@ -241,6 +241,7 @@ static void initializeSystem()
                       tempUnit);
 
   tempReader = new TempReader();
+  tempReader->useFarenheit = (scaleVal == 0);
   wheels->setTireTemps(0, 0, 0, 0);
   tft.fillScreen(ST77XX_BLACK);
   wheels->draw();
