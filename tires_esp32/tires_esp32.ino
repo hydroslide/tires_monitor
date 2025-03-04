@@ -35,6 +35,8 @@
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 
+bool testMode;
+
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
 Adafruit_ST7789 tft = Adafruit_ST7789(&hspi, LCD_CS, LCD_DC, LCD_RST);
@@ -119,6 +121,8 @@ void doRunningMode(int time_delta)
 
 }
 
+bool nightMode=false;
+int nightBrightness=12;
 
 void setup()
 {
@@ -176,6 +180,17 @@ void setup()
   USBSerial.println("Bottom of ESP32 Tires Setup");
 }
 
+void checkForSwipes(){
+  if (menuHandler.SwipedRight())
+    ToggleNightMode();
+}
+
+void ToggleNightMode(){
+    nightMode=!nightMode;
+    int bright = (nightMode)?nightBrightness:255;
+    analogWrite(LCD_BL, bright);
+}
+
 bool menuWasActive = false;
 void loop()
 {
@@ -186,6 +201,7 @@ void loop()
       menuWasActive = false;
       applyMenuConfig();
     }
+    checkForSwipes();
     doRunningMode(time_delta);
   } else {
     menuWasActive = true;
@@ -211,6 +227,7 @@ static void initializeSystem()
 
   extern uint8_t getCurrentModeValue();
   extern uint8_t getTemperatureScaleValue();
+  extern uint8_t getNightBrightness();
   extern uint8_t getStreetMin();
   extern uint8_t getStreetIdeal();
   extern uint8_t getStreetMax();
@@ -220,6 +237,8 @@ static void initializeSystem()
 
   uint8_t modeVal = getCurrentModeValue();         // 0=Street,1=Track
   uint8_t scaleVal = getTemperatureScaleValue();   // 0=F,1=C
+
+  nightBrightness = (int)(((float)getNightBrightness()/100.0f)*255.0f);
 
   float minTemp, idealTemp, maxTemp;
   if (modeVal == 0) {

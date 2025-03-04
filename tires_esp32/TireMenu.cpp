@@ -15,6 +15,8 @@ static const char* currentModeLabels[] = {"Street", "Track"};
 static uint8_t temperatureScale = 0; // 0=Farenheit, 1=Celsius
 static const char* tempScaleLabels[] = {"F", "C"};
 
+static uint8_t nightBrightness   = 25;
+
 // -- Street Settings --
 static uint8_t streetMin   = 40;
 static uint8_t streetIdeal = 120;
@@ -54,6 +56,18 @@ static MenuValueBinding temperatureScaleBinding = {
     2, // eepromAddress or -1
     tempScaleLabels,
     2
+};
+
+// Night Brightenss
+static MenuValueBinding nightBrightnessBinding = {
+    VALUE_BYTE,
+    &nightBrightness,
+    nullptr,
+    0,
+    100,
+    8,
+    nullptr,
+    0
 };
 
 // Street
@@ -245,6 +259,14 @@ static MenuItem mainMenu[] = {
       nullptr
     },
     {
+        "Night Brightness",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &nightBrightnessBinding
+    },
+    {
       "Hardware Settings",
       MENU_SUBMENU,
       nullptr,
@@ -302,9 +324,14 @@ uint8_t getTemperatureScaleValue() {
     return temperatureScale;
 }
 
+uint8_t getNightBrightness() {
+    return nightBrightness;
+}
+
 uint8_t getStreetMin() {
     return streetMin;
 }
+
 
 uint8_t getStreetIdeal() {
     return streetIdeal;

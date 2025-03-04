@@ -20,12 +20,19 @@ public:
 
     bool isMenuActive();
 
+    bool SwipedRight();
+    bool SwipedUp();
+    bool SwipedDown();
+
 private:
     MenuSystem& menu;
     MenuRenderer& render;
     CST816Touch& touchSensor; // from the official library
 
     bool menuActive;
+    bool unhandledSwipeRight;
+    bool unhandledSwipeUp;
+    bool unhandledSwipeDown;
     int touchDelay=200;
     int lastTouchDelta=0;
     // Handle an incoming gesture

@@ -12,6 +12,22 @@ bool TouchMenuHandler::isMenuActive(){
     return menuActive;
 }
 
+bool TouchMenuHandler::SwipedRight(){
+    bool temp = unhandledSwipeRight;
+    unhandledSwipeRight=false;
+    return temp;
+}
+bool TouchMenuHandler::SwipedUp(){
+    bool temp = unhandledSwipeUp;
+    unhandledSwipeUp=false;
+    return temp;
+}
+bool TouchMenuHandler::SwipedDown(){
+    bool temp = unhandledSwipeDown;
+    unhandledSwipeDown=false;
+    return temp;
+}
+
 void TouchMenuHandler::loop(int timeDelta) {
     // Poll the touch sensor
     touchSensor.control();
@@ -62,10 +78,19 @@ void TouchMenuHandler::loop(int timeDelta) {
 void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     MenuRenderState &rState = render.getState();
 
+    unhandledSwipeDown=false;
+    unhandledSwipeRight=false;
+    unhandledSwipeUp=false;
    
     if (!menuActive){
         if (gesture == TouchScreenController::gesture_t::GESTURE_LEFT)
             menuActive = true;
+        else if(gesture == TouchScreenController::gesture_t::GESTURE_RIGHT)
+            unhandledSwipeRight=true;
+        else if(gesture == TouchScreenController::gesture_t::GESTURE_UP)
+            unhandledSwipeUp=true;
+        else if(gesture == TouchScreenController::gesture_t::GESTURE_DOWN)
+            unhandledSwipeDown=true;
         return;
     }
 
