@@ -65,7 +65,7 @@ static MenuValueBinding nightBrightnessBinding = {
     nullptr,
     0,
     100,
-    8,
+    28,
     nullptr,
     0
 };
