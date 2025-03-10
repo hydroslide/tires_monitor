@@ -8,10 +8,12 @@ extern Adafruit_ST7789 tft;
 Wheels::Wheels() {}
 
 Wheels::Wheels(int bufferPix, uint16_t outlineColor, uint16_t _textColor, float _minTemp, float _idealTemp, float _maxTemp, char tempUnit,
-               uint16_t _lowTempColor , uint16_t _normalTempColor , uint16_t _idealTempColor , uint16_t _highTempColor )
+               uint16_t _lowTempColor , uint16_t _normalTempColor , uint16_t _idealTempColor , uint16_t _highTempColor,
+               uint16_t _lowTempTextColor , uint16_t _normalTempTextColor , uint16_t _idealTempTextColor , uint16_t _highTempTextColor )
     : textColor(_textColor),
       minTemp(_minTemp), idealTemp(_idealTemp), maxTemp(_maxTemp),
-      lowTempColor(_lowTempColor), normalTempColor(_normalTempColor), idealTempColor(_idealTempColor), highTempColor(_highTempColor) {
+      lowTempColor(_lowTempColor), normalTempColor(_normalTempColor), idealTempColor(_idealTempColor), highTempColor(_highTempColor),
+      lowTempTextColor(_lowTempTextColor), normalTempTextColor(_normalTempTextColor), idealTempTextColor(_idealTempTextColor), highTempTextColor(_highTempTextColor) {
     int tireWidth = (tft.width() - (bufferPix * 3)) / 2;
     int tireHeight = (tft.height() - (bufferPix * 3)) / 2;
     int tire_0_x = bufferPix;
@@ -34,10 +36,10 @@ void Wheels::draw(bool force) {
 }
 
 void Wheels::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp) {
-    frontLeft.setTemp(frontLeftTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor);
-    frontRight.setTemp(frontRightTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor);
-    rearLeft.setTemp(rearLeftTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor);
-    rearRight.setTemp(rearRightTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor);
+    frontLeft.setTemp(frontLeftTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor, lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor);
+    frontRight.setTemp(frontRightTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor, lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor);
+    rearLeft.setTemp(rearLeftTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor, lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor);
+    rearRight.setTemp(rearRightTemp, minTemp, idealTemp, maxTemp, lowTempColor, normalTempColor, idealTempColor, highTempColor, lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor);
 }
 
     char Wheels::getTempUnit(){ return _tempUnit;}

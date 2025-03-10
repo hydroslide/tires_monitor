@@ -25,17 +25,7 @@
 #define WIFI_PASSWORD "esp32"
 #define WIFI_PORT 8080
 
-// Color definitions
-#define BLACK   0x0000
-#define BLUE    0x001F
-#define RED     0xF800
-#define GREEN   0x07E0
-#define CYAN    0x07FF
-#define MAGENTA 0xF81F
-#define YELLOW  0xFFE0
-#define WHITE   0xFFFF
-
-bool testMode;
+bool testMode = false;
 
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
@@ -105,13 +95,18 @@ void doRunningMode(int time_delta)
       (wheels->getTempUnit() == 'F')
     );
 
-    // Update Wheels display
-    wheels->setTireTemps(
-      tempReader->tireTemps[0],
-      tempReader->tireTemps[1],
-      tempReader->tireTemps[2],
-      tempReader->tireTemps[3]
-    );
+
+    if (testMode)
+       wheels->setTireTemps(25,55,120,200);
+    else {
+      // Update Wheels display
+      wheels->setTireTemps(
+        tempReader->tireTemps[0],
+        tempReader->tireTemps[1],
+        tempReader->tireTemps[2],
+        tempReader->tireTemps[3]
+      );
+    }
     wheels->draw();
 
     // WifiSerial
