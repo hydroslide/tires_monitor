@@ -10,6 +10,9 @@ Tire::Tire(int _x, int _y, int _width, int _height, uint16_t _outlineColor, uint
 
 void Tire::draw(bool force) {
     if ((int)temperature != (int)lastTemp) {
+        if ((lastTemp>=100 && temperature<100) || (lastTemp<100 && temperature>=100) || (lastTemp<0 && temperature>=0) || (lastTemp>=0 && temperature<0))
+            force=true;
+
         int radius = 20;
         //USBSerial.println("Before fillRect");        
         if (force || crossedThreshold) tft.fillRoundRect(x, y, width, height, radius, fillColor);
@@ -37,19 +40,24 @@ void Tire::printTemp() {
     lastTemp = temperature;
 }
 
-void Tire::setTemp(float temp, float minTemp, float idealTemp, float maxTemp, uint16_t lowColor, uint16_t normalColor, uint16_t idealColor, uint16_t highColor) {
+void Tire::setTemp(float temp, float minTemp, float idealTemp, float maxTemp, uint16_t lowColor, uint16_t normalColor, uint16_t idealColor, uint16_t highColor, uint16_t lowTextColor, uint16_t normalTextColor, uint16_t idealTextColor, uint16_t highTextColor) {
+    
     if (isnan(temp)) temp = 0.0f;
     temperature = temp;
 
     uint16_t newColor;
     if (temperature < minTemp) {
         newColor = lowColor;
+        textColor = lowTextColor;
     } else if (temperature >= idealTemp && temperature<= maxTemp) {
         newColor = idealColor;
+        textColor = idealTextColor;
     } else if (temperature > maxTemp) {
         newColor = highColor;
+        textColor = highTextColor;
     } else {
         newColor = normalColor;
+        textColor = normalTextColor;
     }
     if (newColor != fillColor) {
         fillColor = newColor;
@@ -58,4 +66,6 @@ void Tire::setTemp(float temp, float minTemp, float idealTemp, float maxTemp, ui
         if (initialized) crossedThreshold = false;
         else initialized = true;
     }
+
+    outlineColor=textColor;
 }

@@ -4,19 +4,19 @@
 
 extern HWCDC USBSerial;
 
-TempReader::TempReader(){
-    sensorIndices = [0,1,2,3];
+TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
+
 }
 
 void TempReader::readTemps(){
     for (uint8_t i = 0; i < TIRE_COUNT; i++)
     {
 
-    float temp = getTemp(i, true);
+    float temp = getTemp(i, useFarenheit);
         if (isnan(temp))
         temp = 0.0f;
-        USBSerial.print("Temp Read: ");
-        USBSerial.println(temp);
+        //USBSerial.print("Temp Read: ");
+        //USBSerial.println(temp);
         tireTemps[i] = temp;
     }
 }
@@ -29,8 +29,8 @@ void TempReader::setup(){
 
 float TempReader::getTemp(uint8_t index, bool farenheit){
     index = sensorIndices[index];
-    USBSerial.print("Getting temp: ");
-    USBSerial.println(index);
+    //USBSerial.print("Getting temp: ");
+    //USBSerial.println(index);
     select_I2C_bus(index);
     mlx_0.begin();
     //return 0.0f;
