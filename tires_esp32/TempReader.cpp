@@ -8,16 +8,28 @@ TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
 
 }
 
-void TempReader::readTemps(){
-    for (uint8_t i = 0; i < TIRE_COUNT; i++)
-    {
-
-    float temp = getTemp(i, useFarenheit);
-        if (isnan(temp))
-        temp = 0.0f;
-        //USBSerial.print("Temp Read: ");
-        //USBSerial.println(temp);
-        tireTemps[i] = temp;
+void TempReader::readTemps(int time_delta){
+    millisSinceLastRead += time_delta;
+    if (millisSinceLastRead >= readIntervalMillis){
+        millisSinceLastRead=0;
+        for (uint8_t i = 0; i < TIRE_COUNT; i++)
+        {
+            float temp = getTemp(i, useFarenheit);
+            if (isnan(temp))
+                temp = 0.0f;
+                //USBSerial.print("Temp Read: ");
+                //USBSerial.println(temp);
+                if (useBuffer){
+                    tireTempBuffer[i][bufferNdx] = temp;
+                    float temp_sum=0;
+                    for (u_int8_t j=0; j<BUFFER_SIZE; j++){
+                        temp_sum+=tireTempBuffer[i][j];
+                    }
+                    tireTemps[i] = temp_sum/(float)BUFFER_SIZE;
+                }else
+                    tireTemps[i] = temp;
+        }
+        bufferNdx = (bufferNdx+1)%BUFFER_SIZE;
     }
 }
 

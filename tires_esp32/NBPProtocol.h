@@ -66,3 +66,32 @@ private:
 };
 
 #endif // NBP_PROTOCOL_H
+
+/*
+#ifndef NBP_PROTOCOL_H
+#define NBP_PROTOCOL_H
+
+#include <Arduino.h>
+#include <map>
+
+class NBPProtocol {
+public:
+    NBPProtocol(Stream &serial);
+    void setUpdateFrequencyHz(uint8_t hz);
+    void setDataPoint(const String& key, const String& unit, float value);
+    void loop();
+
+private:
+    Stream &serial;
+    std::map<String, std::pair<String, float>> data;
+    unsigned long lastUpdate;
+    unsigned long updateInterval;
+
+    void sendFrame();
+    void sendPacketHeader(const char* type);
+    void sendPacketFooter();
+};
+
+#endif
+
+*/

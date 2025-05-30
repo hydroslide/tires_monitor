@@ -84,7 +84,7 @@ void doRunningMode(int time_delta)
     millisSinceLastUpdate = 0;
 
     // Read tire temps
-    tempReader->readTemps();
+    tempReader->readTemps(time_delta);
 
     // Send them to NBP
     nbp.setTireTemps(
