@@ -20,6 +20,8 @@
 #include "TireMenu.h"           // Our custom menu structure
 #include "MenuRenderer.h"       // Renders the TireMenu items
 #include "TouchMenuHandler.h"   // Handles gestures to navigate the menu
+#include "QuadrantFactory.h"
+#include "ThermalDisplay.h"
 
 #define WIFI_SSID "TireTempMonitor"
 #define WIFI_PASSWORD "esp32"
@@ -39,10 +41,16 @@ NBPProtocol nbp(wifiSerial);
 Wheels* wheels = nullptr;
 TempReader* tempReader = nullptr;
 
+// ... after initializing tft in setup() ...
+QuadrantFactory factory(tft, /*margin=*/ 5);
+
+// To create the upper-left ThermalDisplay:
+ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
+
 // Keep track of time
 unsigned long previousTime = 0;
 long millisSinceLastUpdate = 0;
-long updateIntervalMillis = 1000;
+long updateIntervalMillis = 100;
 
 // Time helper
 long timeDelta()
@@ -76,7 +84,6 @@ static void initializeSystem();
 // Normal Running Mode
 void doRunningMode(int time_delta)
 {
-  int asd=7;
   millisSinceLastUpdate += time_delta;
   if (millisSinceLastUpdate >= updateIntervalMillis)
   {
@@ -108,6 +115,8 @@ void doRunningMode(int time_delta)
       );
     }
     wheels->draw();
+
+    UL->updateDisplay(tempReader->tire_frames[0]);
 
     // WifiSerial
     wifiSerial.loop();
@@ -141,7 +150,9 @@ void setup()
 
   // SPI + TFT
   hspi.begin(LCD_SCK, -1, LCD_MOSI, LCD_CS);
-  tft.setSPISpeed(80000000);
+  //tft.setSPISpeed(80000000);
+  // Slow down SPI to 40MHz (more stable than 80MHz)
+  tft.setSPISpeed(40000000);
   tft.init(240, 280, SPI_MODE0);
   tft.setRotation(3);
   tft.fillScreen(ST77XX_BLACK);
@@ -187,8 +198,18 @@ void ToggleNightMode(){
 }
 
 bool menuWasActive = false;
-void loop()
-{
+
+// Add a 2 s grace period so USB‐Serial stays alive before heavy work
+static bool firstRun = true;
+
+void loop() {
+  if (firstRun) {
+    if (millis() < 2000) {
+      // During first 2 seconds, do nothing to keep USB alive
+      return;
+    }
+    firstRun = false;
+  }
   int time_delta = timeDelta();
   menuHandler.loop(time_delta);
   if (!menuHandler.isMenuActive()) {
