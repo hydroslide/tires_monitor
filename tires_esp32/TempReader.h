@@ -14,6 +14,7 @@ class TempReader {
         static constexpr int ROWS = 24;
         static constexpr int COLS = 32;
         static constexpr int PIXEL_COUNT = ROWS * COLS;
+        static constexpr int FRAME_PIXELS = COLS * ROWS;  
         float getTemp(uint8_t index, bool farenheit);
         void select_I2C_bus(uint8_t bus);
         Adafruit_MLX90614 mlx_0;
@@ -34,7 +35,7 @@ class TempReader {
         float tireSectionTemps[TIRE_COUNT][3];
         bool tireSensor[TIRE_COUNT];
         bool tireSensorBegun[TIRE_COUNT];
-        static constexpr int FRAME_PIXELS = COLS * ROWS;  
+        
         float frame[FRAME_PIXELS];                   // MLX90640 float-array
         int   tire_frames[TIRE_COUNT][FRAME_PIXELS]; // TIRE_COUNT × (32×24) integer arrays
         std::array<uint8_t, 4> sensorIndices;

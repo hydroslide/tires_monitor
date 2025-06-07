@@ -203,7 +203,7 @@ bool TempReader::readFrame(uint8_t index){
         return false;
     } else{
         //USBSerial.println("Succeeded to read MLX frame");  
-
+        flipFrameHorizontal(frame);
     }
     return true;
 }
