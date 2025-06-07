@@ -45,7 +45,8 @@ TempReader* tempReader = nullptr;
 QuadrantFactory factory(tft, /*margin=*/ 5);
 
 // To create the upper-left ThermalDisplay:
-ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
+//ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
+ThermalDisplay* UR = factory.createDisplay(/*top=*/ true, /*left=*/ false);
 
 // Keep track of time
 unsigned long previousTime = 0;
@@ -103,20 +104,33 @@ void doRunningMode(int time_delta)
     );
 
 
-    if (testMode)
-       wheels->setTireTemps(25,55,120,200);
+    if (testMode){
+       //wheels->setTireTemps(25,55,120,200);
+      Wheels::TireTemps fl( 25 );            // single‐value
+      Wheels::TireTemps fr(55); // three‐value
+      Wheels::TireTemps rl( 120);
+      Wheels::TireTemps rr(200); 
+
+      wheels->setTireTemps(fl, fr, rl, rr);
+    }
     else {
+      Wheels::TireTemps fl( tempReader->tireSectionTemps[0] );   // three‐value      
+      Wheels::TireTemps fr(tempReader->tireTemps[1]);    // single‐value
+      Wheels::TireTemps rl( tempReader->tireTemps[2]);
+      Wheels::TireTemps rr( tempReader->tireTemps[3] ); 
+
+      wheels->setTireTemps(fl, fr, rl, rr);
       // Update Wheels display
-      wheels->setTireTemps(
-        tempReader->tireTemps[0],
-        tempReader->tireTemps[1],
-        tempReader->tireTemps[2],
-        tempReader->tireTemps[3]
-      );
+      // wheels->setTireTemps(
+      //   tempReader->tireTemps[0],
+      //   tempReader->tireTemps[1],
+      //   tempReader->tireTemps[2],
+      //   tempReader->tireTemps[3]
+      // );
     }
     wheels->draw();
 
-    UL->updateDisplay(tempReader->tire_frames[0]);
+    UR->updateDisplay(tempReader->tire_frames[0]);
 
     // WifiSerial
     wifiSerial.loop();
@@ -271,13 +285,24 @@ static void initializeSystem()
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
+  bool fl3 = true;
+  bool fr3 = false;
+  bool rl3 = false;
+  bool rr3 = false;
+
   wheels = new Wheels(10, ST77XX_YELLOW, ST77XX_WHITE,
                       minTemp, idealTemp, maxTemp,
-                      tempUnit);
+                      tempUnit, fl3, fr3, rl3, rr3);
 
   tempReader = new TempReader();
   tempReader->useFarenheit = (scaleVal == 0);
-  wheels->setTireTemps(0, 0, 0, 0);
+      Wheels::TireTemps fl(0);  // three‐value
+      Wheels::TireTemps fr(0);// single‐value 
+      Wheels::TireTemps rl(0);
+      Wheels::TireTemps rr(0); 
+
+      wheels->setTireTemps(fl, fr, rl, rr);
+  //wheels->setTireTemps(0, 0, 0, 0);
   tft.fillScreen(ST77XX_BLACK);
   wheels->draw();
 }

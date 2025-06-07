@@ -25,6 +25,7 @@ class TempReader {
         void getSectionMedians(const float frame[PIXEL_COUNT],
                        bool useMiddleRows,
                        float medians_out[3]);
+        void flipFrameHorizontal(float frame[FRAME_PIXELS]);
 
     public:
         TempReader();

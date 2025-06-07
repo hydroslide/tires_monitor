@@ -5,6 +5,8 @@ extern HWCDC USBSerial;
 
 Tire::Tire() {}
 
+Tire::~Tire() {}
+
 Tire::Tire(int _x, int _y, int _width, int _height, uint16_t _outlineColor, uint16_t _textColor, char _tempUnit)
     : x(_x), y(_y), width(_width), height(_height), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {}
 
@@ -29,6 +31,8 @@ void Tire::printTemp() {
 
     uint16_t textWidth, textHeight;
     int16_t c_x, c_y;
+    
+    tft.setFont(nullptr);
     tft.setTextSize(4);
     tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
@@ -68,4 +72,19 @@ void Tire::setTemp(float temp, float minTemp, float idealTemp, float maxTemp, ui
     }
 
     outlineColor=textColor;
+}
+
+void Tire::setTemps(const float *temps, size_t count, bool isFahrenheit,
+                    float minTemp, float idealTemp, float maxTemp,
+                    uint16_t lowColor,    uint16_t normalColor,
+                    uint16_t idealColor,  uint16_t highColor,
+                    uint16_t lowTextColor,    uint16_t normalTextColor,
+                    uint16_t idealTextColor,  uint16_t highTextColor)
+{
+    // old Tire only handles single‐value:
+    if (count >= 1) {
+        setTemp( temps[0], minTemp, idealTemp, maxTemp,
+                 lowColor,normalColor,idealColor,highColor,
+                 lowTextColor,normalTextColor,idealTextColor,highTextColor );
+    }
 }

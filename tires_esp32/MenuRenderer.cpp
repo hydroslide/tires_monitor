@@ -126,6 +126,7 @@ void MenuRenderer::drawMenuItem(const MenuItem &item, uint8_t index, bool select
     }
 
     display.setCursor(x, y);
+    display.setFont(nullptr);     // <— back to the built-in 5×7 font 
     display.setTextSize(textSize);
 
     // Print the item title

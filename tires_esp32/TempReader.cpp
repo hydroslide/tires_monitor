@@ -111,6 +111,8 @@ void TempReader::readTemps(){
                 getSectionMedians(frame, true, tireSectionTemps[i]);
                 for(int j=0; j<3; j++){
                     float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
+                    if (useFarenheit)
+                     tireSectionTemps[i][j] = valueF;
                      USBSerial.print("|");
                      USBSerial.print(valueF);
                         USBSerial.print("F");
@@ -187,7 +189,7 @@ bool TempReader::readFrame(uint8_t index){
     //USBSerial.print("Getting temp: ");
     //USBSerial.println(index);
     select_I2C_bus(index);
-    USBSerial.println("I2C Bus Selected");   
+    //USBSerial.println("I2C Bus Selected");   
     checkTireSensor(index);
 
     // mlx_a[index].setMode(MLX90640_CHESS);  // re-assert chess; this acts as start if in 1 Hz mode
@@ -199,9 +201,23 @@ bool TempReader::readFrame(uint8_t index){
     if (mlx_a[index].getFrame(frame) != 0) {
         USBSerial.println("Failed to read MLX frame");            
         return false;
-    } else
-        USBSerial.println("Succeeded to read MLX frame");     
+    } else{
+        //USBSerial.println("Succeeded to read MLX frame");  
+
+    }
     return true;
+}
+
+void TempReader::flipFrameHorizontal(float frame[FRAME_PIXELS]) {
+  for (int r = 0; r < ROWS; ++r) {
+    int base = r * COLS;
+    // swap columns c <-> (COLS-1-c)
+    for (int c = 0; c < COLS/2; ++c) {
+      int i1 = base + c;
+      int i2 = base + (COLS - 1 - c);
+      std::swap(frame[i1], frame[i2]);
+    }
+  }
 }
 
 float TempReader::getTemp(uint8_t index, bool farenheit){
