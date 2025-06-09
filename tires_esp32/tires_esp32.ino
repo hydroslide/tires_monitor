@@ -94,14 +94,7 @@ void doRunningMode(int time_delta)
     // Read tire temps
     tempReader->readTemps();
 
-    // Send them to NBP
-    nbp.setTireTemps(
-      tempReader->tireTemps[0],
-      tempReader->tireTemps[1],
-      tempReader->tireTemps[2],
-      tempReader->tireTemps[3],
-      (wheels->getTempUnit() == 'F')
-    );
+
 
 
     if (testMode){
@@ -127,6 +120,16 @@ void doRunningMode(int time_delta)
       //   tempReader->tireTemps[2],
       //   tempReader->tireTemps[3]
       // );
+
+          // Send them to NBP
+      // nbp.setTireTemps(
+      //   tempReader->tireTemps[0],
+      //   tempReader->tireTemps[1],
+      //   tempReader->tireTemps[2],
+      //   tempReader->tireTemps[3],
+      //   (wheels->getTempUnit() == 'F')
+      // );
+      nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F'));
     }
     wheels->draw();
 
