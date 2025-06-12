@@ -3,7 +3,13 @@
 extern Adafruit_ST7789 tft;   // from your main sketch
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSans12pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSans18pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
+#include <Fonts/FreeMono18pt7b.h>
+#include <Fonts/FreeMonoBold18pt7b.h>
+
+extern HWCDC USBSerial;
 
 void ThreeSectionTire::setSectionTemps(const float temps[3],
                                        bool isFahrenheit,
@@ -51,6 +57,8 @@ void ThreeSectionTire::classifyOne(int idx, float temp,
 }
 
 void ThreeSectionTire::draw(bool force) {
+    //tft.fillScreen(ST77XX_BLACK);
+
   // Only redraw if forced or temp changed
   static float lastTemps[3] = { NAN, NAN, NAN };
   bool changed = force;
@@ -90,7 +98,11 @@ void ThreeSectionTire::draw(bool force) {
 
   // draw each temperature string center-aligned in its band
   
-    tft.setFont(&FreeSans12pt7b);
+    //tft.setFont(&FreeSansBold12pt7b);
+  //  tft.setFont(&FreeSans12pt7b);
+  //tft.setFont(&FreeSans18pt7b);
+  //tft.setFont(&FreeMono18pt7b);
+  tft.setFont(&FreeMonoBold18pt7b);
   //tft.setFont(&FreeMono9pt7b);
   tft.setTextSize(1);
   //tft.setTextDatum(MC_DATUM);  // center-middle
@@ -104,25 +116,31 @@ void ThreeSectionTire::draw(bool force) {
     tft.setTextColor(sectionTextColors[i], sectionFillColors[i]);
 
     
-    String tempString = String(tInt) + (char)0xF7 + tempUnit;
-
-    uint16_t textWidth, textHeight;
-    
+    String tempString = String(tInt) ;//+ (char)0xF7 + tempUnit;
+    uint16_t textWidth, textHeight;    
     int16_t c_x, c_y;
-    //tft.setTextSize(4);
     tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
-    int startX = (x+bandW*i) + (bandW - textWidth) / 2;
-    int yMod = (i==0)? (textHeight*-1):((i==2)?textHeight:0);
-    int startY = (y + (height / 2))+yMod;// - (textHeight / 2);
+    int startX = (x+bandW*i);// - ((textWidth/2)+(bandW/2));
+    //int yMod = (i==0)? (textHeight*-1):((i==2)?textHeight:0);
+    int yMod = (i==0 || i==2)? (textHeight):0;
+    int startY = (y + ((height+textHeight) / 2))+yMod;// - (textHeight / 2);
     tft.setCursor(startX, startY);
     tft.println(tempString);
     
-    
+    USBSerial.print(i);
+    USBSerial.print(": `");
+    USBSerial.print(tempString);
+    USBSerial.print("`: ");
+    USBSerial.print(textWidth);
+    USBSerial.print("`: ");
+    USBSerial.print(c_x);
+    USBSerial.print(" | ");
     //tft.setCursor(cx,cy);//startX, y + (height / 2) - (textHeight / 2));
     //tft.println(buf);
 
     //tft.drawString(buf, cx, cy);
   }
+  USBSerial.println("");
 }
 
 void ThreeSectionTire::setTemps(const float *temps, size_t count, bool isFahrenheit, float minTemp, float idealTemp, float maxTemp, uint16_t lowColor,  uint16_t normalColor,uint16_t idealColor,  uint16_t highColor,uint16_t lowTextColor, uint16_t normalTextColor, uint16_t idealTextColor,  uint16_t highTextColor)

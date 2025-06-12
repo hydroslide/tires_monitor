@@ -38,6 +38,20 @@ Wheels::Wheels(int bufferPix,
     frontRight = mk(fr3, x1,y0);
     rearLeft   = mk(rl3, x0,y1);
     rearRight  = mk(rr3, x1,y1);
+
+      // Attempt to allocate frame buffer in PSRAM
+    framebuf = (uint16_t *)heap_caps_malloc(
+        tft.width()* tft.height() sizeof(uint16_t),
+        MALLOC_CAP_SPIRAM
+    );
+    if (!framebuf) {
+        // Fall back to normal heap
+        framebuf = (uint16_t *)malloc(tft.width()* tft.height() * sizeof(uint16_t));
+    }
+    if (!framebuf) {
+        // If allocation fails, halt
+        while (true) { delay(1000); }
+    }
 }
 
 Wheels::~Wheels() {
@@ -45,13 +59,27 @@ Wheels::~Wheels() {
     delete frontRight;
     delete rearLeft;
     delete rearRight;
+
+    if (framebuf) {
+        free(framebuf);
+        framebuf = nullptr;
+    }
 }
 
 void Wheels::draw(bool force) {
+    RefreshScreen();
     frontLeft->draw(force);
     frontRight->draw(force);
     rearLeft->draw(force);
     rearRight->draw(force);
+}
+
+void Wheels:RefreshScreen(){
+        // Push the entire buffer to ST7789 at (areaX, areaY)
+    tft.startWrite();
+    tft.setAddrWindow(0, 0, tft.width(), tft.height());
+    tft.writePixels(framebuf, tft.width() * tft.height());
+    tft.endWrite();
 }
 
 void Wheels::setTireTemps(const TireTemps &fl,
