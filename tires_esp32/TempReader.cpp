@@ -113,11 +113,11 @@ void TempReader::readTemps(){
                     float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
                     if (useFarenheit)
                      tireSectionTemps[i][j] = valueF;
-                     USBSerial.print("|");
-                     USBSerial.print(valueF);
-                        USBSerial.print("F");
+                    //  USBSerial.print("|");
+                    //  USBSerial.print(valueF);
+                    //     USBSerial.print("F");
                 }    
-                USBSerial.println("|");            
+                // USBSerial.println("|");            
             }
         }else{
             float temp = getTemp(i, useFarenheit);

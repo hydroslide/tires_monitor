@@ -79,7 +79,8 @@ private:
     char tempUnit;
     uint16_t lowTempColor, normalTempColor, idealTempColor, highTempColor;
     uint16_t lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor;
-
+    uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
+    void RefreshScreen();
 };
 
 #endif

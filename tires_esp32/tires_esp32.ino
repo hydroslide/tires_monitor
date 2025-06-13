@@ -51,7 +51,9 @@ ThermalDisplay* UR = factory.createDisplay(/*top=*/ true, /*left=*/ false);
 // Keep track of time
 unsigned long previousTime = 0;
 long millisSinceLastUpdate = 0;
-long updateIntervalMillis = 100;
+long updateIntervalMillis = 1000;
+long readIntervalMillis = 100;
+long millisSinceLastRead = 0;
 
 // Time helper
 long timeDelta()
@@ -86,57 +88,57 @@ static void initializeSystem();
 void doRunningMode(int time_delta)
 {
   millisSinceLastUpdate += time_delta;
-  if (millisSinceLastUpdate >= updateIntervalMillis)
+  millisSinceLastRead += time_delta;
+  if (millisSinceLastRead >= readIntervalMillis)
   {
-    long tempMillis = millisSinceLastUpdate;
-    millisSinceLastUpdate = 0;
+    millisSinceLastRead = 0;
 
     // Read tire temps
     tempReader->readTemps();
 
+    if (millisSinceLastUpdate >= updateIntervalMillis){
+      millisSinceLastUpdate=0;
+      if (testMode){
+        //wheels->setTireTemps(25,55,120,200);
+        Wheels::TireTemps fl( 25 );            // single‐value
+        Wheels::TireTemps fr(55); // three‐value
+        Wheels::TireTemps rl( 120);
+        Wheels::TireTemps rr(200); 
 
+        wheels->setTireTemps(fl, fr, rl, rr);
+      }
+      else {
+        Wheels::TireTemps fl( tempReader->tireSectionTemps[0] );   // three‐value      
+        Wheels::TireTemps fr(tempReader->tireTemps[1]);    // single‐value
+        Wheels::TireTemps rl( tempReader->tireTemps[2]);
+        Wheels::TireTemps rr( tempReader->tireTemps[3] ); 
 
+        wheels->setTireTemps(fl, fr, rl, rr);
+        // Update Wheels display
+        // wheels->setTireTemps(
+        //   tempReader->tireTemps[0],
+        //   tempReader->tireTemps[1],
+        //   tempReader->tireTemps[2],
+        //   tempReader->tireTemps[3]
+        // );
 
-    if (testMode){
-       //wheels->setTireTemps(25,55,120,200);
-      Wheels::TireTemps fl( 25 );            // single‐value
-      Wheels::TireTemps fr(55); // three‐value
-      Wheels::TireTemps rl( 120);
-      Wheels::TireTemps rr(200); 
+            // Send them to NBP
+        // nbp.setTireTemps(
+        //   tempReader->tireTemps[0],
+        //   tempReader->tireTemps[1],
+        //   tempReader->tireTemps[2],
+        //   tempReader->tireTemps[3],
+        //   (wheels->getTempUnit() == 'F')
+        // );
+        nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F'));
+      }
+      wheels->draw();
 
-      wheels->setTireTemps(fl, fr, rl, rr);
+          // WifiSerial
+      wifiSerial.loop();
     }
-    else {
-      Wheels::TireTemps fl( tempReader->tireSectionTemps[0] );   // three‐value      
-      Wheels::TireTemps fr(tempReader->tireTemps[1]);    // single‐value
-      Wheels::TireTemps rl( tempReader->tireTemps[2]);
-      Wheels::TireTemps rr( tempReader->tireTemps[3] ); 
-
-      wheels->setTireTemps(fl, fr, rl, rr);
-      // Update Wheels display
-      // wheels->setTireTemps(
-      //   tempReader->tireTemps[0],
-      //   tempReader->tireTemps[1],
-      //   tempReader->tireTemps[2],
-      //   tempReader->tireTemps[3]
-      // );
-
-          // Send them to NBP
-      // nbp.setTireTemps(
-      //   tempReader->tireTemps[0],
-      //   tempReader->tireTemps[1],
-      //   tempReader->tireTemps[2],
-      //   tempReader->tireTemps[3],
-      //   (wheels->getTempUnit() == 'F')
-      // );
-      nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F'));
-    }
-    wheels->draw();
 
     UR->updateDisplay(tempReader->tire_frames[0]);
-
-    // WifiSerial
-    wifiSerial.loop();
   }
 
 
