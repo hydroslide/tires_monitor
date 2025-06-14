@@ -34,6 +34,3 @@ temp
 *.exe
 *.out
 *.app
-
-tires_esp32_pio
-tires_pio_waveshare
