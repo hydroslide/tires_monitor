@@ -57,6 +57,13 @@ private:
     float    sectionTemps[3];
     uint16_t sectionFillColors[3];
     uint16_t sectionTextColors[3];
+    bool initialized = false;
+    bool crossedThreshold = true;
+    bool shouldResetThreshold = false;
+    int forceInterval = 5;
+    int drawsSinceForce = 0;
+
+    String printTemp(int temp, int i, int bandW);
 
     // Helper: classify one section’s color/text from temp + thresholds
     void classifyOne(int idx, float tempC,

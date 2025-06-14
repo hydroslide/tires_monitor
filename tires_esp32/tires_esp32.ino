@@ -28,6 +28,7 @@
 #define WIFI_PORT 8080
 
 bool testMode = false;
+int forceDrawAfterInit = 0;
 
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
@@ -96,43 +97,40 @@ void doRunningMode(int time_delta)
     // Read tire temps
     tempReader->readTemps();
 
-    if (millisSinceLastUpdate >= updateIntervalMillis){
-      millisSinceLastUpdate=0;
-      if (testMode){
-        //wheels->setTireTemps(25,55,120,200);
-        Wheels::TireTemps fl( 25 );            // single‐value
-        Wheels::TireTemps fr(55); // three‐value
-        Wheels::TireTemps rl( 120);
-        Wheels::TireTemps rr(200); 
+    Wheels::TireTemps fl;           
+    Wheels::TireTemps fr; 
+    Wheels::TireTemps rl;
+    Wheels::TireTemps rr;
 
-        wheels->setTireTemps(fl, fr, rl, rr);
+    if (testMode){
+        //wheels->setTireTemps(25,55,120,200);
+       fl =  Wheels::TireTemps( 25 );            // single‐value
+       fr = Wheels::TireTemps(55); // three‐value
+       rl = Wheels::TireTemps( 120);
+       rr = Wheels::TireTemps(200);         
       }
       else {
-        Wheels::TireTemps fl( tempReader->tireSectionTemps[0] );   // three‐value      
-        Wheels::TireTemps fr(tempReader->tireTemps[1]);    // single‐value
-        Wheels::TireTemps rl( tempReader->tireTemps[2]);
-        Wheels::TireTemps rr( tempReader->tireTemps[3] ); 
+        fl = Wheels::TireTemps( tempReader->tireSectionTemps[0] );   // three‐value      
+        fr = Wheels::TireTemps(tempReader->tireTemps[1]);    // single‐value
+        rl = Wheels::TireTemps( tempReader->tireTemps[2]);
+        rr = Wheels::TireTemps( tempReader->tireTemps[3] ); 
 
-        wheels->setTireTemps(fl, fr, rl, rr);
-        // Update Wheels display
-        // wheels->setTireTemps(
-        //   tempReader->tireTemps[0],
-        //   tempReader->tireTemps[1],
-        //   tempReader->tireTemps[2],
-        //   tempReader->tireTemps[3]
-        // );
-
-            // Send them to NBP
-        // nbp.setTireTemps(
-        //   tempReader->tireTemps[0],
-        //   tempReader->tireTemps[1],
-        //   tempReader->tireTemps[2],
-        //   tempReader->tireTemps[3],
-        //   (wheels->getTempUnit() == 'F')
-        // );
-        nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F'));
+               
       }
-      wheels->draw();
+
+    if (millisSinceLastUpdate >= updateIntervalMillis){
+      millisSinceLastUpdate=0;
+
+      if (!testMode)
+        nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F')); 
+
+      wheels->setTireTemps(fl, fr, rl, rr);
+      if (forceDrawAfterInit>0){
+          tft.fillScreen(ST77XX_BLACK);
+          wheels->draw(true);
+          forceDrawAfterInit--;
+      }else
+        wheels->draw();
 
           // WifiSerial
       wifiSerial.loop();
@@ -256,6 +254,7 @@ static void cleanupObjects()
   }
 }
 
+
 static void initializeSystem()
 {
   cleanupObjects();
@@ -301,16 +300,20 @@ static void initializeSystem()
 
   tempReader = new TempReader();
   tempReader->useFarenheit = (scaleVal == 0);
-      Wheels::TireTemps fl(0);  // three‐value
-      Wheels::TireTemps fr(0);// single‐value 
-      Wheels::TireTemps rl(0);
-      Wheels::TireTemps rr(0); 
+      constexpr float zeros[3] = { 0.0f, 0.0f, 0.0f };
+      Wheels::TireTemps fl(zeros);  // three‐value
+      Wheels::TireTemps fr(zeros);// single‐value 
+      Wheels::TireTemps rl(zeros);
+      Wheels::TireTemps rr(zeros); 
 
       wheels->setTireTemps(fl, fr, rl, rr);
-  //wheels->setTireTemps(0, 0, 0, 0);
+  //wheels->setTireTemps(0, 0, 0, 0);  
+  wheels->draw(true);
   tft.fillScreen(ST77XX_BLACK);
-  wheels->draw();
+  forceDrawAfterInit = 2;
 }
+
+
 
 static void applyMenuConfig()
 {

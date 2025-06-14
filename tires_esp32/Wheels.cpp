@@ -27,10 +27,10 @@ Wheels::Wheels(int bufferPix,
     // lambda to pick class based on the bool
     auto mk = [&](bool three, int x, int y){
       if (three)
-        return (Tire*)new ThreeSectionTire(x,y,tireW,tireH,
+        return (Tire*)new ThreeSectionTire(x,y,tireW,tireH, bufferPix,
                                           outlineColor,textColor,tempUnit);
       else
-        return (Tire*)new Tire(x,y,tireW,tireH,
+        return (Tire*)new Tire(x,y,tireW,tireH, bufferPix,
                                outlineColor,textColor,tempUnit);
     };
 
@@ -54,13 +54,13 @@ Wheels::Wheels(int bufferPix,
     }
 
 
-    for (int yy = yStart; yy < yEnd; yy++) {
-        for (int xx = xStart; xx < xEnd; xx++) {
-            framebuf[yy * areaW + xx] = color;
-        }
-        // Yield to avoid watchdog reset
-        //yield();
-    }
+    // for (int yy = yStart; yy < yEnd; yy++) {
+    //     for (int xx = xStart; xx < xEnd; xx++) {
+    //         framebuf[yy * areaW + xx] = color;
+    //     }
+    //     // Yield to avoid watchdog reset
+    //     //yield();
+    // }
 }
 
 Wheels::~Wheels() {

@@ -17,6 +17,8 @@ public:
 struct TireTemps {
   float values[3];
   size_t count;
+  
+  TireTemps() = default;             // 1) default‐ctor
 
   // single‐value constructor
   explicit TireTemps(float v)

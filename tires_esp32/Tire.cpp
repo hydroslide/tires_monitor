@@ -7,8 +7,8 @@ Tire::Tire() {}
 
 Tire::~Tire() {}
 
-Tire::Tire(int _x, int _y, int _width, int _height, uint16_t _outlineColor, uint16_t _textColor, char _tempUnit)
-    : x(_x), y(_y), width(_width), height(_height), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {}
+Tire::Tire(int _x, int _y, int _width, int _height, int _bufferPix, uint16_t _outlineColor, uint16_t _textColor, char _tempUnit)
+    : x(_x), y(_y), width(_width), height(_height), bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {}
 
 void Tire::draw(bool force) {
     if ((int)temperature != (int)lastTemp) {
