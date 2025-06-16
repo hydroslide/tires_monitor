@@ -34,3 +34,5 @@ temp
 *.exe
 *.out
 *.app
+
+.branchCompare
