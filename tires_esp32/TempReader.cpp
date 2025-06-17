@@ -92,20 +92,19 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
 
 TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
-    tireSensor[0]=true;
-    tireSensor[1]=false;
-    tireSensor[2]=false;
-    tireSensor[3]=false;
-
     for (uint8_t i = 0; i < TIRE_COUNT; i++){
-        tireSensorBegun[i] = false;
+        tireSensorIsCamera[i]=false; 
+        tireSensorBegun[i] = -2;
     }
 }
 
 void TempReader::readTemps(){
     for (uint8_t i = 0; i < TIRE_COUNT; i++)
     {
-        if (tireSensor[i]){
+        int busIndex = sensorIndices[i];
+        select_I2C_bus(busIndex);  
+        checkTireSensor(i);
+        if (tireSensorIsCamera[i]){
             if(readFrame(i)){
                 fillTireFrame(i);
                 getSectionMedians(frame, true, tireSectionTemps[i]);
@@ -120,14 +119,21 @@ void TempReader::readTemps(){
                 // USBSerial.println("|");            
             }
         }else{
-            float temp = getTemp(i, useFarenheit);
+            float temp = 0.0;
+            if (tireSensorBegun[i]==1){
+                temp = getTemp(i, useFarenheit);
                 if (isnan(temp))
-                temp = 0.0f;
-                //USBSerial.print("Temp Read: ");
-                //USBSerial.println(temp);
-                tireTemps[i] = temp;
+                    temp = 0.0f;
+                USBSerial.print(i);
+                USBSerial.print(": Temp Read: ");
+                USBSerial.println(temp);
             }
+            tireTemps[i] = temp;
+            tireSectionTemps[i][0] = temp;
+            tireSectionTemps[i][1] = 0.0;
+            tireSectionTemps[i][2] = 0.0;
         }
+    }
 }
 
 void TempReader::fillTireFrame(int n) {
@@ -151,32 +157,54 @@ void TempReader::fillTireFrame(int n) {
     }
 
 void TempReader::checkTireSensor(uint8_t index){
-    if (!tireSensorBegun[index]){
-        USBSerial.print("Adafruit MLX90640 Camera Begin: ");
-        USBSerial.println(index);
-        while (!mlx_a[index].begin(MLX90640_I2CADDR_DEFAULT, &Wire)) {
-            USBSerial.println("MLX90640 not found!");
-            delay(1000);
+    if (tireSensorBegun[index]<1){
+        if (tireSensorBegun[index]<0){
+            USBSerial.print("Attempt Adafruit MLX90640 Camera Begin: ");
+            USBSerial.println(index);
+            Wire.setClock(1000000); // max 1 MHz
+            if (!mlx_a[index].begin(MLX90640_I2CADDR_DEFAULT, &Wire)) {
+                USBSerial.print("MLX90640 not found at index: ");
+                USBSerial.println(index);
+                tireSensorBegun[index]++;
+            }else{            
+                mlx_a[index].setMode(MLX90640_CHESS);
+                mlx_a[index].setResolution(MLX90640_ADC_18BIT);
+                mlx_a[index].setRefreshRate(MLX90640_16_HZ);
+                //mlx_a[index].setRefreshRate(MLX90640_1_HZ);
+                USBSerial.print("Adafruit MLX90640 Camera Begun: ");
+                USBSerial.println(index);
+                tireSensorBegun[index]=1;
+                tireSensorIsCamera[index]=true;
+            }
+        }else{
+            USBSerial.print("Attempt MLX_0 Begin: ");
+            USBSerial.println(index);
+            Wire.setClock(100000);
+            mlx_0[index].begin();
+            tireSensorBegun[index]=1;
+            tireSensorIsCamera[index]=false;
+            USBSerial.print("MLX_0 Begun: ");
+            USBSerial.println(index);
         }
-        
-        // TODO: Initialize this for each sensor.
-        mlx_a[index].setMode(MLX90640_CHESS);
-        mlx_a[index].setResolution(MLX90640_ADC_18BIT);
-        mlx_a[index].setRefreshRate(MLX90640_16_HZ);
-        //mlx_a[index].setRefreshRate(MLX90640_1_HZ);
-        USBSerial.print("Adafruit MLX90640 Camera Begun: ");
-        USBSerial.println(index);
-        tireSensorBegun[index]=true;
+    }else{
+        if(tireSensorIsCamera[index]==false){
+            //USBSerial.print("Attempt MLX_0 Begin: ");
+            //USBSerial.println(index);
+            Wire.setClock(100000);
+            mlx_0[index].begin();
+        }
+        else
+            Wire.setClock(1000000); // max 1 MHz
     }
 }
 
 void TempReader::setup(){
-    USBSerial.println("mlx.begin");
-    mlx_0.begin();  
-    USBSerial.println("mlx.begun");
+    // USBSerial.println("mlx.begin");
+    // mlx_0.begin();  
+    // USBSerial.println("mlx.begun");
 
 
-  Wire.setClock(1000000); // max 1 MHz
+
 
 }
 
@@ -185,18 +213,6 @@ float TempReader::celsiusToFahrenheit(float c) {
      }
 
 bool TempReader::readFrame(uint8_t index){
-     index = sensorIndices[index];
-    //USBSerial.print("Getting temp: ");
-    //USBSerial.println(index);
-    select_I2C_bus(index);
-    //USBSerial.println("I2C Bus Selected");   
-    checkTireSensor(index);
-
-    // mlx_a[index].setMode(MLX90640_CHESS);  // re-assert chess; this acts as start if in 1 Hz mode
-
-    // // 3) Wait the conversion time. For 18-bit ADC and “chess” pattern,
-    // //    minimum delay ≈ 62 ms for a single full-frame.
-    // delay(62);
 
     if (mlx_a[index].getFrame(frame) != 0) {
         USBSerial.println("Failed to read MLX frame");            
@@ -221,16 +237,10 @@ void TempReader::flipFrameHorizontal(float frame[FRAME_PIXELS]) {
 }
 
 float TempReader::getTemp(uint8_t index, bool farenheit){
-    index = sensorIndices[index];
-    //USBSerial.print("Getting temp: ");
-    //USBSerial.println(index);
-    select_I2C_bus(index);   
-    mlx_0.begin();
-    //return 0.0f;
     if (farenheit)
-        return mlx_0.readObjectTempF();
+        return mlx_0[index].readObjectTempF();
     else
-        return mlx_0.readObjectTempC();    
+        return mlx_0[index].readObjectTempC();    
 }
 
 void TempReader::select_I2C_bus(uint8_t bus){
@@ -262,6 +272,5 @@ void TempReader::select_I2C_bus(uint8_t bus){
         USBSerial.print("I2C error: ");
         USBSerial.println(err);
     }
-    delayMicroseconds(200);        // give the mux time to settle
-    Wire.setClock(1000000);     
+    delayMicroseconds(200);        // give the mux time to settle 
 }

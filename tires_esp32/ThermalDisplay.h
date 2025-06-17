@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_ST7789.h>
+#include "TempReader.h"
 #include <stdint.h>
 
 /**
@@ -24,9 +25,11 @@ class ThermalDisplay {
 
 private:
     Adafruit_ST7789 &tft;   // reference to the TFT display object
-    uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
+    static uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
     int areaX, areaY;       // upper-left origin of the update region
     int areaW, areaH;       // width/height of the update region
+    
+    int tempIndex;
 
     // Fixed camera dimensions
     static constexpr int CAMERA_WIDTH  = 32;
@@ -54,6 +57,11 @@ public:
     /** Destructor frees the allocated frame buffer. */
     ~ThermalDisplay();
 
+    void setTempIndex(int _tempIndex);
+
+    static TempReader* tempReader;
+    bool isActive=true;
+
     /**
      * updateDisplay
      *
@@ -64,6 +72,10 @@ public:
      * to the region at (areaX, areaY) on the ST7789 display.
      */
     void updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]);
+
+    void updateDisplay();
+
+    void updateDisplay(int _tempIndex);
 
 };
 

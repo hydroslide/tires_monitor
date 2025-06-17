@@ -13,6 +13,16 @@ public:
     char getTempUnit();
     void setTempUnit(char tempUnit);
 
+    // your color/threshold fields…
+    int bufferPix;
+    uint16_t outlineColor, textColor;
+    float minTemp, idealTemp, maxTemp;
+    char tempUnit;
+    bool fl3=false;
+    bool fr3=false;
+    bool rl3=false;
+    bool rr3=false;
+
     // helper for setTireTemps
 struct TireTemps {
   float values[3];
@@ -60,6 +70,8 @@ struct TireTemps {
 
     ~Wheels();
 
+    Wheels(Wheels* src, bool fl3, bool fr3, bool rl3, bool rr3);
+
     // draw all four
     void draw(bool force=false);
 
@@ -75,13 +87,10 @@ struct TireTemps {
 private:
     Tire *frontLeft, *frontRight, *rearLeft, *rearRight;
 
-    // your color/threshold fields…
-    uint16_t outlineColor, textColor;
-    float minTemp, idealTemp, maxTemp;
-    char tempUnit;
+
     uint16_t lowTempColor, normalTempColor, idealTempColor, highTempColor;
     uint16_t lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor;
-    uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
+    //uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
     void RefreshScreen();
 };
 

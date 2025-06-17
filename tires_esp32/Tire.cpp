@@ -1,4 +1,5 @@
 #include "Tire.h"
+#include <Fonts/FreeMonoBold24pt7b.h>
 
 extern Adafruit_ST7789 tft;
 extern HWCDC USBSerial;
@@ -11,7 +12,7 @@ Tire::Tire(int _x, int _y, int _width, int _height, int _bufferPix, uint16_t _ou
     : x(_x), y(_y), width(_width), height(_height), bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {}
 
 void Tire::draw(bool force) {
-    if ((int)temperature != (int)lastTemp) {
+    if ((int)temperature != (int)lastTemp || force || temperature==0.0) {
         if ((lastTemp>=100 && temperature<100) || (lastTemp<100 && temperature>=100) || (lastTemp<0 && temperature>=0) || (lastTemp>=0 && temperature<0))
             force=true;
 
@@ -37,8 +38,15 @@ void Tire::printTemp() {
     tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
     int startX = x + (width - textWidth) / 2;
-    tft.setCursor(startX, y + (height / 2) - (textHeight / 2));
+    int startY = y + (height / 2) - (textHeight / 2);
+    tft.setCursor(startX, startY);
     tft.setTextColor(textColor, fillColor);
+
+    // tft.setFont(&FreeMonoBold24pt7b);
+    // tft.setTextSize(1);
+    // tft.fillRect(startX, startY, textWidth, textHeight, fillColor);
+    // tft.println(tempString);
+
     tft.println(tempString);
 
     lastTemp = temperature;

@@ -45,9 +45,13 @@ TempReader* tempReader = nullptr;
 // ... after initializing tft in setup() ...
 QuadrantFactory factory(tft, /*margin=*/ 5);
 
-// To create the upper-left ThermalDisplay:
-//ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
+// // To create the upper-left ThermalDisplay:
+ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
 ThermalDisplay* UR = factory.createDisplay(/*top=*/ true, /*left=*/ false);
+ThermalDisplay* LL = factory.createDisplay(/*top=*/ false, /*left=*/ true);
+ThermalDisplay* LR = factory.createDisplay(/*top=*/ false, /*left=*/ false);
+
+ThermalDisplay* thermalDisplays[4] = {UL, UR, LL, LR};
 
 // Keep track of time
 unsigned long previousTime = 0;
@@ -85,6 +89,29 @@ static void applyMenuConfig();
 static void cleanupObjects();
 static void initializeSystem();
 
+void checkForWheelsReset(){
+  if (tempReader->tireSensorIsCamera[0] != wheels->fl3 ||
+      tempReader->tireSensorIsCamera[1] != wheels->fr3 ||
+      tempReader->tireSensorIsCamera[2] != wheels->rl3 ||
+      tempReader->tireSensorIsCamera[3] != wheels->rr3){
+        USBSerial.println("Found a different sensor. resetting Wheels");
+        Wheels* oldWheels = wheels;
+        USBSerial.println("oldWheels Point Created");
+        USBSerial.print("Free heap before alloc: ");
+        USBSerial.println(ESP.getFreeHeap());
+        wheels = new Wheels(oldWheels,
+          tempReader->tireSensorIsCamera[0],
+          tempReader->tireSensorIsCamera[1],
+          tempReader->tireSensorIsCamera[2],
+          tempReader->tireSensorIsCamera[3]);
+        USBSerial.println("new Wheels object initialized");
+        delete oldWheels;
+        USBSerial.println("oldWheels deleted");
+        oldWheels = nullptr;
+        USBSerial.println("oldWheels pointer set to null");
+      }
+}
+
 // Normal Running Mode
 void doRunningMode(int time_delta)
 {
@@ -97,29 +124,28 @@ void doRunningMode(int time_delta)
     // Read tire temps
     tempReader->readTemps();
 
-    Wheels::TireTemps fl;           
-    Wheels::TireTemps fr; 
-    Wheels::TireTemps rl;
-    Wheels::TireTemps rr;
-
-    if (testMode){
-        //wheels->setTireTemps(25,55,120,200);
-       fl =  Wheels::TireTemps( 25 );            // single‐value
-       fr = Wheels::TireTemps(55); // three‐value
-       rl = Wheels::TireTemps( 120);
-       rr = Wheels::TireTemps(200);         
-      }
-      else {
-        fl = Wheels::TireTemps( tempReader->tireSectionTemps[0] );   // three‐value      
-        fr = Wheels::TireTemps(tempReader->tireTemps[1]);    // single‐value
-        rl = Wheels::TireTemps( tempReader->tireTemps[2]);
-        rr = Wheels::TireTemps( tempReader->tireTemps[3] ); 
-
-               
-      }
-
     if (millisSinceLastUpdate >= updateIntervalMillis){
       millisSinceLastUpdate=0;
+      checkForWheelsReset();
+
+      Wheels::TireTemps fl;           
+      Wheels::TireTemps fr; 
+      Wheels::TireTemps rl;
+      Wheels::TireTemps rr;
+
+      if (testMode){
+          //wheels->setTireTemps(25,55,120,200);
+        fl =  Wheels::TireTemps( 25 );            // single‐value
+        fr = Wheels::TireTemps(55); // three‐value
+        rl = Wheels::TireTemps( 120);
+        rr = Wheels::TireTemps(200);         
+        }
+        else {
+          fl = (tempReader->tireSensorIsCamera[0])? Wheels::TireTemps( tempReader->tireSectionTemps[0] ):  Wheels::TireTemps( tempReader->tireTemps[0]);  // three‐value      
+          fr = (tempReader->tireSensorIsCamera[1])? Wheels::TireTemps( tempReader->tireSectionTemps[1] ):  Wheels::TireTemps( tempReader->tireTemps[1]);    // single‐value
+          rl = (tempReader->tireSensorIsCamera[2])? Wheels::TireTemps( tempReader->tireSectionTemps[2] ):  Wheels::TireTemps( tempReader->tireTemps[2]);
+          rr = (tempReader->tireSensorIsCamera[3])? Wheels::TireTemps( tempReader->tireSectionTemps[3] ):  Wheels::TireTemps( tempReader->tireTemps[3]); 
+        }
 
       if (!testMode)
         nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F')); 
@@ -136,7 +162,16 @@ void doRunningMode(int time_delta)
       wifiSerial.loop();
     }
 
-    UR->updateDisplay(tempReader->tire_frames[0]);
+    thermalDisplays[0]->updateDisplay(2);
+    thermalDisplays[1]->updateDisplay(3);
+    thermalDisplays[2]->updateDisplay(0);
+    thermalDisplays[3]->updateDisplay(1);
+
+    // for (int i=0; i>TempReader::TIRE_COUNT; i++){
+      
+    // }
+    // if (tempReader->tireSensorIsCamera[0])
+    //   UR->updateDisplay(tempReader->tire_frames[0]);
   }
 
 
@@ -289,7 +324,7 @@ static void initializeSystem()
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
-  bool fl3 = true;
+  bool fl3 = false;
   bool fr3 = false;
   bool rl3 = false;
   bool rr3 = false;
@@ -300,6 +335,8 @@ static void initializeSystem()
 
   tempReader = new TempReader();
   tempReader->useFarenheit = (scaleVal == 0);
+  ThermalDisplay::tempReader = tempReader;
+
       constexpr float zeros[3] = { 0.0f, 0.0f, 0.0f };
       Wheels::TireTemps fl(zeros);  // three‐value
       Wheels::TireTemps fr(zeros);// single‐value 
@@ -308,8 +345,9 @@ static void initializeSystem()
 
       wheels->setTireTemps(fl, fr, rl, rr);
   //wheels->setTireTemps(0, 0, 0, 0);  
-  wheels->draw(true);
   tft.fillScreen(ST77XX_BLACK);
+  wheels->draw(true);
+  //tft.fillScreen(ST77XX_BLACK);
   forceDrawAfterInit = 2;
 }
 

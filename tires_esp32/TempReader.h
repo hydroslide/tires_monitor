@@ -17,7 +17,7 @@ class TempReader {
         static constexpr int FRAME_PIXELS = COLS * ROWS;  
         float getTemp(uint8_t index, bool farenheit);
         void select_I2C_bus(uint8_t bus);
-        Adafruit_MLX90614 mlx_0;
+        Adafruit_MLX90614 mlx_0[TIRE_COUNT];
         Adafruit_MLX90640 mlx_a[TIRE_COUNT];
         float celsiusToFahrenheit(float c);
         void fillTireFrame(int n);
@@ -29,12 +29,12 @@ class TempReader {
         void flipFrameHorizontal(float frame[FRAME_PIXELS]);
 
     public:
-        TempReader();
+        TempReader();        
         void setup();        
         float tireTemps[TIRE_COUNT];
         float tireSectionTemps[TIRE_COUNT][3];
-        bool tireSensor[TIRE_COUNT];
-        bool tireSensorBegun[TIRE_COUNT];
+        bool tireSensorIsCamera[TIRE_COUNT];
+        int8_t tireSensorBegun[TIRE_COUNT];
         
         float frame[FRAME_PIXELS];                   // MLX90640 float-array
         int   tire_frames[TIRE_COUNT][FRAME_PIXELS]; // TIRE_COUNT × (32×24) integer arrays

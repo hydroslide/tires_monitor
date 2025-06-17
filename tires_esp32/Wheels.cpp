@@ -1,19 +1,20 @@
 #include "Wheels.h"
 extern Adafruit_ST7789 tft;  // your global display
 
-Wheels::Wheels(int bufferPix,
+Wheels::Wheels(int _bufferPix,
                uint16_t _outlineColor,
                uint16_t _textColor,
                float _minTemp, float _idealTemp, float _maxTemp,
                char _tempUnit,
-               bool fl3, bool fr3, bool rl3, bool rr3,
+               bool _fl3, bool _fr3, bool _rl3, bool _rr3,
                uint16_t _lowTempColor,    uint16_t _normalTempColor,
                uint16_t _idealTempColor,  uint16_t _highTempColor,
                uint16_t _lowTempTextColor,    uint16_t _normalTempTextColor,
                uint16_t _idealTempTextColor,  uint16_t _highTempTextColor)
-  : outlineColor(_outlineColor), textColor(_textColor),
+  : bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor),
     minTemp(_minTemp), idealTemp(_idealTemp), maxTemp(_maxTemp),
     tempUnit(_tempUnit),
+    fl3(_fl3), fr3(_fr3), rl3(_rl3), rr3(_rr3),
     lowTempColor(_lowTempColor), normalTempColor(_normalTempColor),
     idealTempColor(_idealTempColor), highTempColor(_highTempColor),
     lowTempTextColor(_lowTempTextColor), normalTempTextColor(_normalTempTextColor),
@@ -39,19 +40,19 @@ Wheels::Wheels(int bufferPix,
     rearLeft   = mk(rl3, x0,y1);
     rearRight  = mk(rr3, x1,y1);
 
-      // Attempt to allocate frame buffer in PSRAM
-    framebuf = (uint16_t *)heap_caps_malloc(
-        tft.width()* tft.height() * sizeof(uint16_t),
-        MALLOC_CAP_SPIRAM
-    );
-    if (!framebuf) {
-        // Fall back to normal heap
-        framebuf = (uint16_t *)malloc(tft.width()* tft.height() * sizeof(uint16_t));
-    }
-    if (!framebuf) {
-        // If allocation fails, halt
-        while (true) { delay(1000); }
-    }
+    //   // Attempt to allocate frame buffer in PSRAM
+    // framebuf = (uint16_t *)heap_caps_malloc(
+    //     tft.width()* tft.height() * sizeof(uint16_t),
+    //     MALLOC_CAP_SPIRAM
+    // );
+    // if (!framebuf) {
+    //     // Fall back to normal heap
+    //     framebuf = (uint16_t *)malloc(tft.width()* tft.height() * sizeof(uint16_t));
+    // }
+    // if (!framebuf) {
+    //     // If allocation fails, halt
+    //     while (true) { delay(1000); }
+    // }
 
 
     // for (int yy = yStart; yy < yEnd; yy++) {
@@ -63,16 +64,35 @@ Wheels::Wheels(int bufferPix,
     // }
 }
 
+Wheels::Wheels(Wheels* src, bool _fl3, bool _fr3, bool _rl3, bool _rr3)
+  : Wheels(
+      src->bufferPix,
+      src->outlineColor,
+      src->textColor,
+      src->minTemp, src->idealTemp, src->maxTemp,
+      src->tempUnit,
+      _fl3, _fr3, _rl3, _rr3,
+      src->lowTempColor,
+      src->normalTempColor,
+      src->idealTempColor,
+      src->highTempColor,
+      src->lowTempTextColor,
+      src->normalTempTextColor,
+      src->idealTempTextColor,
+      src->highTempTextColor
+    )
+{}
+
 Wheels::~Wheels() {
     delete frontLeft;
     delete frontRight;
     delete rearLeft;
     delete rearRight;
 
-    if (framebuf) {
-        free(framebuf);
-        framebuf = nullptr;
-    }
+    // if (framebuf) {
+    //     free(framebuf);
+    //     framebuf = nullptr;
+    // }
 }
 
 void Wheels::draw(bool force) {
@@ -85,10 +105,10 @@ void Wheels::draw(bool force) {
 
 void Wheels::RefreshScreen(){
         // Push the entire buffer to ST7789 at (areaX, areaY)
-    tft.startWrite();
-    tft.setAddrWindow(0, 0, tft.width(), tft.height());
-    tft.writePixels(framebuf, tft.width() * tft.height());
-    tft.endWrite();
+    // tft.startWrite();
+    // tft.setAddrWindow(0, 0, tft.width(), tft.height());
+    // tft.writePixels(framebuf, tft.width() * tft.height());
+    // tft.endWrite();
 }
 
 void Wheels::setTireTemps(const TireTemps &fl,

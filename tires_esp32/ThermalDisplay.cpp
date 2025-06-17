@@ -1,6 +1,7 @@
 #include "ThermalDisplay.h"
 #include <esp_heap_caps.h>   // for heap_caps_malloc (PSRAM allocation)
 #include <Arduino.h>         // for yield()
+#include "TempReader.h"
 
 // Define the static 256-entry color palette (RGB565)
 const uint16_t ThermalDisplay::camColors[256] = {
@@ -32,32 +33,53 @@ const uint16_t ThermalDisplay::camColors[256] = {
   0xF0A0, 0xF080, 0xF060, 0xF040, 0xF020, 0xF800
 };
 
+// define+zero-init the static pointer:
+uint16_t* ThermalDisplay::framebuf = nullptr;
+TempReader* ThermalDisplay::tempReader = nullptr;
+
 ThermalDisplay::ThermalDisplay(Adafruit_ST7789 &displayTFT,
                                int areaX, int areaY,
                                int areaW, int areaH)
-  : tft(displayTFT), framebuf(nullptr),
+  : tft(displayTFT),
     areaX(areaX), areaY(areaY), areaW(areaW), areaH(areaH)
 {
-    // Attempt to allocate frame buffer in PSRAM
-    framebuf = (uint16_t *)heap_caps_malloc(
-        areaW * areaH * sizeof(uint16_t),
-        MALLOC_CAP_SPIRAM
-    );
-    if (!framebuf) {
-        // Fall back to normal heap
-        framebuf = (uint16_t *)malloc(areaW * areaH * sizeof(uint16_t));
-    }
-    if (!framebuf) {
-        // If allocation fails, halt
-        while (true) { delay(1000); }
+    if (!framebuf){
+        // Attempt to allocate frame buffer in PSRAM
+        framebuf = (uint16_t *)heap_caps_malloc(
+            areaW * areaH * sizeof(uint16_t),
+            MALLOC_CAP_SPIRAM
+        );
+        if (!framebuf) {
+            // Fall back to normal heap
+            framebuf = (uint16_t *)malloc(areaW * areaH * sizeof(uint16_t));
+        }
+        if (!framebuf) {
+            // If allocation fails, halt
+            while (true) { delay(1000); }
+        }
     }
 }
+
+
 
 ThermalDisplay::~ThermalDisplay() {
     if (framebuf) {
         free(framebuf);
         framebuf = nullptr;
     }
+}
+
+void ThermalDisplay::setTempIndex(int _tempIndex){                                        
+        tempIndex = _tempIndex;
+    }
+
+void ThermalDisplay::updateDisplay(){
+   updateDisplay(tempIndex);
+}
+
+void ThermalDisplay::updateDisplay(int _tempIndex){
+     if (isActive && tempReader->tireSensorIsCamera[_tempIndex])
+        updateDisplay(tempReader->tire_frames[_tempIndex]);
 }
 
 void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT])
