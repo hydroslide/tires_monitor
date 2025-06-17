@@ -191,7 +191,7 @@ static MenuValueBinding useThermalGradientBinding = {
     nullptr,
     0,
     0,
-    0,
+    30,
     nullptr,
     0
 };

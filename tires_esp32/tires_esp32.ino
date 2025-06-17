@@ -330,12 +330,13 @@ static void initializeSystem()
     maxTemp   = getTrackMax();
   }
 
+    ThermalDisplay::useGradient = getUseThermalGradient();
   if (scaleVal)
     ThermalDisplay::setTemperatureRangeC((int)minTemp,(int)idealTemp, (int)maxTemp);
   else
     ThermalDisplay::setTemperatureRangeF((int)minTemp,(int)idealTemp, (int)maxTemp);
 
-  ThermalDisplay::useGradient = getUseThermalGradient();
+
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
