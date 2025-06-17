@@ -304,6 +304,7 @@ static void initializeSystem()
   extern uint8_t getCurrentModeValue();
   extern uint8_t getTemperatureScaleValue();
   extern uint8_t getNightBrightness();
+  extern uint8_t getUseThermalGradient();
   extern uint8_t getStreetMin();
   extern uint8_t getStreetIdeal();
   extern uint8_t getStreetMax();
@@ -329,7 +330,12 @@ static void initializeSystem()
     maxTemp   = getTrackMax();
   }
 
+  if (scaleVal)
+    ThermalDisplay::setTemperatureRangeC((int)minTemp,(int)idealTemp, (int)maxTemp);
+  else
+    ThermalDisplay::setTemperatureRangeF((int)minTemp,(int)idealTemp, (int)maxTemp);
 
+  ThermalDisplay::useGradient = getUseThermalGradient();
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 

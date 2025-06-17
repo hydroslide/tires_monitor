@@ -33,6 +33,20 @@ const uint16_t ThermalDisplay::camColors[256] = {
   0xF0A0, 0xF080, 0xF060, 0xF040, 0xF020, 0xF800
 };
 
+// ─── DEFINE & INITIALIZE STATICS ──────────────────────
+// You can tweak these defaults, or rely on setTemperatureRange()
+int ThermalDisplay::thresholdMin     = MINTEMP;
+int ThermalDisplay::thresholdIdeal   = (MINTEMP + MAXTEMP) / 2;
+int ThermalDisplay::thresholdMax     = MAXTEMP;
+
+bool ThermalDisplay::useGradient = true;
+
+uint16_t ThermalDisplay::camPalette[256];
+int      ThermalDisplay::lenCold;
+int      ThermalDisplay::lenWarm;
+int      ThermalDisplay::lenIdeal;
+int      ThermalDisplay::lenHot;
+
 // define+zero-init the static pointer:
 uint16_t* ThermalDisplay::framebuf = nullptr;
 TempReader* ThermalDisplay::tempReader = nullptr;
@@ -58,6 +72,8 @@ ThermalDisplay::ThermalDisplay(Adafruit_ST7789 &displayTFT,
             while (true) { delay(1000); }
         }
     }
+
+
 }
 
 
@@ -68,6 +84,153 @@ ThermalDisplay::~ThermalDisplay() {
         framebuf = nullptr;
     }
 }
+
+float ThermalDisplay::fahrenheitToCelsius(float f){
+    return (f - 32.0f) * 5.0f / 9.0f;
+}
+
+// ─── STATIC THRESHOLD SETTER ──────────────────────────
+void ThermalDisplay::setTemperatureRangeC(int minTemp,
+                                         int idealTemp,
+                                         int maxTemp)
+{
+    thresholdMin   = constrain(minTemp,   MINTEMP,   MAXTEMP);
+    thresholdIdeal = constrain(idealTemp, thresholdMin, MAXTEMP);
+    thresholdMax   = constrain(maxTemp,   thresholdIdeal, MAXTEMP);
+    generatePalette();
+}
+
+void ThermalDisplay::setTemperatureRangeF(int minTemp,
+                                         int idealTemp,
+                                         int maxTemp)
+{
+    int minTempC = (int)fahrenheitToCelsius(minTemp);
+    int idealTempC = (int)fahrenheitToCelsius(idealTemp);
+    int maxTempC = (int)fahrenheitToCelsius(maxTemp);
+    setTemperatureRangeC(minTempC, idealTempC, maxTempC);
+}
+
+/*
+// ─── STATIC MAPPING HELPER ────────────────────────────
+uint8_t ThermalDisplay::getColorIndexForTemp(int celsius) {
+    // clamp within our class‐wide bounds
+    celsius = constrain(celsius, thresholdMin, thresholdMax);
+
+    // first half of palette = [thresholdMin…thresholdIdeal]
+    if (celsius <= thresholdIdeal) {
+        int upper = max(thresholdIdeal, thresholdMin + 1);
+        int idx = map(celsius, thresholdMin, upper, 1, 127);
+        return constrain(idx, 0, 127);
+    }
+    // second half        = (thresholdIdeal…thresholdMax]
+    else {
+        int lower = min(thresholdIdeal, thresholdMax - 1);
+        int idx   = map(celsius, lower, thresholdMax, 128, 254);
+        return constrain(idx, 128, 255);
+    }
+}
+    */
+uint8_t ThermalDisplay::getColorIndexForTemp(int c) {
+    // clamp entire range: [min-7 … max+7]
+    int lo = thresholdMin - 7;
+    int hi = thresholdMax + 7;
+    c = constrain(c, lo, hi);
+
+    // pick which segment, then local map
+    if (c <= thresholdMin) {
+        // cold segment
+        return map(c, lo, thresholdMin, 0, lenCold - 1);
+    }
+    else if (c <= thresholdIdeal) {
+        // warm segment
+        int start = lenCold;
+        return start + map(c, thresholdMin, thresholdIdeal,
+                           0, lenWarm - 1);
+    }
+    else if (c <= thresholdMax) {
+        // ideal segment
+        int start = lenCold + lenWarm;
+        return start + map(c, thresholdIdeal, thresholdMax,
+                           0, lenIdeal - 1);
+    }
+    else {
+        // hot segment
+        int start = lenCold + lenWarm + lenIdeal;
+        return start + map(c, thresholdMax, hi,
+                           0, lenHot - 1);
+    }
+}
+
+
+void ThermalDisplay::generatePalette() {
+    // 1/8th for “hot” (red→white) = 32 entries
+    lenHot = 256 / 8;       // = 32
+    int rest = 256 - lenHot; // = 224
+
+    // degree spans
+    int spanCold = 7;                         // fixed
+    int spanWarm = thresholdIdeal - thresholdMin;
+    int spanIdeal= thresholdMax   - thresholdIdeal;
+    int sumRest = spanCold + spanWarm + spanIdeal;
+
+    // allocate the other three segment lengths proportionally
+    lenCold  = max(1, int(round((float)spanCold  / sumRest * rest)));
+    lenWarm  = max(1, int(round((float)spanWarm  / sumRest * rest)));
+    // ensure we fill exactly 'rest'
+    lenIdeal = rest - lenCold - lenWarm;
+
+    // now carve into camPalette[]
+    int idx = 0;
+
+    // ── cold: violet → cyan
+    for (int i = 0; i < lenCold; ++i) {
+        float t = float(i) / (lenCold - 1);
+        if (useGradient)
+            camPalette[idx++] = interpolate565(COLOR_COLD_START, COLOR_CYAN, t);
+        else
+            camPalette[idx++] = COLOR_COLD;
+    }
+    // ── warm: cyan → yellow-orange
+    for (int i = 0; i < lenWarm; ++i) {
+        float t = float(i) / (lenWarm - 1);
+        if (useGradient)
+            camPalette[idx++] = interpolate565(COLOR_CYAN, COLOR_YELLOW_ORANGE, t);
+        else
+            camPalette[idx++] = COLOR_WARM;
+    }
+    // ── ideal: yellow-orange → red
+    for (int i = 0; i < lenIdeal; ++i) {
+        float t = float(i) / (lenIdeal - 1);
+        if (useGradient)
+            camPalette[idx++] = interpolate565(COLOR_YELLOW_ORANGE, COLOR_RED, t);
+        else
+            camPalette[idx++] = COLOR_IDEAL;
+    }
+    // ── hot: red → white (always 32 entries)
+    for (int i = 0; i < lenHot; ++i) {
+        float t = float(i) / (lenHot - 1);
+        if (useGradient)
+            camPalette[idx++] = interpolate565(COLOR_RED, COLOR_WHITE, t);
+        else
+            camPalette[idx++] = COLOR_HOT;
+    }
+}
+
+uint16_t ThermalDisplay::interpolate565(uint16_t c1,
+                                        uint16_t c2,
+                                        float t)
+{
+    // extract 5/6/5 bits
+    int r1 = (c1 >> 11) & 0x1F,  g1 = (c1 >> 5) & 0x3F,  b1 = c1 & 0x1F;
+    int r2 = (c2 >> 11) & 0x1F,  g2 = (c2 >> 5) & 0x3F,  b2 = c2 & 0x1F;
+    // linear interp
+    int r = r1 + (r2 - r1) * t + 0.5f;
+    int g = g1 + (g2 - g1) * t + 0.5f;
+    int b = b1 + (b2 - b1) * t + 0.5f;
+    // re-pack
+    return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
 
 void ThermalDisplay::setTempIndex(int _tempIndex){                                        
         tempIndex = _tempIndex;
@@ -88,22 +251,32 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
     for (int camY = 0; camY < CAMERA_HEIGHT; camY++) {
         for (int camX = 0; camX < CAMERA_WIDTH; camX++) {
             int idxFlat = camY * CAMERA_WIDTH + camX;
+
+            int raw = temps[idxFlat];
+            // clamp using our static min/max
+            //raw = constrain(raw, thresholdMin, thresholdMax);
+
+            uint8_t ci      = getColorIndexForTemp(raw);
+            uint16_t color  = camPalette[ci];//camColors[ci];
+
+            /*
             int tempVal = temps[idxFlat];
 
             int celsius = tempVal;
-            // Convert to Celsius if needed
-            // int celsius = isFahrenheit
-            //     ? ((tempVal - 32) * 5 / 9)
-            //     : tempVal;
 
             // Clamp to [MINTEMP, MAXTEMP]
             celsius = min(celsius, MAXTEMP);
             celsius = max(celsius, MINTEMP);
 
-            // Map to palette index 0..255
-            uint8_t colorIndex = map(celsius, MINTEMP, MAXTEMP, 0, 255);
-            colorIndex = constrain(colorIndex, 0, 255);
-            uint16_t color = camColors[colorIndex];
+            // **replace** the old full‐range mapping:
+            //   uint8_t colorIndex = map(celsius, MINTEMP, MAXTEMP, 0, 255);
+            //   colorIndex = constrain(colorIndex, 0, 255);
+            //   uint16_t color = camColors[colorIndex];
+            //
+            // **with** our bucketed helper:
+            uint8_t colorIndex = getColorIndexForTemp(celsius);
+            uint16_t color     = camColors[colorIndex];
+            */
 
             // Compute scaled block in areaW×areaH
             int xStart = (camX     * areaW) / CAMERA_WIDTH;

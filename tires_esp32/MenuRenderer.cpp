@@ -165,9 +165,9 @@ void MenuRenderer::drawBooleanValue(bool val, int16_t x, int16_t y) {
     // We'll represent booleans with [x] or [ ]
     display.setCursor(x, y);
     if (val) {
-        display.print(F("\"[x]\"")); 
+        display.print(F("[X]")); 
     } else {
-        display.print(F("\"[ ]\"")); 
+        display.print(F("[ ]")); 
     }
 }
 

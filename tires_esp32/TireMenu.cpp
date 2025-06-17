@@ -33,6 +33,8 @@ static uint8_t frontRightTempIndex = 0;
 static uint8_t rearLeftTempIndex   = 0;
 static uint8_t rearRightTempIndex  = 1;
 
+static bool useThermalGradient = true;
+
 // ----------------------------------------------------
 //  2) MenuValueBindings
 // ----------------------------------------------------
@@ -183,6 +185,17 @@ static MenuValueBinding rearRightIndexBinding = {
     0
 };
 
+static MenuValueBinding useThermalGradientBinding = {
+    VALUE_BOOL,
+    &useThermalGradient,
+    nullptr,
+    0,
+    0,
+    0,
+    nullptr,
+    0
+};
+
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
@@ -267,6 +280,14 @@ static MenuItem mainMenu[] = {
         &nightBrightnessBinding
     },
     {
+        "Thermal Gradient",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &useThermalGradientBinding
+    },
+    {
       "Hardware Settings",
       MENU_SUBMENU,
       nullptr,
@@ -326,6 +347,10 @@ uint8_t getTemperatureScaleValue() {
 
 uint8_t getNightBrightness() {
     return nightBrightness;
+}
+
+bool getUseThermalGradient() {
+    return useThermalGradient;
 }
 
 uint8_t getStreetMin() {
