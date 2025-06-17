@@ -84,6 +84,11 @@ struct TireTemps {
                       const TireTemps &rl,
                       const TireTemps &rr);
 
+    bool flIsActive = true;
+    bool frIsActive = true;
+    bool rlIsActive = true;
+    bool rrIsActive = true;
+
 private:
     Tire *frontLeft, *frontRight, *rearLeft, *rearRight;
 

@@ -51,6 +51,7 @@ ThermalDisplay* UR = factory.createDisplay(/*top=*/ true, /*left=*/ false);
 ThermalDisplay* LL = factory.createDisplay(/*top=*/ false, /*left=*/ true);
 ThermalDisplay* LR = factory.createDisplay(/*top=*/ false, /*left=*/ false);
 
+
 ThermalDisplay* thermalDisplays[4] = {UL, UR, LL, LR};
 
 // Keep track of time
@@ -109,6 +110,7 @@ void checkForWheelsReset(){
         USBSerial.println("oldWheels deleted");
         oldWheels = nullptr;
         USBSerial.println("oldWheels pointer set to null");
+        activateTires();
       }
 }
 
@@ -232,6 +234,11 @@ void setup()
   menuSystem.loadFromEEPROM();
   USBSerial.println("EEPROM values loaded");
 
+  UL->isActive=true;
+  UR->isActive=false;
+  LL->isActive=false;
+  LR->isActive=false;
+
   // Initialize system objects
   initializeSystem();
 
@@ -322,6 +329,8 @@ static void initializeSystem()
     maxTemp   = getTrackMax();
   }
 
+
+
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
   bool fl3 = false;
@@ -346,12 +355,21 @@ static void initializeSystem()
       wheels->setTireTemps(fl, fr, rl, rr);
   //wheels->setTireTemps(0, 0, 0, 0);  
   tft.fillScreen(ST77XX_BLACK);
+
+    activateTires();
+
+
   wheels->draw(true);
   //tft.fillScreen(ST77XX_BLACK);
   forceDrawAfterInit = 2;
 }
 
-
+static void activateTires(){
+    wheels->flIsActive = (!UL->isActive);
+    wheels->frIsActive = (!UR->isActive);
+    wheels->rlIsActive = (!LL->isActive);
+    wheels->rrIsActive = (!LR->isActive);
+}
 
 static void applyMenuConfig()
 {
