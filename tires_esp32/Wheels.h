@@ -73,7 +73,7 @@ struct TireTemps {
     Wheels(Wheels* src, bool fl3, bool fr3, bool rl3, bool rr3);
 
     // draw all four
-    void draw(bool force=false);
+    void draw(bool force=false, bool textOnly=false);
 
     /** 
      * Dispatch 1-or-3 values per tire.  

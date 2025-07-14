@@ -11,18 +11,18 @@ Tire::~Tire() {}
 Tire::Tire(int _x, int _y, int _width, int _height, int _bufferPix, uint16_t _outlineColor, uint16_t _textColor, char _tempUnit)
     : x(_x), y(_y), width(_width), height(_height), bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {}
 
-void Tire::draw(bool force) {
+void Tire::draw(bool force, bool textOnly) {
     if ((int)temperature != (int)lastTemp || force || temperature==0.0) {
         if ((lastTemp>=100 && temperature<100) || (lastTemp<100 && temperature>=100) || (lastTemp<0 && temperature>=0) || (lastTemp>=0 && temperature<0))
             force=true;
 
         int radius = 20;
         //USBSerial.println("Before fillRect");        
-        if (force || crossedThreshold) tft.fillRoundRect(x, y, width, height, radius, fillColor);
+        if ((!textOnly) && (force || crossedThreshold)) tft.fillRoundRect(x, y, width, height, radius, fillColor);
         //USBSerial.println("Before printTemp");
         printTemp();
         //USBSerial.println("Before drawRoundRect");
-        if (force || crossedThreshold) tft.drawRoundRect(x, y, width, height, radius, outlineColor);
+        if ((!textOnly) && (force || crossedThreshold)) tft.drawRoundRect(x, y, width, height, radius, outlineColor);
     }
 }
 

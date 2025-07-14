@@ -34,7 +34,7 @@ public:
     /** 
      * Override draw to fill three bands, draw outline, then print 3 temps
      */
-    void draw(bool force=false) override;
+    void draw(bool force=false, bool textOnly = false) override;
 
         // Declaration in header, with override:
     void setTemps(const float *temps,
@@ -54,7 +54,8 @@ public:
 
 
 private:
-    float    sectionTemps[3];
+    int    sectionTemps[3];
+    int    lastTemps[3];
     uint16_t sectionFillColors[3];
     uint16_t sectionTextColors[3];
     bool initialized = false;

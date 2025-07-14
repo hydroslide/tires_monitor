@@ -23,8 +23,9 @@ void ThreeSectionTire::setSectionTemps(const float temps[3],
     float t = temps[i];
     // convert if needed
     //float tempC = isFahrenheit ? (t - 32.0f) * 5.0f / 9.0f : t;
-    sectionTemps[i] = t;
-    classifyOne(i, t,
+    int roundedTemp =  (int)round(t);
+    sectionTemps[i] = roundedTemp;
+    classifyOne(i, roundedTemp,
                 minTemp, idealTemp, maxTemp,
                 lowColor, normalColor,
                 idealColor, highColor,
@@ -61,7 +62,7 @@ void ThreeSectionTire::classifyOne(int idx, float temp,
   sectionFillColors[idx] = fCol;
 }
 
-void ThreeSectionTire::draw(bool force) {
+void ThreeSectionTire::draw(bool force, bool textOnly) {
 
 
     // if (drawsSinceForce>= forceInterval){      
@@ -69,16 +70,17 @@ void ThreeSectionTire::draw(bool force) {
     // }
     // drawsSinceForce++;
 
-  // Only redraw if forced or temp changed
-  static float lastTemps[3] = { NAN, NAN, NAN };
+  // Only redraw if forced or temp changed  
   bool changed = force;
-  static float sectionChanged[3] = { force,force,force };
+  bool sectionChanged[3];
   for (int i = 0; i < 3; i++) {
-    if ( (int)round(sectionTemps[i]) !=  (int)round(lastTemps[i])) {
+    sectionChanged[i]=force;
+    int lastTemp = lastTemps[i];
+    int temperature = sectionTemps[i];
+    if (lastTemp != temperature) {
       changed = true;
       sectionChanged[i]=true;
-      float lastTemp = lastTemps[i];
-      float temperature = sectionTemps[i];
+
       if ((lastTemp>=100 && temperature<100) || (lastTemp<100 && temperature>=100) || (lastTemp<0 && temperature>=0) || (lastTemp>=0 && temperature<0))
             crossedThreshold=true;
     }
@@ -90,7 +92,7 @@ void ThreeSectionTire::draw(bool force) {
   if (changed){
 
 
-    if (force || crossedThreshold){
+    if ((!textOnly) && (force || crossedThreshold)){
       tft.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
 
       // fill three vertical bands
@@ -116,7 +118,6 @@ void ThreeSectionTire::draw(bool force) {
     for (int i = 0; i < 3; i++) {
       if (sectionChanged[i]){
         char buf[8];
-        int tInt = (int)round(sectionTemps[i]);
 
         if (!rectsDrawn){
           // Redraw the last temp with background color

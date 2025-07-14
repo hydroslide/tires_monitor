@@ -95,16 +95,16 @@ Wheels::~Wheels() {
     // }
 }
 
-void Wheels::draw(bool force) {
+void Wheels::draw(bool force, bool textOnly) {
     //RefreshScreen();
     if (flIsActive)
-        frontLeft->draw(force);
+        frontLeft->draw(force, textOnly);
     if (frIsActive)
-        frontRight->draw(force);
+        frontRight->draw(force, textOnly);
     if (rlIsActive)        
-        rearLeft->draw(force);
+        rearLeft->draw(force, textOnly);
     if (rrIsActive)
-        rearRight->draw(force);
+        rearRight->draw(force, textOnly);
 }
 
 void Wheels::RefreshScreen(){

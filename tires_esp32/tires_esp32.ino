@@ -26,6 +26,7 @@
 #define WIFI_SSID "TireTempMonitor"
 #define WIFI_PASSWORD "esp32"
 #define WIFI_PORT 8080
+#define THERMAL_MODES 4
 
 bool testMode = false;
 int forceDrawAfterInit = 0;
@@ -53,6 +54,7 @@ ThermalDisplay* LR = factory.createDisplay(/*top=*/ false, /*left=*/ false);
 
 
 ThermalDisplay* thermalDisplays[4] = {UL, UR, LL, LR};
+
 
 uint8_t thermalMode = 0; // 4 modes total
 
@@ -119,8 +121,7 @@ void checkForWheelsReset(){
 void switchThermalMode(bool up){
   int dir = (up)?1:-1;
   int tMode  = thermalMode+dir;
-  tMode=tMode%4;
-  tMode=tMode%4;
+  tMode=tMode%THERMAL_MODES;
   setThermalMode(tMode);
 }
 
@@ -160,37 +161,40 @@ void setThermalMode(uint8_t _thermalMode){
   thermalMode = _thermalMode;
   switch (thermalMode)
   {
-  case 0:
-    UL->isActive=false;
-    UR->isActive=false;
-    LL->isActive=false;
-    LR->isActive=false;
-    break;
+    case 0:
+      UL->isActive=false;
+      UR->isActive=false;
+      LL->isActive=false;
+      LR->isActive=false;
+      break;
 
-  case 1:
-    UL->isActive=false;
-    UR->isActive=false;
-    LL->isActive=true;
-    LR->isActive=true;
-    break;
-  
-  case 2:
-    UL->isActive=true;
-    UR->isActive=true;
-    LL->isActive=false;
-    LR->isActive=false;
-    break;
-  
-  case 3:
-    UL->isActive=true;
-    UR->isActive=true;
-    LL->isActive=true;
-    LR->isActive=true;
-    break;
-  
-  default:
-    break;
+    case 1:
+      UL->isActive=false;
+      UR->isActive=false;
+      LL->isActive=true;
+      LR->isActive=true;
+      break;
+    
+    case 2:
+      UL->isActive=true;
+      UR->isActive=true;
+      LL->isActive=false;
+      LR->isActive=false;
+      break;
+    
+    case 3:
+      UL->isActive=true;
+      UR->isActive=true;
+      LL->isActive=true;
+      LR->isActive=true;
+      break;
+    
+    default:
+      break;
   }
+  tft.fillScreen(ST77XX_BLACK);
+  activateTires();
+  wheels->draw(true);
 }
 
 // Normal Running Mode
