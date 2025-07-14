@@ -54,6 +54,8 @@ ThermalDisplay* LR = factory.createDisplay(/*top=*/ false, /*left=*/ false);
 
 ThermalDisplay* thermalDisplays[4] = {UL, UR, LL, LR};
 
+uint8_t thermalMode = 0; // 4 modes total
+
 // Keep track of time
 unsigned long previousTime = 0;
 long millisSinceLastUpdate = 0;
@@ -114,6 +116,83 @@ void checkForWheelsReset(){
       }
 }
 
+void switchThermalMode(bool up){
+  int dir = (up)?1:-1;
+  int tMode  = thermalMode+dir;
+  tMode=tMode%4;
+  tMode=tMode%4;
+  setThermalMode(tMode);
+}
+
+
+   
+
+void updateThermalDisplays(){
+  switch (thermalMode)
+  {
+  case 0:
+    // Do Nothing
+    break;
+
+  case 1:
+    thermalDisplays[2]->updateDisplay(0);
+    thermalDisplays[3]->updateDisplay(1);
+    break;
+  
+  case 2:
+    thermalDisplays[0]->updateDisplay(2);
+    thermalDisplays[1]->updateDisplay(3);
+    break;
+  
+  case 3:
+    thermalDisplays[0]->updateDisplay(0);
+    thermalDisplays[1]->updateDisplay(1);
+    thermalDisplays[2]->updateDisplay(2);
+    thermalDisplays[3]->updateDisplay(3);
+    break;
+  
+  default:
+    break;
+  }
+}    
+
+void setThermalMode(uint8_t _thermalMode){
+  thermalMode = _thermalMode;
+  switch (thermalMode)
+  {
+  case 0:
+    UL->isActive=false;
+    UR->isActive=false;
+    LL->isActive=false;
+    LR->isActive=false;
+    break;
+
+  case 1:
+    UL->isActive=false;
+    UR->isActive=false;
+    LL->isActive=true;
+    LR->isActive=true;
+    break;
+  
+  case 2:
+    UL->isActive=true;
+    UR->isActive=true;
+    LL->isActive=false;
+    LR->isActive=false;
+    break;
+  
+  case 3:
+    UL->isActive=true;
+    UR->isActive=true;
+    LL->isActive=true;
+    LR->isActive=true;
+    break;
+  
+  default:
+    break;
+  }
+}
+
 // Normal Running Mode
 void doRunningMode(int time_delta)
 {
@@ -164,10 +243,7 @@ void doRunningMode(int time_delta)
       wifiSerial.loop();
     }
 
-    thermalDisplays[0]->updateDisplay(2);
-    thermalDisplays[1]->updateDisplay(3);
-    thermalDisplays[2]->updateDisplay(0);
-    thermalDisplays[3]->updateDisplay(1);
+    updateThermalDisplays();
 
     // for (int i=0; i>TempReader::TIRE_COUNT; i++){
       
@@ -234,7 +310,7 @@ void setup()
   menuSystem.loadFromEEPROM();
   USBSerial.println("EEPROM values loaded");
 
-  UL->isActive=true;
+  UL->isActive=false;
   UR->isActive=false;
   LL->isActive=false;
   LR->isActive=false;
@@ -248,6 +324,10 @@ void setup()
 void checkForSwipes(){
   if (menuHandler.SwipedRight())
     ToggleNightMode();
+  if (menuHandler.SwipedUp())
+    switchThermalMode(true);
+  if (menuHandler.SwipedDown())
+    switchThermalMode(false);
 }
 
 void ToggleNightMode(){
