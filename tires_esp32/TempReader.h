@@ -25,7 +25,7 @@ class TempReader {
         float computeMedianFloat(float* data, size_t length);
         void getSectionMedians(const float frame[PIXEL_COUNT],
                        bool useMiddleRows,
-                       float medians_out[3]);
+                       float medians_out[3], int leftOffset, int rightOffset);
         void flipFrameHorizontal(float frame[FRAME_PIXELS]);
 
     public:
@@ -42,6 +42,8 @@ class TempReader {
         void readTemps();
         bool readFrame(uint8_t index);
         bool useFarenheit;
+        byte leftPixelOffset[TIRE_COUNT];
+        byte rightPixelOffset[TIRE_COUNT];
        
 };
 #endif // TEMPREADER_H

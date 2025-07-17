@@ -395,6 +395,10 @@ static void initializeSystem()
   extern uint8_t getTrackMin();
   extern uint8_t getTrackIdeal();
   extern uint8_t getTrackMax();
+  
+  extern bool getShowPixelOffsets();
+  extern byte getLeftPixelOffset(int index);
+  extern byte getRightPixelOffset(int index);
 
   uint8_t modeVal = getCurrentModeValue();         // 0=Street,1=Track
   uint8_t scaleVal = getTemperatureScaleValue();   // 0=F,1=C
@@ -415,6 +419,7 @@ static void initializeSystem()
   }
 
     ThermalDisplay::useGradient = getUseThermalGradient();
+    ThermalDisplay::showPixelOffsets = getShowPixelOffsets();
   if (scaleVal)
     ThermalDisplay::setTemperatureRangeC((int)minTemp,(int)idealTemp, (int)maxTemp);
   else
@@ -435,6 +440,12 @@ static void initializeSystem()
 
   tempReader = new TempReader();
   tempReader->useFarenheit = (scaleVal == 0);
+
+  for (int i=0; i<4; i++){
+    tempReader->leftPixelOffset[i] = getLeftPixelOffset(i);
+    tempReader->rightPixelOffset[i] = getRightPixelOffset(i);    
+  }
+
   ThermalDisplay::tempReader = tempReader;
 
       constexpr float zeros[3] = { 0.0f, 0.0f, 0.0f };

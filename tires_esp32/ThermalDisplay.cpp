@@ -3,6 +3,8 @@
 #include <Arduino.h>         // for yield()
 #include "TempReader.h"
 
+extern HWCDC USBSerial;
+
 // Define the static 256-entry color palette (RGB565)
 const uint16_t ThermalDisplay::camColors[256] = {
   0x480F, 0x400F, 0x400F, 0x400F, 0x4010, 0x3810, 0x3810, 0x3810, 0x3810, 0x3010,
@@ -40,6 +42,7 @@ int ThermalDisplay::thresholdIdeal   = (MINTEMP + MAXTEMP) / 2;
 int ThermalDisplay::thresholdMax     = MAXTEMP;
 
 bool ThermalDisplay::useGradient = true;
+bool ThermalDisplay::showPixelOffsets = false;
 
 uint16_t ThermalDisplay::camPalette[256];
 int      ThermalDisplay::lenCold;
@@ -242,10 +245,10 @@ void ThermalDisplay::updateDisplay(){
 
 void ThermalDisplay::updateDisplay(int _tempIndex){
      if (isActive && tempReader->tireSensorIsCamera[_tempIndex])
-        updateDisplay(tempReader->tire_frames[_tempIndex]);
+        updateDisplay(tempReader->tire_frames[_tempIndex], _tempIndex);
 }
 
-void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT])
+void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT], int _tempIndex)
 {
     // Build the areaW×areaH RGB565 buffer from 32×24 temps[]
     for (int camY = 0; camY < CAMERA_HEIGHT; camY++) {
@@ -299,4 +302,37 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
     tft.setAddrWindow(areaX, areaY, areaW, areaH);
     tft.writePixels(framebuf, areaW * areaH);
     tft.endWrite();
+
+    if (showPixelOffsets)
+        drawPixelOffsets(_tempIndex);
+}
+
+void ThermalDisplay::drawPixelOffsets(int _tempIndex){
+    byte leftOffset = tempReader->leftPixelOffset[_tempIndex];
+    byte rightOffset = tempReader->rightPixelOffset[_tempIndex];
+
+     USBSerial.print(_tempIndex);
+     USBSerial.print(": leftOffset: ");
+     USBSerial.println(leftOffset);
+
+
+    if(leftOffset >0){
+        int leftX = (((leftOffset * areaW) / CAMERA_WIDTH)-1)+areaX;   
+        USBSerial.print(_tempIndex);
+        USBSerial.print(": leftX: ");
+        USBSerial.println(leftX);     
+        tft.drawFastVLine(leftX, areaY, areaH, OFFSET_LINE_COLOR);
+    }
+
+        USBSerial.print(_tempIndex);
+        USBSerial.print(": rightOffset: ");
+        USBSerial.println(rightOffset);
+    if (rightOffset >0){
+        int rightX = ((areaW- ((rightOffset * areaW) / CAMERA_WIDTH))+1)+areaX;
+        USBSerial.print(_tempIndex);
+        USBSerial.print(": rightX: ");
+        USBSerial.println(rightX);
+        tft.drawFastVLine(rightX, areaY, areaH, OFFSET_LINE_COLOR);
+    }
+
 }

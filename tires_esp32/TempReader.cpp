@@ -53,7 +53,7 @@ extern HWCDC USBSerial;
  */
 void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
                        bool useMiddleRows,
-                       float medians_out[3])
+                       float medians_out[3], int leftOffset, int rightOffset)
 {
     // Allocate a temporary buffer large enough for the largest section (11 cols × 24 rows = 264)
     float temp[COLS * ROWS];
@@ -68,11 +68,13 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
         rowEnd   = ROWS;               // = 24 (exclusive)
     }
 
+    int colsInRange = COLS - (leftOffset+rightOffset);
+
     // For each section 0,1,2:
     for (int section = 0; section < 3; ++section) {
         // Calculate column range: [startCol, endCol)
-        int startCol = (section * COLS) / 3;         // section*32/3
-        int   endCol = ((section + 1) * COLS) / 3;   // (section+1)*32/3
+        int startCol = ((section * colsInRange) / 3)+leftOffset;         // section*32/3
+        int   endCol = (((section + 1) * colsInRange) / 3)+leftOffset;   // (section+1)*32/3
 
         sectionCols = endCol - startCol;             // e.g. 10, 11, or 11
 
@@ -107,7 +109,7 @@ void TempReader::readTemps(){
         if (tireSensorIsCamera[i]){
             if(readFrame(i)){
                 fillTireFrame(i);
-                getSectionMedians(frame, true, tireSectionTemps[i]);
+                getSectionMedians(frame, true, tireSectionTemps[i], leftPixelOffset[i], rightPixelOffset[i]);
                 for(int j=0; j<3; j++){
                     float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
                     if (useFarenheit)

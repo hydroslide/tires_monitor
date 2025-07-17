@@ -42,6 +42,8 @@ private:
     static constexpr uint16_t COLOR_WARM         = DARK_GREEN;
     static constexpr uint16_t COLOR_IDEAL         = ST77XX_ORANGE;
     static constexpr uint16_t COLOR_HOT         = ST77XX_WHITE;
+    
+    static constexpr uint16_t OFFSET_LINE_COLOR = 0xF81F;
 
     Adafruit_ST7789 &tft;   // reference to the TFT display object
     static uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
@@ -84,6 +86,8 @@ private:
     // linearly interpolate 565 colors
     static uint16_t interpolate565(uint16_t c1, uint16_t c2, float t);
 
+    void drawPixelOffsets(int _tempIndex);
+
 public:
     /**
      * Constructor
@@ -113,7 +117,7 @@ public:
      * Scales and color-maps the 32×24 data into an areaW×areaH RGB565 buffer, then writes it
      * to the region at (areaX, areaY) on the ST7789 display.
      */
-    void updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]);
+    void updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT], int _tempIndex);
 
     void updateDisplay();
 
@@ -123,6 +127,7 @@ public:
     static void setTemperatureRangeC(int minTemp, int idealTemp, int maxTemp);
     static void setTemperatureRangeF(int minTemp, int idealTemp, int maxTemp);
     static bool useGradient;
+    static bool showPixelOffsets;
 
 };
 

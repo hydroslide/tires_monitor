@@ -31,9 +31,22 @@ static uint8_t trackMax   = 180;
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
 static uint8_t rearLeftTempIndex   = 0;
-static uint8_t rearRightTempIndex  = 1;
+static uint8_t rearRightTempIndex  = 0;
+
+// -- Camera Offsets --
+static uint8_t leftOffsetFrontLeft = 0;
+static uint8_t leftOffsetFrontRight = 0;
+static uint8_t leftOffsetRearLeft = 0;
+static uint8_t leftOffsetRearRight = 0;
+
+static uint8_t rightOffsetFrontLeft = 0;
+static uint8_t rightOffsetFrontRight = 0;
+static uint8_t rightOffsetRearLeft = 0;
+static uint8_t rightOffsetRearRight = 0;
 
 static bool useThermalGradient = true;
+static bool showPixelOffsets = true;
+
 
 // ----------------------------------------------------
 //  2) MenuValueBindings
@@ -196,6 +209,106 @@ static MenuValueBinding useThermalGradientBinding = {
     0
 };
 
+static MenuValueBinding leftOffsetFrontLeftBinding = {
+    VALUE_BYTE,
+    &leftOffsetFrontLeft,
+    nullptr,
+    0,
+    16,
+    31,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetFrontRightBinding = {
+    VALUE_BYTE,
+    &leftOffsetFrontRight,
+    nullptr,
+    0,
+    16,
+    32,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetRearLeftBinding = {
+    VALUE_BYTE,
+    &leftOffsetRearLeft,
+    nullptr,
+    0,
+    16,
+    33,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetRearRightBinding = {
+    VALUE_BYTE,
+    &leftOffsetRearRight,
+    nullptr,
+    0,
+    16,
+    34,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetFrontLeftBinding = {
+    VALUE_BYTE,
+    &rightOffsetFrontLeft,
+    nullptr,
+    0,
+    16,
+    35,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetFrontRightBinding = {
+    VALUE_BYTE,
+    &rightOffsetFrontRight,
+    nullptr,
+    0,
+    16,
+    36,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetRearLeftBinding = {
+    VALUE_BYTE,
+    &rightOffsetRearLeft,
+    nullptr,
+    0,
+    16,
+    37,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetRearRightBinding = {
+    VALUE_BYTE,
+    &rightOffsetRearRight,
+    nullptr,
+    0,
+    16,
+    38,
+    nullptr,
+    0
+};
+
+static MenuValueBinding showPixelOffsetsBinding = {
+    VALUE_BOOL,
+    &showPixelOffsets,
+    nullptr,
+    0,
+    0,
+    39,
+    nullptr,
+    0
+};
+
+
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
@@ -228,6 +341,43 @@ static MenuItem hardwareSettingsMenu[] = {
       nullptr
     }
 };
+
+static MenuItem frontLeftPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetFrontLeftBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetFrontLeftBinding }
+};
+
+static MenuItem frontRightPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetFrontRightBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetFrontRightBinding }
+};
+
+static MenuItem rearLeftPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetRearLeftBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetRearLeftBinding }
+};
+
+static MenuItem rearRightPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetRearRightBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetRearRightBinding }
+};
+
+static MenuItem pixelOffsetsMenu[] = {
+    { "Front Left",  MENU_SUBMENU, nullptr, frontLeftPixelOffsetsMenu, sizeof(frontLeftPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    { "Front Right", MENU_SUBMENU, nullptr, frontRightPixelOffsetsMenu, sizeof(frontRightPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    { "Rear Left",   MENU_SUBMENU, nullptr, rearLeftPixelOffsetsMenu, sizeof(rearLeftPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    { "Rear Right",  MENU_SUBMENU, nullptr, rearRightPixelOffsetsMenu, sizeof(rearRightPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    {
+        "Show Offsets",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &showPixelOffsetsBinding
+    },
+};
+
+
 
 // ----------------------------------------------------
 //  4) Save/Load Action Callbacks
@@ -293,6 +443,14 @@ static MenuItem mainMenu[] = {
       nullptr,
       hardwareSettingsMenu,
       sizeof(hardwareSettingsMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
+      "Camera Settings",
+      MENU_SUBMENU,
+      nullptr,
+      pixelOffsetsMenu,
+      sizeof(pixelOffsetsMenu)/sizeof(MenuItem),
       nullptr
     },
     {
@@ -376,4 +534,46 @@ uint8_t getTrackIdeal() {
 
 uint8_t getTrackMax() {
     return trackMax;
+}
+
+bool getShowPixelOffsets() {
+    return showPixelOffsets;
+}
+
+byte getLeftPixelOffset(int index){
+    switch(index){
+        case 0:
+            return leftOffsetFrontLeft;
+            break;
+        case 1:
+            return leftOffsetFrontRight;
+            break;
+        case 2:
+            return leftOffsetRearLeft;
+            break;
+        case 3:
+            return leftOffsetRearRight;
+            break;
+        default:
+            return 0;
+    }
+}
+
+byte getRightPixelOffset(int index){
+    switch(index){
+        case 0:
+            return rightOffsetFrontLeft;
+            break;
+        case 1:
+            return rightOffsetFrontRight;
+            break;
+        case 2:
+            return rightOffsetRearLeft;
+            break;
+        case 3:
+            return rightOffsetRearRight;
+            break;
+        default:
+            return 0;
+    }
 }

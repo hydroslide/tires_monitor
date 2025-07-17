@@ -77,6 +77,8 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     sectionChanged[i]=force;
     int lastTemp = lastTemps[i];
     int temperature = sectionTemps[i];
+    if (temperature > 300 || temperature < -30)
+      return; // F
     if (lastTemp != temperature) {
       changed = true;
       sectionChanged[i]=true;
@@ -116,7 +118,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     tft.setTextSize(1);
 
     for (int i = 0; i < 3; i++) {
-      if (sectionChanged[i]){
+      if (sectionChanged[i] || true){
         char buf[8];
 
         if (!rectsDrawn){
