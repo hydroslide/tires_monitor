@@ -197,23 +197,36 @@ void ThermalDisplay::generatePalette() {
     for (int i = 0; i < lenWarm; ++i) {
         float t = float(i) / (lenWarm - 1);
         if (useGradient)
-            camPalette[idx++] = interpolate565(COLOR_CYAN, COLOR_YELLOW_ORANGE, t);
+            camPalette[idx++] = interpolate565(COLOR_CYAN, COLOR_ORANGE, t);// COLOR_YELLOW_ORANGE, t);
         else
             camPalette[idx++] = COLOR_WARM;
     }
     // ── ideal: yellow-orange → red
-    for (int i = 0; i < lenIdeal; ++i) {
-        float t = float(i) / (lenIdeal - 1);
+    int lastI = 0;
+    int halfIdeal = lenIdeal/2;
+    for (int i = 0; i < halfIdeal; ++i) {
+        float t = float(i) / (halfIdeal - 1);
         if (useGradient)
-            camPalette[idx++] = interpolate565(COLOR_YELLOW_ORANGE, COLOR_RED, t);
+            camPalette[idx++] = interpolate565(COLOR_ORANGE, COLOR_PURPLE, t);//interpolate565(COLOR_YELLOW_ORANGE, COLOR_RED, t);
         else
-            camPalette[idx++] = COLOR_IDEAL;
+            camPalette[idx++] = COLOR_PURPLE;//COLOR_IDEAL;
     }
+
+    halfIdeal = lenIdeal-halfIdeal;
+    for (int i =0; i < halfIdeal; ++i) {
+        float t = float(i) / (halfIdeal - 1);
+        if (useGradient)
+            camPalette[idx++] = interpolate565(COLOR_PURPLE, COLOR_PURPLE_HOT, t);//interpolate565(COLOR_YELLOW_ORANGE, COLOR_RED, t);
+        else
+            camPalette[idx++] = COLOR_PURPLE;//COLOR_IDEAL;
+    }
+
+
     // ── hot: red → white (always 32 entries)
     for (int i = 0; i < lenHot; ++i) {
         float t = float(i) / (lenHot - 1);
         if (useGradient)
-            camPalette[idx++] = interpolate565(COLOR_RED, COLOR_WHITE, t);
+            camPalette[idx++] = interpolate565(COLOR_PURPLE_HOT, COLOR_HOT, t); //interpolate565(COLOR_RED, COLOR_WHITE, t);
         else
             camPalette[idx++] = COLOR_HOT;
     }

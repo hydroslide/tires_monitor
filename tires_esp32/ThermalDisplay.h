@@ -33,15 +33,20 @@ private:
     // approx “yellowish‐orange” halfway between yellow and red
     //  (R=31, G≈49,B=0)
     static constexpr uint16_t COLOR_YELLOW_ORANGE = 0xFD20;
+    static constexpr uint16_t COLOR_ORANGE = 0xFAE0;
+    
     // pure red = (31,0,0)
     static constexpr uint16_t COLOR_RED           = 0xF800;
     // pure white = (31,63,31)
     static constexpr uint16_t COLOR_WHITE         = 0xFFFF;
 
+    static constexpr uint16_t COLOR_PURPLE = 0xE01F;
+     static constexpr uint16_t COLOR_PURPLE_HOT = 0xFB7C;
+
     static constexpr uint16_t COLOR_COLD         = ST77XX_BLUE;
     static constexpr uint16_t COLOR_WARM         = DARK_GREEN;
-    static constexpr uint16_t COLOR_IDEAL         = ST77XX_ORANGE;
-    static constexpr uint16_t COLOR_HOT         = ST77XX_WHITE;
+    static constexpr uint16_t COLOR_IDEAL         = 0xE01F;//ST77XX_ORANGE;
+    static constexpr uint16_t COLOR_HOT         =  0xFF9F;//ST77XX_WHITE;
     
     static constexpr uint16_t OFFSET_LINE_COLOR = 0xF81F;
 

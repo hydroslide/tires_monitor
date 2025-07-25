@@ -61,7 +61,7 @@ struct TireTemps {
            bool fl3=false, bool fr3=false, bool rl3=false, bool rr3=false,
            uint16_t lowTempColor    = ST77XX_BLUE,
            uint16_t normalTempColor = DARK_GREEN,
-           uint16_t idealTempColor  = ST77XX_ORANGE,
+           uint16_t idealTempColor  = PURPLE, //ST77XX_ORANGE,
            uint16_t highTempColor   = ST77XX_WHITE,
            uint16_t lowTempTextColor    = ST77XX_WHITE,
            uint16_t normalTempTextColor = ST77XX_WHITE,
