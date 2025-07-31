@@ -16,7 +16,7 @@ class TempReader {
         static constexpr int PIXEL_COUNT = ROWS * COLS;
         static constexpr int FRAME_PIXELS = COLS * ROWS;  
         float getTemp(uint8_t index, bool farenheit);
-        void select_I2C_bus(uint8_t bus);
+        int select_I2C_bus(uint8_t bus);
         Adafruit_MLX90614 mlx_0[TIRE_COUNT];
         Adafruit_MLX90640 mlx_a[TIRE_COUNT];
         float celsiusToFahrenheit(float c);
@@ -33,6 +33,7 @@ class TempReader {
         void setup();        
         float tireTemps[TIRE_COUNT];
         float tireSectionTemps[TIRE_COUNT][3];
+        float lastTireSectionTemps[TIRE_COUNT][3];
         bool tireSensorIsCamera[TIRE_COUNT];
         int8_t tireSensorBegun[TIRE_COUNT];
         

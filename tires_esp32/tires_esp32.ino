@@ -429,17 +429,19 @@ static void initializeSystem()
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
-  bool fl3 = false;
-  bool fr3 = false;
-  bool rl3 = false;
-  bool rr3 = false;
+  tempReader = new TempReader();
+  tempReader->useFarenheit = (scaleVal == 0);
+
+  bool fl3 = tempReader->tireSensorIsCamera[0]; //false;
+  bool fr3 = tempReader->tireSensorIsCamera[1]; //false;
+  bool rl3 = tempReader->tireSensorIsCamera[2]; //false;
+  bool rr3 = tempReader->tireSensorIsCamera[3]; //false;
 
   wheels = new Wheels(10, ST77XX_YELLOW, ST77XX_WHITE,
                       minTemp, idealTemp, maxTemp,
                       tempUnit, fl3, fr3, rl3, rr3);
 
-  tempReader = new TempReader();
-  tempReader->useFarenheit = (scaleVal == 0);
+
 
   for (int i=0; i<4; i++){
     tempReader->leftPixelOffset[i] = getLeftPixelOffset(i);

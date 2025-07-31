@@ -95,8 +95,13 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
 TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
     for (uint8_t i = 0; i < TIRE_COUNT; i++){
-        tireSensorIsCamera[i]=false; 
+        tireSensorIsCamera[i]=true; 
         tireSensorBegun[i] = -2;
+        for(int j=0; j<3; j++){
+            tireTemps[i] = 0;
+            tireSectionTemps[i][j]=0;
+            lastTireSectionTemps[i][j]=0;
+        }
     }
 }
 
@@ -104,36 +109,40 @@ void TempReader::readTemps(){
     for (uint8_t i = 0; i < TIRE_COUNT; i++)
     {
         int busIndex = sensorIndices[i];
-        select_I2C_bus(busIndex);  
-        checkTireSensor(i);
-        if (tireSensorIsCamera[i]){
-            if(readFrame(i)){
-                fillTireFrame(i);
-                getSectionMedians(frame, true, tireSectionTemps[i], leftPixelOffset[i], rightPixelOffset[i]);
-                for(int j=0; j<3; j++){
-                    float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
-                    if (useFarenheit)
-                     tireSectionTemps[i][j] = valueF;
-                    //  USBSerial.print("|");
-                    //  USBSerial.print(valueF);
-                    //     USBSerial.print("F");
-                }    
-                // USBSerial.println("|");            
+        int result = select_I2C_bus(busIndex);  
+        if (result ==0){
+            checkTireSensor(i);
+            if (tireSensorIsCamera[i]){
+                if(readFrame(i)){
+                    fillTireFrame(i);
+                    getSectionMedians(frame, true, tireSectionTemps[i], leftPixelOffset[i], rightPixelOffset[i]);
+                    for(int j=0; j<3; j++){
+                        float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
+                        if (useFarenheit)
+                        tireSectionTemps[i][j] = valueF;
+                        if ((lastTireSectionTemps[i][j] !=0 && abs(tireSectionTemps[i][j]-lastTireSectionTemps[i][j]) > 50) || (lastTireSectionTemps[i][j] ==0 &&  (tireSectionTemps[i][j] >=200 || tireSectionTemps[i][j] <0)))
+                            tireSectionTemps[i][j] = lastTireSectionTemps[i][j];
+                        else
+                            lastTireSectionTemps[i][j] = tireSectionTemps[i][j];
+                        //  USBSerial.print("|");
+                        //  USBSerial.print(valueF);
+                        //     USBSerial.print("F");
+                    }    
+                    // USBSerial.println("|");            
+                }
+            }else{
+                float temp = 0.0;
+                if (tireSensorBegun[i]==1){
+                    temp = getTemp(i, useFarenheit);                   
+                    USBSerial.print(i);
+                    USBSerial.print(": Temp Read: ");
+                    USBSerial.println(temp);                
+                    tireTemps[i] = temp;
+                    tireSectionTemps[i][0] = temp;
+                    tireSectionTemps[i][1] = 0.0;
+                    tireSectionTemps[i][2] = 0.0;
+                }
             }
-        }else{
-            float temp = 0.0;
-            if (tireSensorBegun[i]==1){
-                temp = getTemp(i, useFarenheit);
-                if (isnan(temp))
-                    temp = 0.0f;
-                USBSerial.print(i);
-                USBSerial.print(": Temp Read: ");
-                USBSerial.println(temp);
-            }
-            tireTemps[i] = temp;
-            tireSectionTemps[i][0] = temp;
-            tireSectionTemps[i][1] = 0.0;
-            tireSectionTemps[i][2] = 0.0;
         }
     }
 }
@@ -160,14 +169,29 @@ void TempReader::fillTireFrame(int n) {
 
 void TempReader::checkTireSensor(uint8_t index){
     if (tireSensorBegun[index]<1){
-        if (tireSensorBegun[index]<0){
+        //if (tireSensorBegun[index]<0){
             USBSerial.print("Attempt Adafruit MLX90640 Camera Begin: ");
             USBSerial.println(index);
             Wire.setClock(1000000); // max 1 MHz
+            tireSensorIsCamera[index]=true;
             if (!mlx_a[index].begin(MLX90640_I2CADDR_DEFAULT, &Wire)) {
                 USBSerial.print("MLX90640 not found at index: ");
                 USBSerial.println(index);
-                tireSensorBegun[index]++;
+               // tireSensorBegun[index]++;
+
+                USBSerial.print("Attempt MLX_0 Begin: ");
+                USBSerial.println(index);
+                Wire.setClock(100000);
+                mlx_0[index].begin();
+                int tempTemp = (int)getTemp(index,true);
+                if (tempTemp != 0){
+                    tireSensorBegun[index]=1;
+                    tireSensorIsCamera[index]=false;
+                    USBSerial.print("MLX_0 Begun: ");
+                    USBSerial.print(index);
+                    USBSerial.print(" with Temp: ");
+                    USBSerial.println(tempTemp);
+                }
             }else{            
                 mlx_a[index].setMode(MLX90640_CHESS);
                 mlx_a[index].setResolution(MLX90640_ADC_18BIT);
@@ -178,6 +202,7 @@ void TempReader::checkTireSensor(uint8_t index){
                 tireSensorBegun[index]=1;
                 tireSensorIsCamera[index]=true;
             }
+        /*    
         }else{
             USBSerial.print("Attempt MLX_0 Begin: ");
             USBSerial.println(index);
@@ -188,6 +213,7 @@ void TempReader::checkTireSensor(uint8_t index){
             USBSerial.print("MLX_0 Begun: ");
             USBSerial.println(index);
         }
+        */
     }else{
         if(tireSensorIsCamera[index]==false){
             //USBSerial.print("Attempt MLX_0 Begin: ");
@@ -239,13 +265,17 @@ void TempReader::flipFrameHorizontal(float frame[FRAME_PIXELS]) {
 }
 
 float TempReader::getTemp(uint8_t index, bool farenheit){
+    float temp;
     if (farenheit)
-        return mlx_0[index].readObjectTempF();
+        temp= mlx_0[index].readObjectTempF();
     else
-        return mlx_0[index].readObjectTempC();    
+        temp= mlx_0[index].readObjectTempC(); 
+    if (isnan(temp))
+        temp = 0.0f;   
+    return temp;
 }
 
-void TempReader::select_I2C_bus(uint8_t bus){
+int TempReader::select_I2C_bus(uint8_t bus){
     Wire.beginTransmission(0x70); // TCA9548A address
     Wire.write(1 << bus);
 
@@ -275,4 +305,5 @@ void TempReader::select_I2C_bus(uint8_t bus){
         USBSerial.println(err);
     }
     delayMicroseconds(200);        // give the mux time to settle 
+    return result;
 }
