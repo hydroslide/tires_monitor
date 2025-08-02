@@ -96,7 +96,8 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
     for (uint8_t i = 0; i < TIRE_COUNT; i++){
         tireSensorIsCamera[i]=true; 
-        tireSensorBegun[i] = -2;
+        tireSensorClockSpeed[i] = MAX_CLOCK_SPEED;
+        tireSensorBegun[i] = -5;
         for(int j=0; j<3; j++){
             tireTemps[i] = 0;
             tireSectionTemps[i][j]=0;
@@ -168,20 +169,35 @@ void TempReader::fillTireFrame(int n) {
     }
 
 void TempReader::checkTireSensor(uint8_t index){
+    int cameraClockSpeed = (autoAdjustClock)? tireSensorClockSpeed[index] : MAX_CLOCK_SPEED;
     if (tireSensorBegun[index]<1){
-        //if (tireSensorBegun[index]<0){
             USBSerial.print("Attempt Adafruit MLX90640 Camera Begin: ");
             USBSerial.println(index);
-            Wire.setClock(1000000); // max 1 MHz
+            
+            Wire.setClock(cameraClockSpeed); 
             tireSensorIsCamera[index]=true;
             if (!mlx_a[index].begin(MLX90640_I2CADDR_DEFAULT, &Wire)) {
+
                 USBSerial.print("MLX90640 not found at index: ");
                 USBSerial.println(index);
-               // tireSensorBegun[index]++;
+
+                if (autoAdjustClock){
+                    if (tireSensorBegun[index]<0)
+                        tireSensorBegun[index]++;
+                    else{
+                        if (cameraClockSpeed > MIN_CLOCK_SPEED){
+                            cameraClockSpeed-=MLX0_CLOCK_SPEED;
+                            USBSerial.print("Reducing Clock Speed to: ");
+                            USBSerial.println(cameraClockSpeed);
+                            tireSensorClockSpeed[index] = cameraClockSpeed;
+                            tireSensorBegun[index] = -1;
+                        }                       
+                    }
+                }
 
                 USBSerial.print("Attempt MLX_0 Begin: ");
                 USBSerial.println(index);
-                Wire.setClock(100000);
+                Wire.setClock(MLX0_CLOCK_SPEED);
                 mlx_0[index].begin();
                 int tempTemp = (int)getTemp(index,true);
                 if (tempTemp != 0){
@@ -196,33 +212,18 @@ void TempReader::checkTireSensor(uint8_t index){
                 mlx_a[index].setMode(MLX90640_CHESS);
                 mlx_a[index].setResolution(MLX90640_ADC_18BIT);
                 mlx_a[index].setRefreshRate(MLX90640_16_HZ);
-                //mlx_a[index].setRefreshRate(MLX90640_1_HZ);
                 USBSerial.print("Adafruit MLX90640 Camera Begun: ");
                 USBSerial.println(index);
                 tireSensorBegun[index]=1;
                 tireSensorIsCamera[index]=true;
             }
-        /*    
-        }else{
-            USBSerial.print("Attempt MLX_0 Begin: ");
-            USBSerial.println(index);
-            Wire.setClock(100000);
-            mlx_0[index].begin();
-            tireSensorBegun[index]=1;
-            tireSensorIsCamera[index]=false;
-            USBSerial.print("MLX_0 Begun: ");
-            USBSerial.println(index);
-        }
-        */
     }else{
         if(tireSensorIsCamera[index]==false){
-            //USBSerial.print("Attempt MLX_0 Begin: ");
-            //USBSerial.println(index);
-            Wire.setClock(100000);
+            Wire.setClock(MLX0_CLOCK_SPEED);
             mlx_0[index].begin();
         }
         else
-            Wire.setClock(1000000); // max 1 MHz
+            Wire.setClock(cameraClockSpeed); 
     }
 }
 

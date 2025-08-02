@@ -139,7 +139,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     if (initialized) crossedThreshold = false;
       else initialized = true;
   }
-  USBSerial.println("");
+  //USBSerial.println("");
 }
 
 String ThreeSectionTire::printTemp(int temp, int i, int bandW){

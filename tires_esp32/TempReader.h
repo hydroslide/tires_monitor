@@ -11,6 +11,9 @@
 
 class TempReader {
     private:
+        static constexpr int MAX_CLOCK_SPEED = 1000000; // 1MHz
+        static constexpr int MIN_CLOCK_SPEED = 400000; // 600KHz
+        static constexpr int MLX0_CLOCK_SPEED = 100000; // 100KHz
         static constexpr int ROWS = 24;
         static constexpr int COLS = 32;
         static constexpr int PIXEL_COUNT = ROWS * COLS;
@@ -19,6 +22,7 @@ class TempReader {
         int select_I2C_bus(uint8_t bus);
         Adafruit_MLX90614 mlx_0[TIRE_COUNT];
         Adafruit_MLX90640 mlx_a[TIRE_COUNT];
+        int tireSensorClockSpeed[TIRE_COUNT];
         float celsiusToFahrenheit(float c);
         void fillTireFrame(int n);
         void checkTireSensor(uint8_t index);
@@ -35,6 +39,7 @@ class TempReader {
         float tireSectionTemps[TIRE_COUNT][3];
         float lastTireSectionTemps[TIRE_COUNT][3];
         bool tireSensorIsCamera[TIRE_COUNT];
+        bool autoAdjustClock;
         int8_t tireSensorBegun[TIRE_COUNT];
         
         float frame[FRAME_PIXELS];                   // MLX90640 float-array

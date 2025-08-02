@@ -324,27 +324,27 @@ void ThermalDisplay::drawPixelOffsets(int _tempIndex){
     byte leftOffset = tempReader->leftPixelOffset[_tempIndex];
     byte rightOffset = tempReader->rightPixelOffset[_tempIndex];
 
-     USBSerial.print(_tempIndex);
-     USBSerial.print(": leftOffset: ");
-     USBSerial.println(leftOffset);
+    //  USBSerial.print(_tempIndex);
+    //  USBSerial.print(": leftOffset: ");
+    //  USBSerial.println(leftOffset);
 
 
     if(leftOffset >0){
         int leftX = (((leftOffset * areaW) / CAMERA_WIDTH)-1)+areaX;   
-        USBSerial.print(_tempIndex);
-        USBSerial.print(": leftX: ");
-        USBSerial.println(leftX);     
+        // USBSerial.print(_tempIndex);
+        // USBSerial.print(": leftX: ");
+        // USBSerial.println(leftX);     
         tft.drawFastVLine(leftX, areaY, areaH, OFFSET_LINE_COLOR);
     }
 
-        USBSerial.print(_tempIndex);
-        USBSerial.print(": rightOffset: ");
-        USBSerial.println(rightOffset);
+        // USBSerial.print(_tempIndex);
+        // USBSerial.print(": rightOffset: ");
+        // USBSerial.println(rightOffset);
     if (rightOffset >0){
         int rightX = ((areaW- ((rightOffset * areaW) / CAMERA_WIDTH))+1)+areaX;
-        USBSerial.print(_tempIndex);
-        USBSerial.print(": rightX: ");
-        USBSerial.println(rightX);
+        // USBSerial.print(_tempIndex);
+        // USBSerial.print(": rightX: ");
+        // USBSerial.println(rightX);
         tft.drawFastVLine(rightX, areaY, areaH, OFFSET_LINE_COLOR);
     }
 

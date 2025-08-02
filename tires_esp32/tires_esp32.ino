@@ -437,6 +437,9 @@ static void initializeSystem()
   bool rl3 = tempReader->tireSensorIsCamera[2]; //false;
   bool rr3 = tempReader->tireSensorIsCamera[3]; //false;
 
+  tempReader->autoAdjustClock = true;// getShowPixelOffsets();
+
+
   wheels = new Wheels(10, ST77XX_YELLOW, ST77XX_WHITE,
                       minTemp, idealTemp, maxTemp,
                       tempUnit, fl3, fr3, rl3, rr3);
