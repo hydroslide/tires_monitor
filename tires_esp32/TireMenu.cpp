@@ -47,6 +47,7 @@ static uint8_t rightOffsetRearRight = 0;
 static bool useThermalGradient = true;
 static bool testEnabled = true;
 static bool showPixelOffsets = true;
+static bool highFrequencyUpdates = false;
 
 
 // ----------------------------------------------------
@@ -320,6 +321,16 @@ static MenuValueBinding testEnabledBinding = {
     0
 };
 
+static MenuValueBinding highFrequencyUpdatesBinding = {
+    VALUE_BOOL,
+    &highFrequencyUpdates,
+    nullptr,
+    0,
+    0,
+    41,
+    nullptr,
+    0
+};
 
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
@@ -387,6 +398,22 @@ static MenuItem pixelOffsetsMenu[] = {
         0,
         &showPixelOffsetsBinding
     },
+    {
+        "Thermal Gradient",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &useThermalGradientBinding
+    },
+    {
+        "Hi Freq Updates",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &highFrequencyUpdatesBinding
+    },
 };
 
 
@@ -441,14 +468,6 @@ static MenuItem mainMenu[] = {
         0,
         &nightBrightnessBinding
     },    
-    {
-        "Thermal Gradient",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &useThermalGradientBinding
-    },
     {
         "Test",
         MENU_VALUE,
@@ -562,6 +581,10 @@ uint8_t getTrackMax() {
 
 bool getShowPixelOffsets() {
     return showPixelOffsets;
+}
+
+bool getHighFrequencyUpdates() {
+    return highFrequencyUpdates;
 }
 
 byte getLeftPixelOffset(int index){

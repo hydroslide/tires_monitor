@@ -399,6 +399,7 @@ static void initializeSystem()
   extern uint8_t getTrackMax();
   
   extern bool getShowPixelOffsets();
+  extern bool getHighFrequencyUpdates();
   extern byte getLeftPixelOffset(int index);
   extern byte getRightPixelOffset(int index);
 
@@ -407,7 +408,8 @@ static void initializeSystem()
 
   nightBrightness = (int)(((float)getNightBrightness()/100.0f)*255.0f);
 
-  highFrequencyUpdates = getTestEnabled();
+  highFrequencyUpdates = getHighFrequencyUpdates();
+  USBSerial.println((highFrequencyUpdates)? "highFrequencyUpdates Enabled": "highFrequencyUpdates Disabled");
 
   float minTemp, idealTemp, maxTemp;
   if (modeVal == 0) {
