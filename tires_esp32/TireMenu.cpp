@@ -45,6 +45,7 @@ static uint8_t rightOffsetRearLeft = 0;
 static uint8_t rightOffsetRearRight = 0;
 
 static bool useThermalGradient = true;
+static bool testEnabled = true;
 static bool showPixelOffsets = true;
 
 
@@ -308,6 +309,17 @@ static MenuValueBinding showPixelOffsetsBinding = {
     0
 };
 
+static MenuValueBinding testEnabledBinding = {
+    VALUE_BOOL,
+    &testEnabled,
+    nullptr,
+    0,
+    0,
+    40,
+    nullptr,
+    0
+};
+
 
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
@@ -428,7 +440,7 @@ static MenuItem mainMenu[] = {
         nullptr,
         0,
         &nightBrightnessBinding
-    },
+    },    
     {
         "Thermal Gradient",
         MENU_VALUE,
@@ -436,6 +448,14 @@ static MenuItem mainMenu[] = {
         nullptr,
         0,
         &useThermalGradientBinding
+    },
+    {
+        "Test",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &testEnabledBinding
     },
     {
       "Hardware Settings",
@@ -509,6 +529,10 @@ uint8_t getNightBrightness() {
 
 bool getUseThermalGradient() {
     return useThermalGradient;
+}
+
+bool getTestEnabled() {
+    return testEnabled;
 }
 
 uint8_t getStreetMin() {

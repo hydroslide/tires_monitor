@@ -30,6 +30,7 @@
 
 bool testMode = false;
 int forceDrawAfterInit = 0;
+bool highFrequencyUpdates = false;
 
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
@@ -209,7 +210,7 @@ void doRunningMode(int time_delta)
     // Read tire temps
     tempReader->readTemps();
 
-    if (millisSinceLastUpdate >= updateIntervalMillis){
+    if (millisSinceLastUpdate >= updateIntervalMillis || highFrequencyUpdates){
       millisSinceLastUpdate=0;
       checkForWheelsReset();
 
@@ -389,6 +390,7 @@ static void initializeSystem()
   extern uint8_t getTemperatureScaleValue();
   extern uint8_t getNightBrightness();
   extern uint8_t getUseThermalGradient();
+  extern bool getTestEnabled();
   extern uint8_t getStreetMin();
   extern uint8_t getStreetIdeal();
   extern uint8_t getStreetMax();
@@ -404,6 +406,8 @@ static void initializeSystem()
   uint8_t scaleVal = getTemperatureScaleValue();   // 0=F,1=C
 
   nightBrightness = (int)(((float)getNightBrightness()/100.0f)*255.0f);
+
+  highFrequencyUpdates = getTestEnabled();
 
   float minTemp, idealTemp, maxTemp;
   if (modeVal == 0) {
