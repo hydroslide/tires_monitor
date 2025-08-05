@@ -9,7 +9,7 @@ Tire::Tire() {}
 Tire::~Tire() {}
 
 Tire::Tire(int _x, int _y, int _width, int _height, int _bufferPix, uint16_t _outlineColor, uint16_t _textColor, char _tempUnit)
-    : x(_x), y(_y), width(_width), height(_height), bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {}
+    : x(_x), y(_y), width(_width), height(_height), bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor), temperature(0), tempUnit(_tempUnit) {initialize();}
 
 void Tire::draw(bool force, bool textOnly) {
     if ((int)temperature != (int)lastTemp || force || temperature==0.0) {
@@ -25,6 +25,8 @@ void Tire::draw(bool force, bool textOnly) {
         if ((!textOnly) && (force || crossedThreshold)) tft.drawRoundRect(x, y, width, height, radius, outlineColor);
     }
 }
+
+void Tire::initialize(){}
 
 void Tire::printTemp() {
     int tempInt = (int)temperature;

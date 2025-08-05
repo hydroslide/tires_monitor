@@ -6,6 +6,7 @@ Wheels::Wheels(int _bufferPix,
                uint16_t _textColor,
                float _minTemp, float _idealTemp, float _maxTemp,
                char _tempUnit,
+               bool _showSegmentDeltas, byte _minInflationDelta, byte _minAlignmentDelta,
                bool _fl3, bool _fr3, bool _rl3, bool _rr3,
                uint16_t _lowTempColor,    uint16_t _normalTempColor,
                uint16_t _idealTempColor,  uint16_t _highTempColor,
@@ -14,6 +15,7 @@ Wheels::Wheels(int _bufferPix,
   : bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor),
     minTemp(_minTemp), idealTemp(_idealTemp), maxTemp(_maxTemp),
     tempUnit(_tempUnit),
+    showSegmentDeltas(_showSegmentDeltas), minInflationDelta(_minInflationDelta), minAlignmentDelta(_minAlignmentDelta),
     fl3(_fl3), fr3(_fr3), rl3(_rl3), rr3(_rr3),
     lowTempColor(_lowTempColor), normalTempColor(_normalTempColor),
     idealTempColor(_idealTempColor), highTempColor(_highTempColor),
@@ -26,19 +28,25 @@ Wheels::Wheels(int _bufferPix,
     int y0 = bufferPix, y1 = y0 + tireH + bufferPix;
 
     // lambda to pick class based on the bool
-    auto mk = [&](bool three, int x, int y){
-      if (three)
-        return (Tire*)new ThreeSectionTire(x,y,tireW,tireH, bufferPix,
+    auto mk = [&](bool three, int x, int y, byte index){
+      if (three){
+        ThreeSectionTire* tire = new ThreeSectionTire(x,y,tireW,tireH, bufferPix,
                                           outlineColor,textColor,tempUnit);
+        tire->showSegmentDeltas = showSegmentDeltas;
+        tire->minInflationDelta = minInflationDelta;
+        tire->minAlignmentDelta = minAlignmentDelta;
+        tire->tireIndex=index;
+        return (Tire*)tire;
+        }
       else
         return (Tire*)new Tire(x,y,tireW,tireH, bufferPix,
                                outlineColor,textColor,tempUnit);
     };
 
-    frontLeft  = mk(fl3, x0,y0);
-    frontRight = mk(fr3, x1,y0);
-    rearLeft   = mk(rl3, x0,y1);
-    rearRight  = mk(rr3, x1,y1);
+    frontLeft  = mk(fl3, x0,y0, 0);
+    frontRight = mk(fr3, x1,y0, 1);
+    rearLeft   = mk(rl3, x0,y1, 2);
+    rearRight  = mk(rr3, x1,y1, 3);
 
     //   // Attempt to allocate frame buffer in PSRAM
     // framebuf = (uint16_t *)heap_caps_malloc(
@@ -71,6 +79,7 @@ Wheels::Wheels(Wheels* src, bool _fl3, bool _fr3, bool _rl3, bool _rr3)
       src->textColor,
       src->minTemp, src->idealTemp, src->maxTemp,
       src->tempUnit,
+      src->showSegmentDeltas, src->minInflationDelta, src->minAlignmentDelta,
       _fl3, _fr3, _rl3, _rr3,
       src->lowTempColor,
       src->normalTempColor,

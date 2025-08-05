@@ -36,6 +36,8 @@ public:
      */
     void draw(bool force=false, bool textOnly = false) override;
 
+
+
         // Declaration in header, with override:
     void setTemps(const float *temps,
                   size_t count,
@@ -52,17 +54,28 @@ public:
                   uint16_t idealTextColor,
                   uint16_t highTextColor) override;
 
+    bool showSegmentDeltas;
+    byte minInflationDelta;
+    byte minAlignmentDelta;
+
 
 private:
+
     int    sectionTemps[3];
     int    lastTemps[3];
     uint16_t sectionFillColors[3];
     uint16_t sectionTextColors[3];
+    
+    
     bool initialized = false;
     bool crossedThreshold = true;
     bool shouldResetThreshold = false;
     int forceInterval = 5;
     int drawsSinceForce = 0;
+
+
+
+
 
     String printTemp(int temp, int i, int bandW);
 
@@ -73,6 +86,14 @@ private:
                      uint16_t idealColor,  uint16_t highColor,
                      uint16_t lowTextColor,    uint16_t normalTextColor,
                      uint16_t idealTextColor,  uint16_t highTextColor);
+
+protected:
+    uint16_t normalDeltaColor  = 0x06A0; 
+    uint16_t lowDeltaColor  = ST77XX_CYAN;
+    uint16_t highDeltaColor  = ST77XX_YELLOW;
+    uint16_t lastDeltaColors[3];
+    uint16_t currentDeltaColors[3];
+    void initialize();
 };
 
 #endif // THREESECTIONTIRE_H

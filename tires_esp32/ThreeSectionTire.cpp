@@ -62,6 +62,13 @@ void ThreeSectionTire::classifyOne(int idx, float temp,
   sectionFillColors[idx] = fCol;
 }
 
+void ThreeSectionTire::initialize(){
+   for (int i = 0; i < 3; i++) {
+    lastDeltaColors[i] = ST77XX_BLACK;
+    currentDeltaColors[i] = normalDeltaColor;
+   }
+}
+
 void ThreeSectionTire::draw(bool force, bool textOnly) {
 
 
@@ -109,6 +116,57 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       //tft.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
       rectsDrawn=true;
       drawsSinceForce=0;
+    }
+
+     
+    if (showSegmentDeltas){
+      int outer = 2; 
+      int inner = 0;
+      if (tireIndex == 0 || tireIndex == 2){
+        outer = 0;
+        inner = 2;
+      }      
+      int center = 1;
+      float avgEdge = (float)(sectionTemps[outer]+sectionTemps[inner]) / 2.0f;
+      float delta = avgEdge-sectionTemps[center]; // First measure for inflation delta
+      if (delta >= minInflationDelta){
+        currentDeltaColors[outer] = highDeltaColor;
+        currentDeltaColors[center] = lowDeltaColor;
+        currentDeltaColors[inner] = highDeltaColor;
+      }else if (delta <= minInflationDelta*-1)
+      {
+        currentDeltaColors[outer] = lowDeltaColor;
+        currentDeltaColors[center] = highDeltaColor;
+        currentDeltaColors[inner] = lowDeltaColor;
+      }else{
+        // If no inflation delta tripped, measure for alignment delta
+        delta = sectionTemps[outer] - sectionTemps[inner];
+        if (delta >= minAlignmentDelta){
+          currentDeltaColors[outer] = highDeltaColor;
+          currentDeltaColors[center] = normalDeltaColor;
+          currentDeltaColors[inner] = normalDeltaColor;
+        }else if (delta <= minAlignmentDelta*-1){
+          currentDeltaColors[outer] = normalDeltaColor;
+          currentDeltaColors[center] = normalDeltaColor;
+          currentDeltaColors[inner] = highDeltaColor;
+        }else{
+          currentDeltaColors[outer] = normalDeltaColor;
+          currentDeltaColors[center] = normalDeltaColor;
+          currentDeltaColors[inner] = normalDeltaColor;
+        }
+      }
+      for (int i = 0; i < 3; i++) {
+        if (rectsDrawn || currentDeltaColors[i] != lastDeltaColors[i]){
+          lastDeltaColors[i] = currentDeltaColors[i];
+          int bx = x + i * bandW;
+          int bw = bandW; 
+          int bandH = height/8;
+          int startY = (y+height) - (bandH *2);
+          tft.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
+          //tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+        }
+      }       
     }
   
 

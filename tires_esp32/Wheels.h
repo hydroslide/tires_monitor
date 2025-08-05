@@ -58,6 +58,7 @@ struct TireTemps {
            uint16_t textColor,
            float minTemp, float idealTemp, float maxTemp,
            char tempUnit,
+           bool showSegmentDeltas, byte minInflationDelta, byte minAlignmentDelta,
            bool fl3=false, bool fr3=false, bool rl3=false, bool rr3=false,
            uint16_t lowTempColor    = ST77XX_BLUE,
            uint16_t normalTempColor = DARK_GREEN,
@@ -93,6 +94,9 @@ private:
     Tire *frontLeft, *frontRight, *rearLeft, *rearRight;
 
 
+    bool showSegmentDeltas;
+    byte minInflationDelta;
+    byte minAlignmentDelta;
     uint16_t lowTempColor, normalTempColor, idealTempColor, highTempColor;
     uint16_t lowTempTextColor, normalTempTextColor, idealTempTextColor, highTempTextColor;
     //uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer

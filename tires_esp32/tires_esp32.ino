@@ -400,8 +400,12 @@ static void initializeSystem()
   
   extern bool getShowPixelOffsets();
   extern bool getHighFrequencyUpdates();
+  extern bool getShowSegmentDeltas();  
   extern byte getLeftPixelOffset(int index);
   extern byte getRightPixelOffset(int index);
+  extern byte getMinInflationDelta();
+  extern byte getMinAlignmentDelta();
+
 
   uint8_t modeVal = getCurrentModeValue();         // 0=Street,1=Track
   uint8_t scaleVal = getTemperatureScaleValue();   // 0=F,1=C
@@ -448,7 +452,9 @@ static void initializeSystem()
 
   wheels = new Wheels(10, ST77XX_YELLOW, ST77XX_WHITE,
                       minTemp, idealTemp, maxTemp,
-                      tempUnit, fl3, fr3, rl3, rr3);
+                      tempUnit,
+                      getShowSegmentDeltas(), getMinInflationDelta(), getMinAlignmentDelta(),
+                      fl3, fr3, rl3, rr3);
 
 
 

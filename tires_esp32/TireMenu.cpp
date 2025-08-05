@@ -48,6 +48,9 @@ static bool useThermalGradient = true;
 static bool testEnabled = true;
 static bool showPixelOffsets = true;
 static bool highFrequencyUpdates = false;
+static bool showSegmentDeltas = false;
+static uint8_t minInflationDelta = 10;
+static uint8_t minAlignmentDelta = 15;
 
 
 // ----------------------------------------------------
@@ -320,7 +323,6 @@ static MenuValueBinding testEnabledBinding = {
     nullptr,
     0
 };
-
 static MenuValueBinding highFrequencyUpdatesBinding = {
     VALUE_BOOL,
     &highFrequencyUpdates,
@@ -328,6 +330,37 @@ static MenuValueBinding highFrequencyUpdatesBinding = {
     0,
     0,
     41,
+    nullptr,
+    0
+};
+static MenuValueBinding showSegmentDeltasBinding = {
+    VALUE_BOOL,
+    &showSegmentDeltas,
+    nullptr,
+    0,
+    0,
+    42,
+    nullptr,
+    0
+};
+
+static MenuValueBinding minInflationDeltaBinding = {
+    VALUE_BYTE,
+    &minInflationDelta,
+    nullptr,
+    0,
+    16,
+    43,
+    nullptr,
+    0
+};
+static MenuValueBinding minAlignmentDeltaBinding = {
+    VALUE_BYTE,
+    &minAlignmentDelta,
+    nullptr,
+    0,
+    16,
+    44,
     nullptr,
     0
 };
@@ -414,6 +447,16 @@ static MenuItem pixelOffsetsMenu[] = {
         0,
         &highFrequencyUpdatesBinding
     },
+    {
+        "Segment Deltas",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &showSegmentDeltasBinding
+    },
+    { "Inflation Delta", MENU_VALUE, nullptr, nullptr, 0, &minInflationDeltaBinding },
+    { "Alignment Delta", MENU_VALUE, nullptr, nullptr, 0, &minAlignmentDeltaBinding },
 };
 
 
@@ -585,6 +628,18 @@ bool getShowPixelOffsets() {
 
 bool getHighFrequencyUpdates() {
     return highFrequencyUpdates;
+}
+
+bool getShowSegmentDeltas() {
+    return showSegmentDeltas;
+}
+
+uint8_t getMinInflationDelta() {
+    return minInflationDelta;
+}
+
+uint8_t getMinAlignmentDelta() {
+    return minAlignmentDelta;
 }
 
 byte getLeftPixelOffset(int index){
