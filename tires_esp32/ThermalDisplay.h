@@ -93,6 +93,27 @@ private:
 
     void drawPixelOffsets(int _tempIndex);
 
+        // ---- HSV/RGB helpers (keep interpolation saturated) ----
+    static inline void rgb565_to_888(uint16_t c, uint8_t& r,uint8_t& g,uint8_t& b) {
+    r = ((c>>11)&0x1F); g=((c>>5)&0x3F); b=(c&0x1F);
+    r = (r<<3)|(r>>2); g=(g<<2)|(g>>4); b=(b<<3)|(b>>2);
+    }
+    static inline uint16_t rgb888_to_565(uint8_t r,uint8_t g,uint8_t b) {
+    return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+    }
+
+    // RGB<->HSV (h in [0,360), s,v in [0,1])
+    static void rgb2hsv(uint8_t R,uint8_t G,uint8_t B, float& h,float& s,float& v);
+    static void hsv2rgb888(float h,float s,float v, uint8_t& R,uint8_t& G,uint8_t& B);
+
+    // Saturated hue-walk between two RGB565 colors (S=1, V=1 inside the band)
+    // Endpoints are kept EXACTLY as your anchors.
+    static uint16_t interpolateHSV_saturated(uint16_t c1, uint16_t c2, float t);
+
+    // Desaturating tail: keep hue from the start color, ramp S↓ toward target,
+    // and V toward target (for your purple_hot → hot end segment).
+    static uint16_t interpolateDesaturateToTarget(uint16_t cStart, uint16_t cEnd, float t);
+
 public:
     /**
      * Constructor

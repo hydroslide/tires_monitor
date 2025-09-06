@@ -2,6 +2,8 @@
 #include <esp_heap_caps.h>   // for heap_caps_malloc (PSRAM allocation)
 #include <Arduino.h>         // for yield()
 #include "TempReader.h"
+#include <math.h>
+
 
 extern HWCDC USBSerial;
 
@@ -164,7 +166,88 @@ uint8_t ThermalDisplay::getColorIndexForTemp(int c) {
     }
 }
 
+static inline float _clamp360(float h) { 
+  while (h < 0) h += 360.0f; 
+  while (h >= 360.0f) h -= 360.0f; 
+  return h; 
+}
 
+void ThermalDisplay::rgb2hsv(uint8_t R,uint8_t G,uint8_t B, float& h,float& s,float& v) {
+  float r = R/255.0f, g = G/255.0f, b = B/255.0f;
+  float maxv = fmaxf(r,fmaxf(g,b)), minv = fminf(r,fminf(g,b));
+  v = maxv;
+  float d = maxv - minv;
+  s = (maxv == 0.0f) ? 0.0f : d / maxv;
+  if (d == 0.0f) { h = 0.0f; return; }
+  if (maxv == r)      h = 60.0f * fmodf(((g - b) / d), 6.0f);
+  else if (maxv == g) h = 60.0f * (((b - r) / d) + 2.0f);
+  else                h = 60.0f * (((r - g) / d) + 4.0f);
+  if (h < 0) h += 360.0f;
+}
+
+void ThermalDisplay::hsv2rgb888(float h,float s,float v, uint8_t& R,uint8_t& G,uint8_t& B) {
+  h = _clamp360(h);
+  float c = v * s;
+  float hh = (h / 60.0f);
+  float x = c * (1.0f - fabsf(fmodf(hh, 2.0f) - 1.0f));
+  float r=0,g=0,b=0;
+  if      (0<=hh && hh<1){ r=c; g=x; b=0; }
+  else if (1<=hh && hh<2){ r=x; g=c; b=0; }
+  else if (2<=hh && hh<3){ r=0; g=c; b=x; }
+  else if (3<=hh && hh<4){ r=0; g=x; b=c; }
+  else if (4<=hh && hh<5){ r=x; g=0; b=c; }
+  else                   { r=c; g=0; b=x; }
+  float m = v - c;
+  r += m; g += m; b += m;
+  R = (uint8_t)lroundf(r*255.0f);
+  G = (uint8_t)lroundf(g*255.0f);
+  B = (uint8_t)lroundf(b*255.0f);
+}
+
+uint16_t ThermalDisplay::interpolateHSV_saturated(uint16_t c1, uint16_t c2, float t) {
+  if (t <= 0.0f) return c1;
+  if (t >= 1.0f) return c2;
+
+  uint8_t r1,g1,b1, r2,g2,b2;
+  rgb565_to_888(c1, r1,g1,b1);
+  rgb565_to_888(c2, r2,g2,b2);
+
+  float h1,s1,v1, h2,s2,v2;
+  rgb2hsv(r1,g1,b1, h1,s1,v1);
+  rgb2hsv(r2,g2,b2, h2,s2,v2);
+
+  // shortest-path hue interpolation
+  float dh = fmodf((h2 - h1 + 540.0f), 360.0f) - 180.0f; // [-180,180]
+  float h  = _clamp360(h1 + t * dh);
+
+  // fully saturated rim (S=1, V=1) inside band
+  uint8_t R,G,B;
+  hsv2rgb888(h, 1.0f, 1.0f, R,G,B);
+  return rgb888_to_565(R,G,B);
+}
+
+uint16_t ThermalDisplay::interpolateDesaturateToTarget(uint16_t cStart, uint16_t cEnd, float t) {
+  if (t <= 0.0f) return cStart;
+  if (t >= 1.0f) return cEnd;
+
+  uint8_t rs,gs,bs, re,ge,be;
+  rgb565_to_888(cStart, rs,gs,bs);
+  rgb565_to_888(cEnd,   re,ge,be);
+
+  float hs,ss,vs, he,se,ve;
+  rgb2hsv(rs,gs,bs, hs,ss,vs);
+  rgb2hsv(re,ge,be, he,se,ve);
+
+  // hold hue at start, ramp S: 1 → se, and V: vs → ve
+  float s = 1.0f + (se - 1.0f) * t;
+  float v = vs    + (ve - vs)  * t;
+
+  uint8_t R,G,B;
+  hsv2rgb888(hs, s, v, R,G,B);
+  return rgb888_to_565(R,G,B);
+}
+
+/*
 void ThermalDisplay::generatePalette() {
     // 1/8th for “hot” (red→white) = 32 entries
     lenHot = 256 / 8;       // = 32
@@ -231,6 +314,77 @@ void ThermalDisplay::generatePalette() {
             camPalette[idx++] = COLOR_HOT;
     }
 }
+    */
+
+void ThermalDisplay::generatePalette() {
+  // 1/8th for “hot” tail
+  lenHot = 256 / 8;                 // 32
+  int rest = 256 - lenHot;          // 224
+
+  // degree spans (unchanged)
+  int spanCold  = 7;
+  int spanWarm  = thresholdIdeal - thresholdMin;
+  int spanIdeal = thresholdMax   - thresholdIdeal;
+  int sumRest   = spanCold + spanWarm + spanIdeal;
+
+  lenCold  = max(1, int(lroundf((float)spanCold  / sumRest * rest)));
+  lenWarm  = max(1, int(lroundf((float)spanWarm  / sumRest * rest)));
+  lenIdeal =           rest - lenCold - lenWarm;
+
+  auto t_of = [](int i, int n) -> float {
+    return (n > 1) ? (float)i / (float)(n - 1) : 0.0f;
+  };
+
+  int idx = 0;
+
+  // COLD: violet → cyan (HSV saturated)
+  for (int i = 0; i < lenCold; ++i) {
+    float t = t_of(i, lenCold);
+    camPalette[idx++] = useGradient
+      ? interpolateHSV_saturated(COLOR_COLD_START, COLOR_CYAN, t)
+      : COLOR_COLD;
+  }
+
+  // WARM: cyan → orange (HSV saturated)
+  for (int i = 0; i < lenWarm; ++i) {
+    float t = t_of(i, lenWarm);
+    camPalette[idx++] = useGradient
+      ? interpolateHSV_saturated(COLOR_CYAN, COLOR_ORANGE, t)
+      : COLOR_WARM;
+  }
+
+  // IDEAL (split in half, as you already do):
+  //   orange → purple (HSV saturated)
+  int halfIdealA = lenIdeal / 2;
+  for (int i = 0; i < halfIdealA; ++i) {
+    float t = t_of(i, halfIdealA);
+    camPalette[idx++] = useGradient
+      ? interpolateHSV_saturated(COLOR_ORANGE, COLOR_PURPLE, t)
+      : COLOR_PURPLE; // your solid fallback
+  }
+
+  //   purple → purple_hot (HSV saturated)
+  int halfIdealB = lenIdeal - halfIdealA;
+  for (int i = 0; i < halfIdealB; ++i) {
+    float t = t_of(i, halfIdealB);
+    camPalette[idx++] = useGradient
+      ? interpolateHSV_saturated(COLOR_PURPLE, COLOR_PURPLE_HOT, t)
+      : COLOR_PURPLE; // your solid fallback
+  }
+
+  // HOT: purple_hot → hot (desaturate toward your target color)
+  for (int i = 0; i < lenHot; ++i) {
+    float t = t_of(i, lenHot);
+    camPalette[idx++] = useGradient
+      ? interpolateDesaturateToTarget(COLOR_PURPLE_HOT, COLOR_HOT, t)
+      : COLOR_HOT;
+  }
+
+  // Safety: ensure we filled exactly 256
+  // (harmless if idx==256; clamps if rounding created an off-by-one)
+  while (idx < 256) camPalette[idx++] = camPalette[255];
+}
+
 
 uint16_t ThermalDisplay::interpolate565(uint16_t c1,
                                         uint16_t c2,
