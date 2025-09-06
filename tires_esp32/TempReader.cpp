@@ -95,15 +95,59 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
 TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
     for (uint8_t i = 0; i < TIRE_COUNT; i++){
-        tireSensorIsCamera[i]=true; 
-        tireSensorClockSpeed[i] = MAX_CLOCK_SPEED;
-        tireSensorBegun[i] = -5;
+        resetTireSensor(i);
         for(int j=0; j<3; j++){
             tireTemps[i] = 0;
             tireSectionTemps[i][j]=0;
             lastTireSectionTemps[i][j]=0;
         }
     }
+    
+}
+
+void TempReader::resetTireSensor(int i){
+    tireSensorIsCamera[i]=true; 
+    tireSensorClockSpeed[i] = MAX_CLOCK_SPEED;
+    tireSensorBegun[i] = -5;
+}
+
+bool TempReader::newTempIsInvalid(int i, int j){
+ //return (lastTireSectionTemps[i][j] !=0 && abs(tireSectionTemps[i][j]-lastTireSectionTemps[i][j]) > 50) || (lastTireSectionTemps[i][j] ==0 &&  (tireSectionTemps[i][j] >=200 || tireSectionTemps[i][j] <0));
+
+  // Read current/last using your existing indices i,j
+  const float curr = tireSectionTemps[i][j];
+  const float last = lastTireSectionTemps[i][j];
+
+  // --- Tunables (keep simple) ---
+  const float ABS_MIN   = -10.0f;   // physically impossible low
+  const float ABS_MAX   = 270.0f;   // physically impossible high
+  const float START_OK_MIN = -5.0f; // during startup, only reject crazy values
+  const float START_OK_MAX = 190.0f;
+  const float MAX_STEP  = 30.0f;    // max believable jump per frame
+
+  // 1) Absolute sanity
+  if (!isfinite(curr) || curr < ABS_MIN || curr > ABS_MAX) return true;
+
+  // 2) If last is uninitialized (your code uses 0 as "none"),
+  //    don't be picky—just reject only extreme startup garbage.
+  if (last == 0.0f) {
+    return !(curr >= START_OK_MIN && curr <= START_OK_MAX);
+  }
+
+  // 3) If the *last* looked bogus but the new value looks mid-range sane,
+  //    allow an immediate re-sync (prevents getting stuck using a bad last).
+  if ((last < START_OK_MIN || last > START_OK_MAX) &&
+      (curr >= START_OK_MIN && curr <= START_OK_MAX)) {
+    return false; // accept to recover immediately
+  }
+
+  // 4) Normal step check vs last accepted
+  if (fabsf(curr - last) > MAX_STEP) return true;
+
+  // Passed all guards → valid
+  return false;
+
+
 }
 
 void TempReader::readTemps(){
@@ -121,7 +165,7 @@ void TempReader::readTemps(){
                         float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
                         if (useFarenheit)
                         tireSectionTemps[i][j] = valueF;
-                        if ((lastTireSectionTemps[i][j] !=0 && abs(tireSectionTemps[i][j]-lastTireSectionTemps[i][j]) > 50) || (lastTireSectionTemps[i][j] ==0 &&  (tireSectionTemps[i][j] >=200 || tireSectionTemps[i][j] <0)))
+                        if (newTempIsInvalid(i,j))
                             tireSectionTemps[i][j] = lastTireSectionTemps[i][j];
                         else
                             lastTireSectionTemps[i][j] = tireSectionTemps[i][j];
@@ -191,7 +235,9 @@ void TempReader::checkTireSensor(uint8_t index){
                             USBSerial.println(cameraClockSpeed);
                             tireSensorClockSpeed[index] = cameraClockSpeed;
                             tireSensorBegun[index] = -1;
-                        }                       
+                        }
+                        else
+                            tireSensorBegun[index] = 2;                   
                     }
                 }
 
@@ -224,6 +270,11 @@ void TempReader::checkTireSensor(uint8_t index){
         }
         else
             Wire.setClock(cameraClockSpeed); 
+        if (autoRecoverTire && tireSensorBegun[index] > 1){
+            tireSensorBegun[index]++;
+            if (tireSensorBegun[index] >=60)
+                resetTireSensor(index);
+        }
     }
 }
 

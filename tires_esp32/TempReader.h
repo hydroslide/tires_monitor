@@ -31,6 +31,8 @@ class TempReader {
                        bool useMiddleRows,
                        float medians_out[3], int leftOffset, int rightOffset);
         void flipFrameHorizontal(float frame[FRAME_PIXELS]);
+        bool newTempIsInvalid(int i, int j);
+        void resetTireSensor(int i);
 
     public:
         TempReader();        
@@ -40,6 +42,7 @@ class TempReader {
         float lastTireSectionTemps[TIRE_COUNT][3];
         bool tireSensorIsCamera[TIRE_COUNT];
         bool autoAdjustClock;
+        bool autoRecoverTire;
         int8_t tireSensorBegun[TIRE_COUNT];
         
         float frame[FRAME_PIXELS];                   // MLX90640 float-array

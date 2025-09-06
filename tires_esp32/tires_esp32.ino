@@ -121,8 +121,7 @@ void checkForWheelsReset(){
 
 void switchThermalMode(bool up){
   int dir = (up)?1:-1;
-  int tMode  = thermalMode+dir;
-  tMode=tMode%THERMAL_MODES;
+  int tMode = (thermalMode + dir + THERMAL_MODES) % THERMAL_MODES;
   setThermalMode(tMode);
 }
 
@@ -440,6 +439,7 @@ static void initializeSystem()
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
   tempReader = new TempReader();
+  tempReader->autoRecoverTire = getTestEnabled();
   tempReader->useFarenheit = (scaleVal == 0);
 
   bool fl3 = tempReader->tireSensorIsCamera[0]; //false;
