@@ -121,7 +121,7 @@ bool TempReader::newTempIsInvalid(int i, int j){
   // --- Tunables (keep simple) ---
   const float ABS_MIN   = -10.0f;   // physically impossible low
   const float ABS_MAX   = 270.0f;   // physically impossible high
-  const float START_OK_MIN = -5.0f; // during startup, only reject crazy values
+  const float START_OK_MIN = 20.0f; // during startup, only reject crazy values
   const float START_OK_MAX = 190.0f;
   const float MAX_STEP  = 30.0f;    // max believable jump per frame
 
@@ -142,7 +142,16 @@ bool TempReader::newTempIsInvalid(int i, int j){
   }
 
   // 4) Normal step check vs last accepted
-  if (fabsf(curr - last) > MAX_STEP) return true;
+  if (fabsf(curr - last) > MAX_STEP){
+    for (int tj; tj<3; tj++){
+        if (tj!=j){
+            float tjCurr = tireSectionTemps[i][tj];
+            if (tjCurr!=0.0 && fabsf(curr - tjCurr) <= MAX_STEP)
+                return false;
+        }
+    }
+        return true;
+  } 
 
   // Passed all guards → valid
   return false;
