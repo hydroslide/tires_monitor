@@ -415,6 +415,7 @@ void ThermalDisplay::updateDisplay(int _tempIndex){
         updateDisplay(tempReader->tire_frames[_tempIndex], _tempIndex);
 }
 
+/*
 void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT], int _tempIndex)
 {
     // Build the areaW×areaH RGB565 buffer from 32×24 temps[]
@@ -428,26 +429,7 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
 
             uint8_t ci      = getColorIndexForTemp(raw);
             uint16_t color  = camPalette[ci];//camColors[ci];
-
-            /*
-            int tempVal = temps[idxFlat];
-
-            int celsius = tempVal;
-
-            // Clamp to [MINTEMP, MAXTEMP]
-            celsius = min(celsius, MAXTEMP);
-            celsius = max(celsius, MINTEMP);
-
-            // **replace** the old full‐range mapping:
-            //   uint8_t colorIndex = map(celsius, MINTEMP, MAXTEMP, 0, 255);
-            //   colorIndex = constrain(colorIndex, 0, 255);
-            //   uint16_t color = camColors[colorIndex];
-            //
-            // **with** our bucketed helper:
-            uint8_t colorIndex = getColorIndexForTemp(celsius);
-            uint16_t color     = camColors[colorIndex];
-            */
-
+           
             // Compute scaled block in areaW×areaH
             int xStart = (camX     * areaW) / CAMERA_WIDTH;
             int xEnd   = ((camX+1) * areaW) / CAMERA_WIDTH;
@@ -473,32 +455,89 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
     if (showPixelOffsets)
         drawPixelOffsets(_tempIndex);
 }
+*/
+
+void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT], int _tempIndex)
+{
+    // When showPixelOffsets == false, we *stretch* only the X range between the two offsets
+    // to fill the entire display width. Y mapping is unchanged.
+    int leftOff  = 0;
+    int rightOff = 0;
+    int cropW    = CAMERA_WIDTH;
+    const bool stretchX = !showPixelOffsets;
+
+    if (stretchX) {
+        // Read the per-sensor offsets
+        leftOff  = (int)tempReader->leftPixelOffset[_tempIndex];
+        rightOff = (int)tempReader->rightPixelOffset[_tempIndex];
+
+        // Sanity checks to avoid degenerate/invalid ranges
+        if (leftOff   < 0) leftOff = 0;
+        if (rightOff  < 0) rightOff = 0;
+        if (leftOff + rightOff >= CAMERA_WIDTH) { // pathological; disable stretch
+            leftOff = 0; rightOff = 0;
+        }
+        cropW = CAMERA_WIDTH - leftOff - rightOff;
+        if (cropW <= 0) cropW = 1; // hard guard against div-by-zero
+    }
+
+    // Build the areaW×areaH RGB565 buffer from 32×24 temps[]
+    for (int camY = 0; camY < CAMERA_HEIGHT; camY++) {
+        // Y scaling is unchanged regardless of stretch
+        const int yStart = (camY     * areaH) / CAMERA_HEIGHT;
+        const int yEnd   = ((camY+1) * areaH) / CAMERA_HEIGHT;
+
+        // X loop: either full width or the cropped range
+        const int xBegin = stretchX ? leftOff : 0;
+        const int xFinal = CAMERA_WIDTH - (stretchX ? rightOff : 0);
+
+        for (int camX = xBegin; camX < xFinal; camX++) {
+            const int idxFlat = camY * CAMERA_WIDTH + camX;
+
+            int raw = temps[idxFlat];
+            uint8_t  ci    = getColorIndexForTemp(raw);
+            uint16_t color = camPalette[ci];
+
+            // Compute scaled block in areaW×areaH
+            // If stretching, remap localX (camX - leftOff) across cropW → full areaW.
+            // If not stretching, localX == camX and cropW == CAMERA_WIDTH (original behavior).
+            const int localX = stretchX ? (camX - leftOff) : camX;
+
+            const int xStart = (localX     * areaW) / cropW;
+            const int xEnd   = ((localX+1) * areaW) / cropW;
+
+            for (int yy = yStart; yy < yEnd; yy++) {
+                uint16_t* row = &framebuf[yy * areaW];
+                for (int xx = xStart; xx < xEnd; xx++) {
+                    row[xx] = color;
+                }
+            }
+        }
+    }
+
+    // Push the entire buffer to ST7789 at (areaX, areaY)
+    tft.startWrite();
+    tft.setAddrWindow(areaX, areaY, areaW, areaH);
+    tft.writePixels(framebuf, areaW * areaH);
+    tft.endWrite();
+
+    // When not stretching (i.e., showPixelOffsets == true), draw the guide lines on top.
+    if (showPixelOffsets)
+        drawPixelOffsets(_tempIndex);
+}
+
 
 void ThermalDisplay::drawPixelOffsets(int _tempIndex){
     byte leftOffset = tempReader->leftPixelOffset[_tempIndex];
     byte rightOffset = tempReader->rightPixelOffset[_tempIndex];
 
-    //  USBSerial.print(_tempIndex);
-    //  USBSerial.print(": leftOffset: ");
-    //  USBSerial.println(leftOffset);
-
-
     if(leftOffset >0){
         int leftX = (((leftOffset * areaW) / CAMERA_WIDTH)-1)+areaX;   
-        // USBSerial.print(_tempIndex);
-        // USBSerial.print(": leftX: ");
-        // USBSerial.println(leftX);     
         tft.drawFastVLine(leftX, areaY, areaH, OFFSET_LINE_COLOR);
     }
 
-        // USBSerial.print(_tempIndex);
-        // USBSerial.print(": rightOffset: ");
-        // USBSerial.println(rightOffset);
     if (rightOffset >0){
         int rightX = ((areaW- ((rightOffset * areaW) / CAMERA_WIDTH))+1)+areaX;
-        // USBSerial.print(_tempIndex);
-        // USBSerial.print(": rightX: ");
-        // USBSerial.println(rightX);
         tft.drawFastVLine(rightX, areaY, areaH, OFFSET_LINE_COLOR);
     }
 
