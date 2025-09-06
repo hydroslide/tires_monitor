@@ -129,6 +129,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       int center = 1;
       float avgEdge = (float)(sectionTemps[outer]+sectionTemps[inner]) / 2.0f;
       float delta = avgEdge-sectionTemps[center]; // First measure for inflation delta
+      float minInflationDelta = avgEdge * (minInflationDeltaPct/100.0f);
       if (delta >= minInflationDelta){
         currentDeltaColors[outer] = highDeltaColor;
         currentDeltaColors[center] = lowDeltaColor;
@@ -141,6 +142,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       }else{
         // If no inflation delta tripped, measure for alignment delta
         delta = sectionTemps[outer] - sectionTemps[inner];
+        float minAlignmentDelta = avgEdge * (minAlignmentDeltaPct/100.0f);
         if (delta >= minAlignmentDelta){
           currentDeltaColors[outer] = highDeltaColor;
           currentDeltaColors[center] = normalDeltaColor;

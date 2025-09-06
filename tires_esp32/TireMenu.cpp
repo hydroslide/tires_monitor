@@ -49,8 +49,8 @@ static bool testEnabled = true;
 static bool showPixelOffsets = true;
 static bool highFrequencyUpdates = false;
 static bool showSegmentDeltas = false;
-static uint8_t minInflationDelta = 10;
-static uint8_t minAlignmentDelta = 15;
+static uint8_t minInflationDeltaPct = 10;
+static uint8_t minAlignmentDeltaPct = 15;
 
 
 // ----------------------------------------------------
@@ -344,9 +344,9 @@ static MenuValueBinding showSegmentDeltasBinding = {
     0
 };
 
-static MenuValueBinding minInflationDeltaBinding = {
+static MenuValueBinding minInflationDeltaPctBinding = {
     VALUE_BYTE,
-    &minInflationDelta,
+    &minInflationDeltaPct,
     nullptr,
     0,
     16,
@@ -354,9 +354,9 @@ static MenuValueBinding minInflationDeltaBinding = {
     nullptr,
     0
 };
-static MenuValueBinding minAlignmentDeltaBinding = {
+static MenuValueBinding minAlignmentDeltaPctBinding = {
     VALUE_BYTE,
-    &minAlignmentDelta,
+    &minAlignmentDeltaPct,
     nullptr,
     0,
     16,
@@ -455,8 +455,8 @@ static MenuItem pixelOffsetsMenu[] = {
         0,
         &showSegmentDeltasBinding
     },
-    { "Inflation Delta", MENU_VALUE, nullptr, nullptr, 0, &minInflationDeltaBinding },
-    { "Alignment Delta", MENU_VALUE, nullptr, nullptr, 0, &minAlignmentDeltaBinding },
+    { "Inflation Delta %", MENU_VALUE, nullptr, nullptr, 0, &minInflationDeltaPctBinding },
+    { "Alignment Delta %", MENU_VALUE, nullptr, nullptr, 0, &minAlignmentDeltaPctBinding },
 };
 
 
@@ -634,12 +634,12 @@ bool getShowSegmentDeltas() {
     return showSegmentDeltas;
 }
 
-uint8_t getMinInflationDelta() {
-    return minInflationDelta;
+uint8_t getminInflationDeltaPct() {
+    return minInflationDeltaPct;
 }
 
-uint8_t getMinAlignmentDelta() {
-    return minAlignmentDelta;
+uint8_t getminAlignmentDeltaPct() {
+    return minAlignmentDeltaPct;
 }
 
 byte getLeftPixelOffset(int index){

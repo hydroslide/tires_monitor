@@ -6,7 +6,7 @@ Wheels::Wheels(int _bufferPix,
                uint16_t _textColor,
                float _minTemp, float _idealTemp, float _maxTemp,
                char _tempUnit,
-               bool _showSegmentDeltas, byte _minInflationDelta, byte _minAlignmentDelta,
+               bool _showSegmentDeltas, byte _minInflationDeltaPct, byte _minAlignmentDeltaPct,
                bool _fl3, bool _fr3, bool _rl3, bool _rr3,
                uint16_t _lowTempColor,    uint16_t _normalTempColor,
                uint16_t _idealTempColor,  uint16_t _highTempColor,
@@ -15,7 +15,7 @@ Wheels::Wheels(int _bufferPix,
   : bufferPix(_bufferPix), outlineColor(_outlineColor), textColor(_textColor),
     minTemp(_minTemp), idealTemp(_idealTemp), maxTemp(_maxTemp),
     tempUnit(_tempUnit),
-    showSegmentDeltas(_showSegmentDeltas), minInflationDelta(_minInflationDelta), minAlignmentDelta(_minAlignmentDelta),
+    showSegmentDeltas(_showSegmentDeltas), minInflationDeltaPct(_minInflationDeltaPct), minAlignmentDeltaPct(_minAlignmentDeltaPct),
     fl3(_fl3), fr3(_fr3), rl3(_rl3), rr3(_rr3),
     lowTempColor(_lowTempColor), normalTempColor(_normalTempColor),
     idealTempColor(_idealTempColor), highTempColor(_highTempColor),
@@ -33,8 +33,8 @@ Wheels::Wheels(int _bufferPix,
         ThreeSectionTire* tire = new ThreeSectionTire(x,y,tireW,tireH, bufferPix,
                                           outlineColor,textColor,tempUnit);
         tire->showSegmentDeltas = showSegmentDeltas;
-        tire->minInflationDelta = minInflationDelta;
-        tire->minAlignmentDelta = minAlignmentDelta;
+        tire->minInflationDeltaPct = minInflationDeltaPct;
+        tire->minAlignmentDeltaPct = minAlignmentDeltaPct;
         tire->tireIndex=index;
         return (Tire*)tire;
         }
@@ -79,7 +79,7 @@ Wheels::Wheels(Wheels* src, bool _fl3, bool _fr3, bool _rl3, bool _rr3)
       src->textColor,
       src->minTemp, src->idealTemp, src->maxTemp,
       src->tempUnit,
-      src->showSegmentDeltas, src->minInflationDelta, src->minAlignmentDelta,
+      src->showSegmentDeltas, src->minInflationDeltaPct, src->minAlignmentDeltaPct,
       _fl3, _fr3, _rl3, _rr3,
       src->lowTempColor,
       src->normalTempColor,

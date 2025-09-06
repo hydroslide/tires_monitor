@@ -55,8 +55,8 @@ public:
                   uint16_t highTextColor) override;
 
     bool showSegmentDeltas;
-    byte minInflationDelta;
-    byte minAlignmentDelta;
+    byte minInflationDeltaPct;
+    byte minAlignmentDeltaPct;
 
 
 private:
