@@ -2,6 +2,7 @@
 #define NBP_PROTOCOL_H
 
 #include <Arduino.h>
+#include "Wheels.h"
 
 // Enumerations for channel types and units
 enum class ChannelType {
@@ -13,6 +14,18 @@ enum class ChannelType {
     FrontRightTire,
     RearLeftTire,
     RearRightTire,
+    FrontLeftTireO,
+    FrontRightTireO,
+    RearLeftTireO,
+    RearRightTireO,
+    FrontLeftTireC,
+    FrontRightTireC,
+    RearLeftTireC,
+    RearRightTireC,
+    FrontLeftTireI,
+    FrontRightTireI,
+    RearLeftTireI,
+    RearRightTireI,
     // Add additional types as needed
 };
 
@@ -44,6 +57,11 @@ public:
     void clearChannels();
 
     void setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit);
+
+    void setAllTireTemps(const Wheels::TireTemps &fl,
+                      const Wheels::TireTemps &fr,
+                      const Wheels::TireTemps &rl,
+                      const Wheels::TireTemps &rr, bool farenheit);
 
 private:
     // Reference to the Stream object for communication
