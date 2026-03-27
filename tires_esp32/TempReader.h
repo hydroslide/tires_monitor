@@ -42,7 +42,7 @@ class TempReader {
         float lastTireSectionTemps[TIRE_COUNT][3];
         bool tireSensorIsCamera[TIRE_COUNT];
         bool autoAdjustClock;
-        bool autoRecoverTire;
+        bool autoRecoverTire = true;
         int8_t tireSensorBegun[TIRE_COUNT];
         
         float frame[FRAME_PIXELS];                   // MLX90640 float-array

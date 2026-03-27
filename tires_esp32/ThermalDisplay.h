@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 #include <Arduino_GFX_Library.h>
 #include "TempReader.h"
 #include "Wheels.h"
@@ -50,7 +51,7 @@ private:
     
     static constexpr uint16_t OFFSET_LINE_COLOR = 0xF81F;
 
-    Adafruit_ST7789 &tft;   // reference to the TFT display object
+    DisplayBase &display;   // reference to the display object
     static uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
     int areaX, areaY;       // upper-left origin of the update region
     int areaW, areaH;       // width/height of the update region
@@ -124,7 +125,7 @@ public:
      * @param areaW        Width (in pixels) of update region (e.g. 240)
      * @param areaH        Height (in pixels) of update region (e.g. 180)
      */
-    ThermalDisplay(Adafruit_ST7789 &displayTFT, int areaX, int areaY, int areaW, int areaH);
+    ThermalDisplay(DisplayBase &displayTFT, int areaX, int areaY, int areaW, int areaH);
 
     /** Destructor frees the allocated frame buffer. */
     ~ThermalDisplay();

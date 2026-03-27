@@ -2,8 +2,8 @@
 #include "MenuRenderer.h"
 #include <string.h> // for strncpy
 
-MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
-: menu(menuSystem), display(tft)
+MenuRenderer::MenuRenderer(MenuSystem &menuSystem, DisplayBase &display)
+: menu(menuSystem), display(display)
 {
     state.dropdownOpen = false;
     state.numericEditing = false;
@@ -48,6 +48,8 @@ void MenuRenderer::render() {
             display.print(statusMessage);
         }
     }
+
+    display.drawScreen();
 }
 
 void MenuRenderer::setStatusMessage(const char* msg) {

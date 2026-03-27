@@ -1,6 +1,7 @@
 #include "ThreeSectionTire.h"
 #include <Arduino.h>          // for round()
-extern Adafruit_ST7789 tft;   // from your main sketch
+#include "DisplayBase.h"
+extern DisplayBase& display;
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
@@ -110,19 +111,19 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
 
 
     if (((!textOnly) && (force || crossedThreshold)) || (textOnly && crossedThreshold)){
-      tft.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
+      display.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
 
       // fill three vertical bands
       for (int i = 0; i < 3; i++) {
           int bx = x + i * bandW;
           int bw = bandW; 
           lastSectionFillColors[i] = sectionFillColors[i];
-          tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+          display.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+          //display.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
       }       
 
       // draw outer outline
-      //tft.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
+      //display.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
       rectsDrawn=true;
       drawsSinceForce=0;
     }
@@ -173,9 +174,9 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
           int bw = bandW; 
           int bandH = height/8;
           int startY = (y+height) - (bandH *2);
-          tft.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
-          //tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+          display.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
+          //display.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+          //display.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
         }
       }       
     }
@@ -183,8 +184,8 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
 
     // draw each temperature string center-aligned in its band
     
-    tft.setFont(&FreeMonoBold18pt7b);
-    tft.setTextSize(1);
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setTextSize(1);
 
     for (int i = 0; i < 3; i++) {
       if (sectionChanged[i] || true){
@@ -192,13 +193,13 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
 
         if (!rectsDrawn && !textOnly){
           // Redraw the last temp with background color
-          tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);    
+          display.setTextColor(sectionFillColors[i], sectionFillColors[i]);
           printTemp(lastTemps[i], i, bandW, textOnly);
         }
 
-        uint16_t textColor = (textOnly) ? ST77XX_BLACK : sectionTextColors[i];
-        tft.setTextColor(textColor, sectionFillColors[i]);    
-        String tempString = printTemp(sectionTemps[i], i, bandW, false);
+        uint16_t textColor = sectionTextColors[i];//(textOnly) ? ST77XX_BLACK : sectionTextColors[i];
+        display.setTextColor(textColor, sectionFillColors[i]);
+        String tempString = printTemp(sectionTemps[i], i, bandW, true);
 
         lastTemps[i] = sectionTemps[i];
       }     
@@ -220,7 +221,7 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int extraYBuffer = 7;
     int extraXBuffer = -3;
 
-    tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
+    display.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
     int xShift = 0;
     int xShiftDir = 0;
@@ -242,14 +243,16 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int startY = (y + ((height+textHeight) / 2))+yMod;// - (textHeight / 2);
 
     if (drawOutline){
-      tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);   
-      tft.setCursor(startX+2, startY+2);
-      tft.println(tempString);
-      tft.setTextColor(sectionTextColors[i], sectionFillColors[i]);   
+      
+      display.setTextColor(ST77XX_BLACK, sectionFillColors[i]);
+      //display.setTextColor(sectionFillColors[i], sectionFillColors[i]);
+      display.setCursor(startX+2, startY+2);
+      display.println(tempString);
+      display.setTextColor(sectionTextColors[i], sectionFillColors[i]);
     }
 
-    tft.setCursor(startX, startY);
-    tft.println(tempString);
+    display.setCursor(startX, startY);
+    display.println(tempString);
     return tempString;
 }
 
