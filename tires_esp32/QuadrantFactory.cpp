@@ -45,6 +45,12 @@ ThermalDisplay* QuadrantFactory::createDisplay(bool top, bool left) {
     int areaX = quadX + margin + offsetInsideX;
     int areaY = quadY + margin + offsetInsideY;
 
+    // Manual offset
+    int yOffsetPixels = 3;
+    areaY+= (yOffsetPixels * ((top)? 1:-1));
+    int xOffsetPixels = 2;
+    areaX+= (xOffsetPixels * ((left)? 1:-1));
+
     // 7) Instantiate a ThermalDisplay for that rectangle
     //    Constructor: ThermalDisplay(tft, areaX, areaY, areaW, areaH)
     ThermalDisplay* disp = new ThermalDisplay(tft, areaX, areaY, areaW, areaH);

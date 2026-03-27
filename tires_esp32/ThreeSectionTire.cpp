@@ -66,7 +66,15 @@ void ThreeSectionTire::initialize(){
    for (int i = 0; i < 3; i++) {
     lastDeltaColors[i] = ST77XX_BLACK;
     currentDeltaColors[i] = normalDeltaColor;
+    lastSectionFillColors[i] = ST77XX_BLACK;
    }
+}
+
+bool ThreeSectionTire::anySectionColorChanged(){
+    for (int i = 0; i < 3; i++) {
+      if (sectionFillColors[i] != lastSectionFillColors[i])
+        return true;
+    }
 }
 
 void ThreeSectionTire::draw(bool force, bool textOnly) {
@@ -98,16 +106,17 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       bool rectsDrawn = false;
     int bandW = width / 3;
 
-  if (changed){
+  if (changed || force){
 
 
-    if ((!textOnly) && (force || crossedThreshold)){
+    if (((!textOnly) && (force || crossedThreshold)) || (textOnly && crossedThreshold)){
       tft.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
 
       // fill three vertical bands
       for (int i = 0; i < 3; i++) {
           int bx = x + i * bandW;
           int bw = bandW; 
+          lastSectionFillColors[i] = sectionFillColors[i];
           tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
           //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
       }       
@@ -181,14 +190,15 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       if (sectionChanged[i] || true){
         char buf[8];
 
-        if (!rectsDrawn){
+        if (!rectsDrawn && !textOnly){
           // Redraw the last temp with background color
           tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);    
-          printTemp(lastTemps[i], i, bandW);
+          printTemp(lastTemps[i], i, bandW, textOnly);
         }
 
-        tft.setTextColor(sectionTextColors[i], sectionFillColors[i]);    
-        String tempString = printTemp(sectionTemps[i], i, bandW);
+        uint16_t textColor = (textOnly) ? ST77XX_BLACK : sectionTextColors[i];
+        tft.setTextColor(textColor, sectionFillColors[i]);    
+        String tempString = printTemp(sectionTemps[i], i, bandW, false);
 
         lastTemps[i] = sectionTemps[i];
       }     
@@ -202,7 +212,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
   //USBSerial.println("");
 }
 
-String ThreeSectionTire::printTemp(int temp, int i, int bandW){
+String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline){
       
     String tempString = String(temp) ;//+ (char)0xF7 + tempUnit;
     uint16_t textWidth, textHeight;    
@@ -230,6 +240,14 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW){
     int yDir = -1;
     int yMod = (i==0 || i==2)? ((textHeight+extraYBuffer)*yDir):0;
     int startY = (y + ((height+textHeight) / 2))+yMod;// - (textHeight / 2);
+
+    if (drawOutline){
+      tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);   
+      tft.setCursor(startX+2, startY+2);
+      tft.println(tempString);
+      tft.setTextColor(sectionTextColors[i], sectionFillColors[i]);   
+    }
+
     tft.setCursor(startX, startY);
     tft.println(tempString);
     return tempString;

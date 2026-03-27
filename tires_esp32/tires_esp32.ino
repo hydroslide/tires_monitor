@@ -26,11 +26,12 @@
 #define WIFI_SSID "TireTempMonitor"
 #define WIFI_PASSWORD "esp32"
 #define WIFI_PORT 8080
-#define THERMAL_MODES 4
+byte THERMAL_MODES =4;
 
 bool testMode = false;
 int forceDrawAfterInit = 0;
 bool highFrequencyUpdates = false;
+bool enableThermalTemps = false;
 
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
@@ -129,72 +130,99 @@ void switchThermalMode(bool up){
    
 
 void updateThermalDisplays(){
-  switch (thermalMode)
-  {
-  case 0:
-    // Do Nothing
-    break;
+  if (enableThermalTemps){
+    if (thermalMode ==0){
+      // Do Nothing
+    }else{
+      thermalDisplays[0]->updateDisplay(0);
+      thermalDisplays[1]->updateDisplay(1);
+      thermalDisplays[2]->updateDisplay(2);
+      thermalDisplays[3]->updateDisplay(3);
+    }
+  }
+  else{
+    switch (thermalMode)
+    {
+    case 0:
+      // Do Nothing
+      break;
 
-  case 1:
-    thermalDisplays[2]->updateDisplay(0);
-    thermalDisplays[3]->updateDisplay(1);
-    break;
-  
-  case 2:
-    thermalDisplays[0]->updateDisplay(2);
-    thermalDisplays[1]->updateDisplay(3);
-    break;
-  
-  case 3:
-    thermalDisplays[0]->updateDisplay(0);
-    thermalDisplays[1]->updateDisplay(1);
-    thermalDisplays[2]->updateDisplay(2);
-    thermalDisplays[3]->updateDisplay(3);
-    break;
-  
-  default:
-    break;
+    case 1:
+      thermalDisplays[2]->updateDisplay(0);
+      thermalDisplays[3]->updateDisplay(1);
+      break;
+    
+    case 2:
+      thermalDisplays[0]->updateDisplay(2);
+      thermalDisplays[1]->updateDisplay(3);
+      break;
+    
+    case 3:
+      thermalDisplays[0]->updateDisplay(0);
+      thermalDisplays[1]->updateDisplay(1);
+      thermalDisplays[2]->updateDisplay(2);
+      thermalDisplays[3]->updateDisplay(3);
+      break;
+    
+    default:
+      break;
+    }
   }
 }    
 
 void setThermalMode(uint8_t _thermalMode){
   thermalMode = _thermalMode;
-  switch (thermalMode)
-  {
-    case 0:
-      UL->isActive=false;
-      UR->isActive=false;
-      LL->isActive=false;
-      LR->isActive=false;
-      break;
+  if (enableThermalTemps){
+    if (thermalMode == 0){
+        UL->isActive=false;
+        UR->isActive=false;
+        LL->isActive=false;
+        LR->isActive=false;
+    }else{
+        UL->isActive=true;
+        UR->isActive=true;
+        LL->isActive=true;
+        LR->isActive=true;
+    }
+  }else{
+    switch (thermalMode)
+    {
+      case 0:
+        UL->isActive=false;
+        UR->isActive=false;
+        LL->isActive=false;
+        LR->isActive=false;
+        break;
 
-    case 1:
-      UL->isActive=false;
-      UR->isActive=false;
-      LL->isActive=true;
-      LR->isActive=true;
-      break;
-    
-    case 2:
-      UL->isActive=true;
-      UR->isActive=true;
-      LL->isActive=false;
-      LR->isActive=false;
-      break;
-    
-    case 3:
-      UL->isActive=true;
-      UR->isActive=true;
-      LL->isActive=true;
-      LR->isActive=true;
-      break;
-    
-    default:
-      break;
+      case 1:
+        UL->isActive=false;
+        UR->isActive=false;
+        LL->isActive=true;
+        LR->isActive=true;
+        break;
+      
+      case 2:
+        UL->isActive=true;
+        UR->isActive=true;
+        LL->isActive=false;
+        LR->isActive=false;
+        break;
+      
+      case 3:
+        UL->isActive=true;
+        UR->isActive=true;
+        LL->isActive=true;
+        LR->isActive=true;
+        break;
+      
+      default:
+        break;
+    }
   }
   tft.fillScreen(ST77XX_BLACK);
   activateTires();
-  wheels->draw(true);
+  if (!(enableThermalTemps && thermalMode ==2))
+    wheels->draw(true);
 }
 
 // Normal Running Mode
@@ -208,6 +236,8 @@ void doRunningMode(int time_delta)
 
     // Read tire temps
     tempReader->readTemps();
+
+    updateThermalDisplays();
 
     if (millisSinceLastUpdate >= updateIntervalMillis || highFrequencyUpdates){
       millisSinceLastUpdate=0;
@@ -240,14 +270,16 @@ void doRunningMode(int time_delta)
           tft.fillScreen(ST77XX_BLACK);
           wheels->draw(true);
           forceDrawAfterInit--;
-      }else
+      }else if (enableThermalTemps && thermalMode == 2)
+        wheels->draw(true, true);
+      else
         wheels->draw();
 
           // WifiSerial
       wifiSerial.loop();
     }
 
-    updateThermalDisplays();
+
 
     // for (int i=0; i>TempReader::TIRE_COUNT; i++){
       
@@ -414,6 +446,12 @@ static void initializeSystem()
   highFrequencyUpdates = getHighFrequencyUpdates();
   USBSerial.println((highFrequencyUpdates)? "highFrequencyUpdates Enabled": "highFrequencyUpdates Disabled");
 
+  enableThermalTemps = getTestEnabled();
+  if (enableThermalTemps)
+    THERMAL_MODES = 3;
+  else
+    THERMAL_MODES=4;
+
   float minTemp, idealTemp, maxTemp;
   if (modeVal == 0) {
     // Street
@@ -439,7 +477,7 @@ static void initializeSystem()
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
   tempReader = new TempReader();
-  tempReader->autoRecoverTire = getTestEnabled();
+  tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
 
   bool fl3 = tempReader->tireSensorIsCamera[0]; //false;
@@ -484,10 +522,17 @@ static void initializeSystem()
 }
 
 static void activateTires(){
-    wheels->flIsActive = (!UL->isActive);
-    wheels->frIsActive = (!UR->isActive);
-    wheels->rlIsActive = (!LL->isActive);
-    wheels->rrIsActive = (!LR->isActive);
+    if (enableThermalTemps && thermalMode == 2){
+      wheels->flIsActive = true;
+      wheels->frIsActive = true;
+      wheels->rlIsActive = true;
+      wheels->rrIsActive = true;
+    }else{
+      wheels->flIsActive = (!UL->isActive);
+      wheels->frIsActive = (!UR->isActive);
+      wheels->rlIsActive = (!LL->isActive);
+      wheels->rrIsActive = (!LR->isActive);
+    }
 }
 
 static void applyMenuConfig()

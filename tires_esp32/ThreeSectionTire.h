@@ -64,6 +64,7 @@ private:
     int    sectionTemps[3];
     int    lastTemps[3];
     uint16_t sectionFillColors[3];
+    uint16_t lastSectionFillColors[3];
     uint16_t sectionTextColors[3];
     
     
@@ -74,10 +75,10 @@ private:
     int drawsSinceForce = 0;
 
 
+    bool anySectionColorChanged();
 
 
-
-    String printTemp(int temp, int i, int bandW);
+    String printTemp(int temp, int i, int bandW, bool drawOutline = false);
 
     // Helper: classify one section’s color/text from temp + thresholds
     void classifyOne(int idx, float tempC,
