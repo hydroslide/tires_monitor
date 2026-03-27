@@ -126,6 +126,7 @@ void MenuRenderer::drawMenuItem(const MenuItem &item, uint8_t index, bool select
     }
 
     display.setCursor(x, y);
+    display.setFont(nullptr);     // <— back to the built-in 5×7 font 
     display.setTextSize(textSize);
 
     // Print the item title
@@ -164,9 +165,9 @@ void MenuRenderer::drawBooleanValue(bool val, int16_t x, int16_t y) {
     // We'll represent booleans with [x] or [ ]
     display.setCursor(x, y);
     if (val) {
-        display.print(F("\"[x]\"")); 
+        display.print(F("[X]")); 
     } else {
-        display.print(F("\"[ ]\"")); 
+        display.print(F("[ ]")); 
     }
 }
 

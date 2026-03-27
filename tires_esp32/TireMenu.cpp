@@ -31,7 +31,27 @@ static uint8_t trackMax   = 180;
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
 static uint8_t rearLeftTempIndex   = 0;
-static uint8_t rearRightTempIndex  = 1;
+static uint8_t rearRightTempIndex  = 0;
+
+// -- Camera Offsets --
+static uint8_t leftOffsetFrontLeft = 0;
+static uint8_t leftOffsetFrontRight = 0;
+static uint8_t leftOffsetRearLeft = 0;
+static uint8_t leftOffsetRearRight = 0;
+
+static uint8_t rightOffsetFrontLeft = 0;
+static uint8_t rightOffsetFrontRight = 0;
+static uint8_t rightOffsetRearLeft = 0;
+static uint8_t rightOffsetRearRight = 0;
+
+static bool useThermalGradient = true;
+static bool testEnabled = true;
+static bool showPixelOffsets = true;
+static bool highFrequencyUpdates = false;
+static bool showSegmentDeltas = false;
+static uint8_t minInflationDeltaPct = 10;
+static uint8_t minAlignmentDeltaPct = 15;
+
 
 // ----------------------------------------------------
 //  2) MenuValueBindings
@@ -183,6 +203,168 @@ static MenuValueBinding rearRightIndexBinding = {
     0
 };
 
+static MenuValueBinding useThermalGradientBinding = {
+    VALUE_BOOL,
+    &useThermalGradient,
+    nullptr,
+    0,
+    0,
+    30,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetFrontLeftBinding = {
+    VALUE_BYTE,
+    &leftOffsetFrontLeft,
+    nullptr,
+    0,
+    16,
+    31,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetFrontRightBinding = {
+    VALUE_BYTE,
+    &leftOffsetFrontRight,
+    nullptr,
+    0,
+    16,
+    32,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetRearLeftBinding = {
+    VALUE_BYTE,
+    &leftOffsetRearLeft,
+    nullptr,
+    0,
+    16,
+    33,
+    nullptr,
+    0
+};
+
+static MenuValueBinding leftOffsetRearRightBinding = {
+    VALUE_BYTE,
+    &leftOffsetRearRight,
+    nullptr,
+    0,
+    16,
+    34,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetFrontLeftBinding = {
+    VALUE_BYTE,
+    &rightOffsetFrontLeft,
+    nullptr,
+    0,
+    16,
+    35,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetFrontRightBinding = {
+    VALUE_BYTE,
+    &rightOffsetFrontRight,
+    nullptr,
+    0,
+    16,
+    36,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetRearLeftBinding = {
+    VALUE_BYTE,
+    &rightOffsetRearLeft,
+    nullptr,
+    0,
+    16,
+    37,
+    nullptr,
+    0
+};
+
+static MenuValueBinding rightOffsetRearRightBinding = {
+    VALUE_BYTE,
+    &rightOffsetRearRight,
+    nullptr,
+    0,
+    16,
+    38,
+    nullptr,
+    0
+};
+
+static MenuValueBinding showPixelOffsetsBinding = {
+    VALUE_BOOL,
+    &showPixelOffsets,
+    nullptr,
+    0,
+    0,
+    39,
+    nullptr,
+    0
+};
+
+static MenuValueBinding testEnabledBinding = {
+    VALUE_BOOL,
+    &testEnabled,
+    nullptr,
+    0,
+    0,
+    40,
+    nullptr,
+    0
+};
+static MenuValueBinding highFrequencyUpdatesBinding = {
+    VALUE_BOOL,
+    &highFrequencyUpdates,
+    nullptr,
+    0,
+    0,
+    41,
+    nullptr,
+    0
+};
+static MenuValueBinding showSegmentDeltasBinding = {
+    VALUE_BOOL,
+    &showSegmentDeltas,
+    nullptr,
+    0,
+    0,
+    42,
+    nullptr,
+    0
+};
+
+static MenuValueBinding minInflationDeltaPctBinding = {
+    VALUE_BYTE,
+    &minInflationDeltaPct,
+    nullptr,
+    0,
+    16,
+    43,
+    nullptr,
+    0
+};
+static MenuValueBinding minAlignmentDeltaPctBinding = {
+    VALUE_BYTE,
+    &minAlignmentDeltaPct,
+    nullptr,
+    0,
+    16,
+    44,
+    nullptr,
+    0
+};
+
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
@@ -215,6 +397,69 @@ static MenuItem hardwareSettingsMenu[] = {
       nullptr
     }
 };
+
+static MenuItem frontLeftPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetFrontLeftBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetFrontLeftBinding }
+};
+
+static MenuItem frontRightPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetFrontRightBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetFrontRightBinding }
+};
+
+static MenuItem rearLeftPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetRearLeftBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetRearLeftBinding }
+};
+
+static MenuItem rearRightPixelOffsetsMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetRearRightBinding},
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetRearRightBinding }
+};
+
+static MenuItem pixelOffsetsMenu[] = {
+    { "Front Left",  MENU_SUBMENU, nullptr, frontLeftPixelOffsetsMenu, sizeof(frontLeftPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    { "Front Right", MENU_SUBMENU, nullptr, frontRightPixelOffsetsMenu, sizeof(frontRightPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    { "Rear Left",   MENU_SUBMENU, nullptr, rearLeftPixelOffsetsMenu, sizeof(rearLeftPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    { "Rear Right",  MENU_SUBMENU, nullptr, rearRightPixelOffsetsMenu, sizeof(rearRightPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
+    {
+        "Show Offsets",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &showPixelOffsetsBinding
+    },
+    {
+        "Thermal Gradient",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &useThermalGradientBinding
+    },
+    {
+        "Hi Freq Updates",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &highFrequencyUpdatesBinding
+    },
+    {
+        "Segment Deltas",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &showSegmentDeltasBinding
+    },
+    { "Inflation Delta %", MENU_VALUE, nullptr, nullptr, 0, &minInflationDeltaPctBinding },
+    { "Alignment Delta %", MENU_VALUE, nullptr, nullptr, 0, &minAlignmentDeltaPctBinding },
+};
+
+
 
 // ----------------------------------------------------
 //  4) Save/Load Action Callbacks
@@ -265,6 +510,14 @@ static MenuItem mainMenu[] = {
         nullptr,
         0,
         &nightBrightnessBinding
+    },    
+    {
+        "Test",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &testEnabledBinding
     },
     {
       "Hardware Settings",
@@ -272,6 +525,14 @@ static MenuItem mainMenu[] = {
       nullptr,
       hardwareSettingsMenu,
       sizeof(hardwareSettingsMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
+      "Camera Settings",
+      MENU_SUBMENU,
+      nullptr,
+      pixelOffsetsMenu,
+      sizeof(pixelOffsetsMenu)/sizeof(MenuItem),
       nullptr
     },
     {
@@ -328,6 +589,14 @@ uint8_t getNightBrightness() {
     return nightBrightness;
 }
 
+bool getUseThermalGradient() {
+    return useThermalGradient;
+}
+
+bool getTestEnabled() {
+    return testEnabled;
+}
+
 uint8_t getStreetMin() {
     return streetMin;
 }
@@ -351,4 +620,62 @@ uint8_t getTrackIdeal() {
 
 uint8_t getTrackMax() {
     return trackMax;
+}
+
+bool getShowPixelOffsets() {
+    return showPixelOffsets;
+}
+
+bool getHighFrequencyUpdates() {
+    return highFrequencyUpdates;
+}
+
+bool getShowSegmentDeltas() {
+    return showSegmentDeltas;
+}
+
+uint8_t getminInflationDeltaPct() {
+    return minInflationDeltaPct;
+}
+
+uint8_t getminAlignmentDeltaPct() {
+    return minAlignmentDeltaPct;
+}
+
+byte getLeftPixelOffset(int index){
+    switch(index){
+        case 0:
+            return leftOffsetFrontLeft;
+            break;
+        case 1:
+            return leftOffsetFrontRight;
+            break;
+        case 2:
+            return leftOffsetRearLeft;
+            break;
+        case 3:
+            return leftOffsetRearRight;
+            break;
+        default:
+            return 0;
+    }
+}
+
+byte getRightPixelOffset(int index){
+    switch(index){
+        case 0:
+            return rightOffsetFrontLeft;
+            break;
+        case 1:
+            return rightOffsetFrontRight;
+            break;
+        case 2:
+            return rightOffsetRearLeft;
+            break;
+        case 3:
+            return rightOffsetRearRight;
+            break;
+        default:
+            return 0;
+    }
 }
