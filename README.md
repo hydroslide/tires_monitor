@@ -43,12 +43,15 @@ This project provides a complete solution for monitoring tire temperatures in pe
 
 ## Directory Structure
 
+- `/tires_esp32` - **Main implementation** using ESP32 with touch interface and WiFi
+- `/docs` - Dev environment setup and build/flash guides
+- `/scripts` - `tm.sh` / `tm.ps1` build helpers (compile, flash, monitor, diagnose)
 - `/3d_parts` - 3D printable files for enclosures and mounting hardware
 - `/circuits` - Circuit diagrams and PCB designs
-- `/i2c_scanner` - Utility sketch for detecting I2C devices
+- `/esp32_i2c_scanner` - I2C scanner for this board; use it to debug the sensor bus
+- `/i2c_scanner` - Generic Arduino I2C scanner
 - `/menu_test` - Test sketch for menu system
-- `/tires_esp32` - Main implementation using ESP32 with touch interface and WiFi
-- `/tires_modular` - Simplified implementation for Arduino with Bluetooth
+- `/tires_modular` - Older/simplified implementation for Arduino with Bluetooth
 - `/wifi_test` - Test sketch for WiFi functionality
 
 ## Setup and Installation
@@ -63,21 +66,39 @@ This project provides a complete solution for monitoring tire temperatures in pe
 
 ### Software Setup
 
-#### ESP32 Version
+#### ESP32 Version (main firmware)
 
-1. Install the Arduino IDE and set it up for ESP32 development.
-2. Install the following libraries:
-   - Adafruit_GFX
-   - Adafruit_ST7789
-   - Adafruit_MLX90614
-   - Wire
-   - SPI
-   - EEPROM
-   - Arduino_GFX_Library
-   - CST816Touch_SWMode
-3. Open the `tires_esp32.ino` sketch in the Arduino IDE.
-4. Configure WiFi credentials in the sketch (if needed).
-5. Upload the sketch to your ESP32 board.
+Development happens in **VS Code** using `arduino-cli`. The Arduino IDE is not required.
+
+| Guide | For |
+|---|---|
+| **[docs/DEV-SETUP-MACOS.md](docs/DEV-SETUP-MACOS.md)** | First-time setup on a Mac |
+| **[docs/DEV-SETUP-WINDOWS.md](docs/DEV-SETUP-WINDOWS.md)** | First-time setup on Windows |
+| **[docs/BUILD-AND-FLASH.md](docs/BUILD-AND-FLASH.md)** | The daily build/flash/monitor loop |
+
+Short version, once set up:
+
+```bash
+./scripts/tm.sh flash      # compile + upload   (~1 min)
+./scripts/tm.sh monitor    # watch serial output
+```
+
+Windows: `.\scripts\tm.ps1 <same>`. Or use the status-bar buttons / `Cmd+Shift+B` in
+VS Code.
+
+Core and library versions are pinned in
+[`tires_esp32/sketch.yaml`](tires_esp32/sketch.yaml) and installed automatically on the
+first build — there is nothing to click through in a Library Manager. For reference, the
+firmware depends on:
+
+- ESP32 Arduino core 3.0.7 (bundles `Wire`, `SPI`, `EEPROM`, `WiFi`)
+- Adafruit GFX Library, Adafruit ST7735 and ST7789 Library, Adafruit BusIO
+- Adafruit MLX90614 Library (spot IR sensors), Adafruit MLX90640 (thermal cameras)
+- GFX Library for Arduino
+- CST816_TouchLib — supplies `CST816Touch_SWMode`, which is a class in that library, not
+  a library of its own
+
+WiFi credentials are `#define`d at the top of `tires_esp32.ino`.
 
 #### Modular Version
 
