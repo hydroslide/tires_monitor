@@ -1,0 +1,18 @@
+{
+    "recommendations": [
+        // C/C++ IntelliSense, driven by build/compile_commands.json
+        "ms-vscode.cpptools",
+        // Serial monitor pane -- the GUI alternative to `./scripts/tm.sh monitor`
+        "ms-vscode.vscode-serial-monitor",
+        // Turns the tasks below into clickable status-bar buttons.
+        // VS Code has no native task buttons; this reads .vscode/tasks.json directly.
+        "actboy168.tasks"
+    ],
+    "unwantedRecommendations": [
+        // The Microsoft Arduino extension was archived in Oct 2024 and its
+        // community fork manages its own .vscode/arduino.json, which conflicts
+        // with the sketch.yaml build profile this project uses.
+        "vsciot-vscode.vscode-arduino",
+        "vscode-arduino.vscode-arduino-community"
+    ]
+}
