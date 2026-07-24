@@ -15,6 +15,7 @@
 | STATE_IN_REVIEW | open + label `done` (PR up, awaiting merge/deploy) |
 | COMMIT_PREFIX | `[#N] ` (e.g. `[#123] feat: …`) |
 | DEFAULT_PARENT | none (group with milestones/labels if desired) |
+| STATE_LABELS_PROVISIONED | false — create the label set on first status change, then set true (conventions §3.0) |
 
 Story workflows are ACTIVE for this repo. Follow the agile/story instructions in the global
 `~/.claude/CLAUDE.md`: link a GitHub issue before feature work, move it to `doing` and carry `[#N]`
