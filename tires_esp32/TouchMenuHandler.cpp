@@ -82,6 +82,18 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     unhandledSwipeRight=false;
     unhandledSwipeUp=false;
    
+    // Session summary screen (story 01) takes over the whole screen; up/down page
+    // through it, any other gesture dismisses it and returns to the menu.
+    if (menuActive && rState.summaryViewing) {
+        if (gesture == TouchScreenController::gesture_t::GESTURE_UP)
+            render.summaryPageStep(+1);
+        else if (gesture == TouchScreenController::gesture_t::GESTURE_DOWN)
+            render.summaryPageStep(-1);
+        else
+            render.exitSummary();
+        return;
+    }
+
     // Balance summary screen (story 05) takes over the whole screen; any gesture
     // dismisses it and returns to the menu.
     if (menuActive && rState.balanceViewing) {

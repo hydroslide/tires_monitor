@@ -8,10 +8,11 @@
 extern "C" {
 #endif
 
-// define the number of bytes you want to access. Bumped from 50 to make room for the
-// tire-profile region (story 04): menu bindings stay at 0..48, the menu magic moves to
-// EEPROM_SIZE-1 (127), and TireProfiles owns 50..111.
-#define EEPROM_SIZE 128
+// define the number of bytes you want to access. Bumped 50 -> 128 for the tire-profile
+// region (story 04), then 128 -> 256 for the session-summary blob (story 01): menu
+// bindings stay at 0..49, TireProfiles owns 50..111, the session summary lives at
+// 128..~172 with its own magic at 250, and the menu magic sits at EEPROM_SIZE-1 (255).
+#define EEPROM_SIZE 256
 
 // Menu item types
 typedef enum {

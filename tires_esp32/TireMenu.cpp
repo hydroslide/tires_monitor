@@ -38,6 +38,12 @@ static const char* calcDisplayModeLabels[] = {"Raw", "Calculated"};
 // "Balance" summary item reports that it is hidden instead of opening.
 static bool showBalance = true;
 
+// -- Auto-seal on stationary (story 01; Track-mode only) --
+// When on, a running session self-seals after a sustained still period (a backstop for
+// a forgotten swipe-to-end). Best-effort IMU-stillness only (no speed channel), so it
+// defaults off.
+static bool autoSealStationary = false;
+
 // -- Hardware Temp Sensor Indices --
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
@@ -197,6 +203,19 @@ static MenuValueBinding showBalanceBinding = {
     0,
     0,
     49,
+    nullptr,
+    0
+};
+
+// Auto-seal on stationary (EEPROM addr 3; free byte among the menu bindings). The
+// magic-sentinel load makes the false/0 case safe.
+static MenuValueBinding autoSealStationaryBinding = {
+    VALUE_BOOL,
+    &autoSealStationary,
+    nullptr,
+    0,
+    0,
+    3,
     nullptr,
     0
 };
@@ -509,6 +528,8 @@ static MenuItem streetSettingsMenu[] = {
 // Balance summary action (defined in section 6). Opens the front/rear + left/right
 // readout; Track-mode-only and honors the Show Balance toggle.
 static void doShowBalance();
+// Session summary recall action (story 01). Opens the last sealed summary; Track-only.
+static void doViewSummary();
 
 static MenuItem trackSettingsMenu[] = {
     { "Min",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMinBinding        },
@@ -516,7 +537,9 @@ static MenuItem trackSettingsMenu[] = {
     { "Max",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMaxBinding        },
     { "Display",      MENU_VALUE,  nullptr,        nullptr, 0, &calcDisplayModeBinding },
     { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
-    { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 }
+    { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 },
+    { "View Summary", MENU_ACTION, doViewSummary,  nullptr, 0, nullptr                 },
+    { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding }
 };
 
 static MenuItem tempSensorIndicesMenu[] = {
@@ -803,6 +826,18 @@ static void doShowBalance()
     menuRenderer.showBalance();
 }
 
+// -- Session summary recall action (story 01) --
+static void doViewSummary()
+{
+    // Track-mode-only feature: inert in Street mode.
+    if (currentMode != 1) {
+        menuRenderer.setStatusMessage("Track mode only");
+        return;
+    }
+    // Full-screen multi-page recall; the touch loop pages/dismisses it.
+    menuRenderer.showSummary();
+}
+
 // ----------------------------------------------------
 //  7) Provide global access to the Tire MenuSystem
 // ----------------------------------------------------
@@ -863,6 +898,10 @@ uint8_t getCalcDisplayMode() {
 
 bool getShowBalance() {
     return showBalance;
+}
+
+bool getAutoSealStationary() {
+    return autoSealStationary;
 }
 
 bool getShowPixelOffsets() {

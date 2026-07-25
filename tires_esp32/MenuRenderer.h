@@ -18,6 +18,10 @@ struct MenuRenderState {
     // Balance summary screen (story 05): a full-screen Track-mode readout of the
     // front/rear and left/right thermal balance. Any gesture dismisses it.
     bool balanceViewing;
+    // Session summary screen (story 01): a full-screen, multi-page recall of the last
+    // sealed session. up/down pages, any other gesture dismisses it.
+    bool summaryViewing;
+    uint8_t summaryPage;
 };
 
 class MenuRenderer {
@@ -54,6 +58,12 @@ public:
     void showBalance();
     void exitBalance();
 
+    // Session summary screen (story 01). showSummary takes over the whole screen with
+    // the recalled last summary; summaryPageStep pages through it; exitSummary dismisses.
+    void showSummary();
+    void exitSummary();
+    void summaryPageStep(int dir);
+
 private:
     MenuSystem &menu;
     Adafruit_ST7789 &display;
@@ -75,6 +85,7 @@ private:
     void renderDropdown(const MenuItem &item);
     void renderNameEditor();
     void renderBalanceView();
+    void renderSummaryView();
 
     // Name-editor working state.
     static const uint8_t NAME_EDIT_MAX = 12;

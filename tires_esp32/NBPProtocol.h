@@ -53,8 +53,18 @@ enum class ChannelType {
     GyroY,
     GyroZ,
     LateralG,
+    // Session summary channels (story 01): emitted once on seal so the per-corner recap
+    // is captured off-device. Per-corner peak/avg/time-in-window/overheat, plus the
+    // session-level balance deltas and warm-up time.
+    SumFLPeak, SumFRPeak, SumRLPeak, SumRRPeak,
+    SumFLAvg,  SumFRAvg,  SumRLAvg,  SumRRAvg,
+    SumFLWindow, SumFRWindow, SumRLWindow, SumRRWindow,
+    SumFLOver, SumFROver, SumRLOver, SumRROver,
+    SumFrontRear, SumLeftRight, SumWarmup, SumLength,
     // Add additional types as needed
 };
+
+struct SessionSummary; // defined in SessionManager.h
 
 enum class Unit {
     V,         // Volts
@@ -103,6 +113,11 @@ public:
     // the gated lateral-g value as its own UPDATEALL packet.
     void sendIMU(float ax, float ay, float az,
                  float gx, float gy, float gz, float lateralG);
+
+    // Emit the sealed session summary as its own UPDATEALL packet (story 01). Overheat
+    // is emitted as seconds-over; window as percent; balance/warm-up as their stored
+    // values. Skipped when the summary is not valid.
+    void sendSessionSummary(const SessionSummary& s);
 
 private:
     // Reference to the Stream object for communication

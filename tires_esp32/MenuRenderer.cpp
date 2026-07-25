@@ -3,11 +3,14 @@
 #include <string.h> // for strncpy
 #include "TempReader.h"
 #include "TireBalance.h"
+#include "SessionManager.h"
 
 // The active reader and temperature-scale selection live in the sketch; the balance
 // summary reads the current working temps straight from them (story 05).
 extern TempReader* tempReader;
 extern uint8_t getTemperatureScaleValue();
+// The session manager lives in the sketch; View Summary recalls its last summary.
+extern SessionManager sessionManager;
 
 MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
 : menu(menuSystem), display(tft)
@@ -18,6 +21,8 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
     state.dropdownItem = nullptr;
     state.nameEditing = false;
     state.balanceViewing = false;
+    state.summaryViewing = false;
+    state.summaryPage = 0;
     nameBuf[0] = '\0';
 
     // Initialize status message as empty
@@ -27,6 +32,12 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
 void MenuRenderer::render() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
+
+    // Session summary takes over the whole screen while active (story 01).
+    if (state.summaryViewing) {
+        renderSummaryView();
+        return;
+    }
 
     // Balance summary takes over the whole screen while active (story 05).
     if (state.balanceViewing) {
@@ -397,4 +408,26 @@ void MenuRenderer::renderBalanceView() {
     display.setTextColor(ST77XX_WHITE);
     display.setCursor(10, SCREEN_HEIGHT - 20);
     display.print(F("Tap to return"));
+}
+
+// --- Session summary screen (story 01) ----------------------------------------------
+void MenuRenderer::showSummary() {
+    state.summaryViewing = true;
+    state.summaryPage = 0;
+}
+
+void MenuRenderer::exitSummary() {
+    state.summaryViewing = false;
+}
+
+void MenuRenderer::summaryPageStep(int dir) {
+    int p = (int)state.summaryPage + dir;
+    if (p < 0) p = 0;
+    if (p >= SessionManager::PAGE_COUNT) p = SessionManager::PAGE_COUNT - 1;
+    state.summaryPage = (uint8_t)p;
+}
+
+void MenuRenderer::renderSummaryView() {
+    // renderSummary paints the whole frame (including its own fillScreen).
+    SessionManager::renderSummary(display, sessionManager.summary(), state.summaryPage);
 }

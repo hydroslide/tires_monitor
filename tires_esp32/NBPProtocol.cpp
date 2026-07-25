@@ -1,5 +1,6 @@
 #include "NBPProtocol.h"
 #include "Wheels.h"
+#include "SessionManager.h"
 
 // Constructor: Initialize with the provided Stream object
 NBPProtocol::NBPProtocol(Stream &serial) 
@@ -129,6 +130,41 @@ void NBPProtocol::sendIMU(float ax, float ay, float az,
     sendUpdateAll();
 }
 
+void NBPProtocol::sendSessionSummary(const SessionSummary& s) {
+    if (!s.valid) return;
+    clearChannels();
+    Unit tempUnit = (s.unit == 'C') ? Unit::DegreesC : Unit::DegreesF;
+
+    addChannel(ChannelType::SumFLPeak, tempUnit, (float)s.peak[0]);
+    addChannel(ChannelType::SumFRPeak, tempUnit, (float)s.peak[1]);
+    addChannel(ChannelType::SumRLPeak, tempUnit, (float)s.peak[2]);
+    addChannel(ChannelType::SumRRPeak, tempUnit, (float)s.peak[3]);
+
+    addChannel(ChannelType::SumFLAvg, tempUnit, (float)s.avg[0]);
+    addChannel(ChannelType::SumFRAvg, tempUnit, (float)s.avg[1]);
+    addChannel(ChannelType::SumRLAvg, tempUnit, (float)s.avg[2]);
+    addChannel(ChannelType::SumRRAvg, tempUnit, (float)s.avg[3]);
+
+    addChannel(ChannelType::SumFLWindow, Unit::Percent, (float)s.inWindowPct[0]);
+    addChannel(ChannelType::SumFRWindow, Unit::Percent, (float)s.inWindowPct[1]);
+    addChannel(ChannelType::SumRLWindow, Unit::Percent, (float)s.inWindowPct[2]);
+    addChannel(ChannelType::SumRRWindow, Unit::Percent, (float)s.inWindowPct[3]);
+
+    addChannel(ChannelType::SumFLOver, Unit::None, (float)s.overheatSec[0]);
+    addChannel(ChannelType::SumFROver, Unit::None, (float)s.overheatSec[1]);
+    addChannel(ChannelType::SumRLOver, Unit::None, (float)s.overheatSec[2]);
+    addChannel(ChannelType::SumRROver, Unit::None, (float)s.overheatSec[3]);
+
+    addChannel(ChannelType::SumFrontRear, tempUnit, (float)s.frontRearDelta);
+    addChannel(ChannelType::SumLeftRight, tempUnit, (float)s.leftRightDelta);
+    // Warm-up: emit -1 when undefined (a seen corner never warmed).
+    addChannel(ChannelType::SumWarmup, Unit::None,
+               (s.warmupSec == 0xFFFF) ? -1.0f : (float)s.warmupSec);
+    addChannel(ChannelType::SumLength, Unit::None, (float)s.durationSec);
+
+    sendUpdateAll();
+}
+
 void NBPProtocol::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit) {
     
     clearChannels();
@@ -211,6 +247,26 @@ const char* NBPProtocol::getChannelName(ChannelType channel) {
         case ChannelType::GyroY:         return "Gyro Y";
         case ChannelType::GyroZ:         return "Gyro Z";
         case ChannelType::LateralG:      return "Lateral G";
+        case ChannelType::SumFLPeak:     return "Summary FL Peak";
+        case ChannelType::SumFRPeak:     return "Summary FR Peak";
+        case ChannelType::SumRLPeak:     return "Summary RL Peak";
+        case ChannelType::SumRRPeak:     return "Summary RR Peak";
+        case ChannelType::SumFLAvg:      return "Summary FL Avg";
+        case ChannelType::SumFRAvg:      return "Summary FR Avg";
+        case ChannelType::SumRLAvg:      return "Summary RL Avg";
+        case ChannelType::SumRRAvg:      return "Summary RR Avg";
+        case ChannelType::SumFLWindow:   return "Summary FL Window";
+        case ChannelType::SumFRWindow:   return "Summary FR Window";
+        case ChannelType::SumRLWindow:   return "Summary RL Window";
+        case ChannelType::SumRRWindow:   return "Summary RR Window";
+        case ChannelType::SumFLOver:     return "Summary FL Overheat";
+        case ChannelType::SumFROver:     return "Summary FR Overheat";
+        case ChannelType::SumRLOver:     return "Summary RL Overheat";
+        case ChannelType::SumRROver:     return "Summary RR Overheat";
+        case ChannelType::SumFrontRear:  return "Summary Front Rear";
+        case ChannelType::SumLeftRight:  return "Summary Left Right";
+        case ChannelType::SumWarmup:     return "Summary Warmup";
+        case ChannelType::SumLength:     return "Summary Length";
         default:                         return "";
     }
 }

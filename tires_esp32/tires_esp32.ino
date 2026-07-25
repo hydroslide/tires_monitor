@@ -14,6 +14,7 @@
 #include "WifiSerial.h"
 #include "IMUGate.h"
 #include "TireProfiles.h"
+#include "SessionManager.h"
 
 // #include "MyCST816Touch.h"
 #include "CST816Touch_SWMode.h"
@@ -55,6 +56,22 @@ TempReader* tempReader = nullptr;
 
 // On-board QMI8658C IMU: lateral-g capture gate + latched over/under (story 02).
 IMUGate imuGate;
+
+// Session lifecycle + end-of-session summary (story 01). Owns start/seal, per-corner
+// accumulation, the persisted summary, and the auto-seal backstop. Referenced extern by
+// MenuRenderer (View Summary recall).
+SessionManager sessionManager;
+
+// Swipe-feedback + auto-summary display state (story 01). On start a red "recording"
+// dot shows for 5 s; on end a black "stop" square shows for 5 s, then the summary is
+// presented and paged with up/down swipes (Track mode only).
+enum SwipeFeedback { FB_NONE, FB_START, FB_END };
+static SwipeFeedback fbState = FB_NONE;
+static unsigned long fbSetMs = 0;
+static const unsigned long FB_MS = 5000;
+static bool summaryAutoView = false;   // full-screen summary is showing (running mode)
+static int  summaryAutoPage = 0;
+static bool summaryAutoDirty = false;  // needs a (re)paint
 
 // ... after initializing tft in setup() ...
 QuadrantFactory factory(tft, /*margin=*/ 5);
@@ -106,7 +123,10 @@ long timeDelta()
 static void applyMenuConfig();
 static void cleanupObjects();
 static void initializeSystem();
+static void exitSummaryAutoView();
+static void toggleSession();
 extern uint8_t getCurrentModeValue();
+extern bool getAutoSealStationary();
 
 void checkForWheelsReset(){
   if (tempReader->tireSensorIsCamera[0] != wheels->fl3 ||
@@ -293,6 +313,36 @@ void doRunningMode(int time_delta)
                   imuGate.lateralG());
     }
 
+    // Session accumulation (story 01): fold this frame's calculated working temps into
+    // the running per-corner stats. Track-mode only; once sealed, running is false so
+    // post-seal frames are excluded. Uses the whole-tire working average per corner
+    // (calculated value when calculated mode is on), matching the balance readout.
+    if (trackMode && sessionManager.isRunning()) {
+      float sTemps[TIRE_COUNT];
+      bool  sValid[TIRE_COUNT];
+      for (int t = 0; t < TIRE_COUNT; t++) {
+        float v = tempReader->tireSensorIsCamera[t]
+                    ? (tempReader->tireSectionTemps[t][0] +
+                       tempReader->tireSectionTemps[t][1] +
+                       tempReader->tireSectionTemps[t][2]) / 3.0f
+                    : tempReader->tireTemps[t];
+        sTemps[t] = v;
+        sValid[t] = (v > 0.0f);
+      }
+      sessionManager.accumulate(readDelta, sTemps, sValid);
+
+      // Auto-seal backstop: seal after sustained IMU stillness (near-zero horizontal
+      // accel + gyro). Best-effort -- there is no speed channel -- and off by default.
+      bool still = imuGate.isPresent() &&
+                   fabsf(imuGate.accelG(0)) < 0.03f && fabsf(imuGate.accelG(1)) < 0.03f &&
+                   fabsf(imuGate.gyroDps(0)) < 3.0f && fabsf(imuGate.gyroDps(1)) < 3.0f &&
+                   fabsf(imuGate.gyroDps(2)) < 3.0f;
+      if (sessionManager.pollAutoSeal(readDelta, getAutoSealStationary(), still)) {
+        if (!testMode) nbp.sendSessionSummary(sessionManager.summary());
+        fbState = FB_END; fbSetMs = millis();
+      }
+    }
+
     updateThermalDisplays();
 
     if (millisSinceLastUpdate >= updateIntervalMillis || highFrequencyUpdates){
@@ -420,6 +470,10 @@ void setup()
   // active-slot selection and profile struct region are the authority.
   TireProfiles::begin();
 
+  // Recall the last persisted session summary (story 01) so View Summary works after a
+  // reboot. Its EEPROM region sits above the profiles; the menu load never touches it.
+  sessionManager.begin();
+
   // Bring up the on-board IMU and auto-calibrate orientation at rest. The car
   // should be stationary/level at boot; a manual axis override is the fallback.
   if (imuGate.begin(Wire))
@@ -438,13 +492,90 @@ void setup()
   USBSerial.println("Bottom of ESP32 Tires Setup");
 }
 
+// Start or end a session (story 01). End seals immediately and emits the summary over
+// NBP; start/end both raise the on-screen swipe feedback. Track-mode only (the caller
+// gates this), reading the window/unit from the active display config.
+static void toggleSession(){
+  if (sessionManager.isRunning()){
+    sessionManager.end();
+    if (!testMode) nbp.sendSessionSummary(sessionManager.summary());
+    fbState = FB_END; fbSetMs = millis();
+  } else {
+    sessionManager.start(wheels->getTempUnit(),
+                         wheels->minTemp, wheels->idealTemp, wheels->maxTemp);
+    fbState = FB_START; fbSetMs = millis();
+  }
+}
+
+// Leave the full-screen summary and restore the running display.
+static void exitSummaryAutoView(){
+  summaryAutoView = false;
+  tft.fillScreen(ST77XX_BLACK);
+  activateTires();
+  wheels->draw(true);
+  forceDrawAfterInit = 2;
+}
+
 void checkForSwipes(){
-  if (menuHandler.SwipedRight())
-    ToggleNightMode();
-  if (menuHandler.SwipedUp())
-    switchThermalMode(true);
-  if (menuHandler.SwipedDown())
-    switchThermalMode(false);
+  bool sr = menuHandler.SwipedRight();
+  bool su = menuHandler.SwipedUp();
+  bool sd = menuHandler.SwipedDown();
+  bool track = (getCurrentModeValue() == 1);
+
+  // While the auto summary is showing, gestures page/dismiss it and nothing else --
+  // the swipe must not also toggle a session or Night Mode here.
+  if (summaryAutoView){
+    if (su && summaryAutoPage < SessionManager::PAGE_COUNT - 1){ summaryAutoPage++; summaryAutoDirty = true; }
+    else if (sd && summaryAutoPage > 0){ summaryAutoPage--; summaryAutoDirty = true; }
+    else if (sr) exitSummaryAutoView();
+    return;
+  }
+
+  if (track){
+    // Track mode: the left/right swipe toggles the SESSION (not Night Mode). Up/down
+    // still switch the thermal display mode.
+    if (sr) toggleSession();
+    if (su) switchThermalMode(true);
+    if (sd) switchThermalMode(false);
+  } else {
+    // Street mode: unchanged -- the swipe toggles Night Mode and never a session.
+    if (sr) ToggleNightMode();
+    if (su) switchThermalMode(true);
+    if (sd) switchThermalMode(false);
+  }
+}
+
+// Advance the swipe-feedback timers (story 01). The red dot / black square each show for
+// FB_MS; when the end square expires the summary takes over the screen.
+static void serviceFeedback(){
+  if (fbState == FB_NONE) return;
+  unsigned long dt = millis() - fbSetMs;
+  if (fbState == FB_START){
+    if (dt >= FB_MS){
+      fbState = FB_NONE;              // clear the recording dot
+      tft.fillScreen(ST77XX_BLACK);
+      activateTires();
+      wheels->draw(true);
+      forceDrawAfterInit = 2;
+    }
+  } else { // FB_END
+    if (dt >= FB_MS){
+      fbState = FB_NONE;
+      summaryAutoView = true;         // present the sealed summary
+      summaryAutoPage = 0;
+      summaryAutoDirty = true;
+    }
+  }
+}
+
+// Paint the small upper-right swipe-feedback indicator over the running display.
+static void drawSessionFeedback(){
+  if (fbState == FB_START){
+    tft.fillCircle(271, 9, 6, ST77XX_RED);          // recording dot
+  } else if (fbState == FB_END){
+    tft.fillRect(264, 3, 13, 13, ST77XX_BLACK);     // stop square
+    tft.drawRect(264, 3, 13, 13, ST77XX_WHITE);     // outline so it reads on black
+  }
 }
 
 void ToggleNightMode(){
@@ -474,9 +605,22 @@ void loop() {
       applyMenuConfig();
     }
     checkForSwipes();
-    doRunningMode(time_delta);
+    serviceFeedback();
+    if (summaryAutoView){
+      // Full-screen sealed summary owns the display; repaint only on page change.
+      if (summaryAutoDirty){
+        SessionManager::renderSummary(tft, sessionManager.summary(), summaryAutoPage);
+        summaryAutoDirty = false;
+      }
+    } else {
+      doRunningMode(time_delta);
+      drawSessionFeedback();
+    }
   } else {
     menuWasActive = true;
+    // Opening the menu takes over the screen: drop any running-mode summary/feedback.
+    summaryAutoView = false;
+    fbState = FB_NONE;
   }
 }
 
