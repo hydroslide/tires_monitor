@@ -2,12 +2,21 @@
 
 ## Branching & PR policy
 
-**Promotion stops at `dev` for now — do NOT PR to `main`.** `dev` is the integration / flash branch; `main` is a stable baseline and is not a merge target until we explicitly decide otherwise.
+**Promotion stops at `dev` for now — never PR to `main`.** `dev` is the integration / flash branch; `main` is a stable baseline and is not a merge target until we explicitly decide otherwise.
 
-- **Every feature or bug fix gets its own branch off a _fresh_ `dev`.** Before starting: `git checkout dev && git pull` so the branch forks from the latest `dev`.
-- **Use git worktrees for safe parallel development**, per the global `~/.claude/CLAUDE.md` — invoke the `parallel-dev` skill before the first code change (branch isolation, auto-escalation to a sibling worktree on file conflict, strict explicit-path staging, merge-back cycle). Use `smart-merge` for conflicts and `read-parallel-sessions` to see what other sessions are doing.
-- **PRs target `dev` only.** When a feature/fix is ready, open a PR from its branch into `dev`. Never open or merge a PR into `main`.
-- Carry the issue key and run the tracker close-out at PR time per the tracker-config below.
+**One procedure for any feature or bug fix (i.e. firmware source work):**
+
+1. **Isolate BEFORE editing source.** Never edit firmware source (`.ino/.cpp/.h`) while on `dev` or `main` — a `PreToolUse` hook enforces this and will block the edit (docs/config are exempt). Get isolated one of two ways:
+   - launch the session with `claude --worktree <name>` (auto-isolation), **or**
+   - `git checkout dev && git pull`, then `git checkout -b <type>/<slug>` (e.g. `fix/menu-scroll`, `feat/session-summary`) off the fresh `dev`, and invoke the **`parallel-dev`** skill.
+2. **Work on that feature branch.** `parallel-dev` handles intra-session isolation (ephemeral `wt/*` branches, auto-escalation to a sibling worktree on conflict, strict explicit-path staging, merge-back). Use **`smart-merge`** for conflicts and **`read-parallel-sessions`** to see what other sessions are doing.
+3. **Link the issue** (tracker-config below): move it to `doing`, carry `[#N]` on every commit.
+4. **PR the feature branch → `dev`** when ready (never `main`); comment the issue and move it to `done`. `dev → main` is a separate, deliberate call — never automatic.
+5. **Flash the device** with the latest `dev` after the feature merges. Compile-green ≠ works-on-car, so every completed feature is flashed and verified on hardware before it's considered done (`./scripts/tm.sh` handles build + flash).
+
+**Branch naming:** feature/fix branches are `<type>/<slug>` (`feat/…`, `fix/…`, `chore/…`) off `dev`; `parallel-dev`'s ephemeral session branches are `wt/…` (never pushed). This supersedes the global `rscanlon-*` convention for this repo.
+
+**Exempt from the isolation rule:** config/doc/tooling changes (this file, `.claude/**`, `docs/**`, `*.md`) may be committed directly to `dev` — they aren't "features," and the hook does not block them.
 
 <!-- BEGIN tracker-config -->
 ## Issue tracker integration
