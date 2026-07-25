@@ -8,8 +8,15 @@ extern HWCDC USBSerial;
 // we stamp a magic marker once saveToEEPROM() has run. On load: if the marker is
 // absent (never saved by this firmware), keep the compiled-in defaults; if present,
 // every byte 0..255 is a legitimate stored value and is loaded verbatim.
-static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 49; above all binding addrs
-static const uint8_t  SETTINGS_MAGIC      = 0xA5;
+//
+// Bump SETTINGS_MAGIC whenever binding addresses are removed or re-purposed: the stored
+// bytes are then meaningless for the new layout, and a stale value would be misread as a
+// different setting (#14 freed the Street/Track Min/Ideal/Max bytes and re-used two of
+// them for the per-mode default profile, so an old streetIdeal=120 would have loaded as a
+// wildly out-of-range profile index). A new magic makes the first boot after the flash
+// fall back to the compiled-in defaults and re-seed cleanly.
+static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 255; above all binding addrs
+static const uint8_t  SETTINGS_MAGIC      = 0xA6;
 
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
@@ -206,6 +213,9 @@ static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
     if (item->itemType == MENU_VALUE && item->binding) {
       MenuValueBinding* b = item->binding;
       uint16_t addr = b->eepromAddress;
+      // Transient binding: runtime-only value, deliberately not persisted (and the
+      // sentinel address is outside the EEPROM anyway, so it must never reach write()).
+      if (addr == EEPROM_NO_PERSIST) continue;
       switch (b->valueType) {
         case VALUE_BYTE:
           EEPROM.write(addr, *(uint8_t*)b->valuePtr);
@@ -248,6 +258,9 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
     if (item->itemType == MENU_VALUE && item->binding) {
       MenuValueBinding* b = item->binding;
       uint16_t addr = b->eepromAddress;
+      // Transient binding: nothing was persisted for it, so leave the runtime value
+      // alone (whoever owns it resolves it -- see applyModeDefaultProfile()).
+      if (addr == EEPROM_NO_PERSIST) continue;
       switch (b->valueType) {
         case VALUE_BYTE: {
           // The caller only reaches the helper once the "written" sentinel is present,
