@@ -1,0 +1,59 @@
+# Reproducible build definition for the tire temperature monitor.
+#
+# This file pins the ESP32 core version and every library version, so
+# `arduino-cli compile` produces the same binary on macOS, Windows, or in CI --
+# no Library Manager clicking, no global state to drift. arduino-cli downloads
+# anything missing on first build and EXCLUDES globally installed platforms and
+# libraries from a profile build, so a stray version elsewhere on the machine
+# cannot leak in.
+#
+# Usage (from the repo root):
+#   ./scripts/tm.sh build            # uses default_profile below
+#   arduino-cli compile --profile waveshare169 tires_esp32
+#
+# Board: Waveshare ESP32-S3-Touch-LCD-1.69
+#   ESP32-S3 / 16MB flash / 8MB PSRAM / ST7789V2 240x280 LCD / CST816T touch
+#   Native USB (USB-Serial-JTAG), enumerates as VID 0x303A PID 0x1001
+#
+# UploadSpeed is deliberately 115200, NOT the 921600 the Arduino IDE setup used.
+# Verified on hardware: at 921600 esptool dies with "No serial data received"
+# while renegotiating baud. USB-Serial-JTAG is not a real UART, so a higher
+# number buys nothing anyway -- the flash still runs at ~865 kbit/s.
+
+profiles:
+  # Known-good configuration. The FQBN option string is carried over verbatim
+  # from the Arduino IDE 2.x setup that last produced a working flash
+  # (previously recorded in .vscode/arduino.json).
+  waveshare169:
+    notes: Pinned to the last known-good toolchain. Use this one.
+    fqbn: esp32:esp32:waveshare_esp32_s3_touch_lcd_169:PSRAM=enabled,FlashMode=qio,LoopCore=1,EventsCore=1,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,PartitionScheme=app3M_fat9M_16MB,CPUFreq=240,UploadSpeed=115200,DebugLevel=none,EraseFlash=none
+    platforms:
+      - platform: esp32:esp32 (3.0.7)
+        platform_index_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    libraries:
+      - Adafruit GFX Library (1.11.11)
+      - Adafruit ST7735 and ST7789 Library (1.10.4)
+      - Adafruit MLX90614 Library (2.1.5)
+      - Adafruit MLX90640 (1.1.1)
+      - Adafruit BusIO (1.16.2)
+      - GFX Library for Arduino (1.4.9)
+      - CST816_TouchLib (2.2.0)
+
+  # Opt-in upgrade path: current core + current libraries. Not verified.
+  #   ./scripts/tm.sh build --profile waveshare169-latest
+  waveshare169-latest:
+    notes: Bleeding edge. Expect to fix compile errors from core/library API drift.
+    fqbn: esp32:esp32:waveshare_esp32_s3_touch_lcd_169:PSRAM=enabled,FlashMode=qio,LoopCore=1,EventsCore=1,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,PartitionScheme=app3M_fat9M_16MB,CPUFreq=240,UploadSpeed=115200,DebugLevel=none,EraseFlash=none
+    platforms:
+      - platform: esp32:esp32 (3.3.11)
+        platform_index_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    libraries:
+      - Adafruit GFX Library (1.12.6)
+      - Adafruit ST7735 and ST7789 Library (1.11.0)
+      - Adafruit MLX90614 Library (2.1.6)
+      - Adafruit MLX90640 (1.1.2)
+      - Adafruit BusIO (1.17.4)
+      - GFX Library for Arduino (1.6.7)
+      - CST816_TouchLib (2.2.0)
+
+default_profile: waveshare169

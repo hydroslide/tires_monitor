@@ -1,0 +1,102 @@
+{
+    // Build/flash tasks for the tires_esp32 firmware.
+    //
+    // These shell out to scripts/tm.sh (macOS/Linux) or scripts/tm.ps1 (Windows),
+    // which wrap arduino-cli. The build configuration itself -- core version,
+    // library versions, board options -- lives in tires_esp32/sketch.yaml.
+    //
+    //   Cmd+Shift+B / Ctrl+Shift+B  -> Build
+    //   Cmd+Shift+P "Run Task"      -> everything else
+    //
+    // The "options.statusbar" blocks are read by the `actboy168.tasks` extension,
+    // which turns tasks into clickable buttons in the bottom status bar. VS Code
+    // has no native equivalent. Without that extension these blocks are ignored
+    // and everything still works from the command palette.
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "detail": "Compile the firmware (arduino-cli, pinned profile)",
+            "type": "shell",
+            "command": "./scripts/tm.sh build",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 build" },
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": "$gcc",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "options": { "statusbar": { "label": "$(tools) Build", "detail": "Compile the firmware" } }
+        },
+        {
+            "label": "Flash (build + upload)",
+            "detail": "Compile, then upload to the connected board",
+            "type": "shell",
+            "command": "./scripts/tm.sh flash",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 flash" },
+            "group": "build",
+            "problemMatcher": "$gcc",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "options": { "statusbar": { "label": "$(zap) Flash", "color": "#f0a030", "detail": "Build + upload to the board" } }
+        },
+        {
+            "label": "Serial monitor",
+            "detail": "Attach to the board's serial output (Ctrl-] to exit)",
+            "type": "shell",
+            "command": "./scripts/tm.sh monitor",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 monitor" },
+            "problemMatcher": [],
+            // Dedicated panel so it does not get clobbered by a build, and so it is
+            // obvious you need to close it before uploading (the port is exclusive).
+            "presentation": { "reveal": "always", "panel": "dedicated", "focus": true },
+            "options": { "statusbar": { "label": "$(pulse) Monitor", "detail": "Watch serial output" } }
+        },
+        {
+            "label": "Upload only",
+            "detail": "Upload the existing build without recompiling",
+            "type": "shell",
+            "command": "./scripts/tm.sh upload",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 upload" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" },
+            "options": { "statusbar": { "hide": true } }
+        },
+        {
+            "label": "Refresh IntelliSense",
+            "detail": "Regenerate build/compile_commands.json, then reload the window",
+            "type": "shell",
+            "command": "./scripts/tm.sh intellisense",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 intellisense" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" },
+            "options": { "statusbar": { "hide": true } }
+        },
+        {
+            "label": "Find board port",
+            "detail": "Print the detected serial port for the board",
+            "type": "shell",
+            "command": "./scripts/tm.sh port",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 port" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "options": { "statusbar": { "hide": true } }
+        },
+        {
+            "label": "Doctor (diagnose connection)",
+            "detail": "Check toolchain, USB enumeration, and serial ports",
+            "type": "shell",
+            "command": "./scripts/tm.sh doctor",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 doctor" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "options": { "statusbar": { "label": "$(plug) Doctor", "detail": "Diagnose a board that will not connect" } }
+        },
+        {
+            "label": "Clean",
+            "detail": "Delete the build directory",
+            "type": "shell",
+            "command": "./scripts/tm.sh clean",
+            "windows": { "command": "powershell -ExecutionPolicy Bypass -File .\\scripts\\tm.ps1 clean" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "silent", "panel": "shared" },
+            "options": { "statusbar": { "hide": true } }
+        }
+    ]
+}

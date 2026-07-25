@@ -36,3 +36,12 @@ temp
 *.app
 
 .branchCompare
+# arduino-cli build output (scripts/tm.sh build --build-path ./build)
+build/
+compile_commands.json
+
+# Firmware artifacts
+*.bin
+*.elf
+*.map
+*.hex
