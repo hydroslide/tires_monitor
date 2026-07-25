@@ -1,5 +1,6 @@
 #include "TireMenu.h"
 #include "MenuRenderer.h"
+#include "TireProfiles.h"
 
 extern MenuRenderer menuRenderer;
 
@@ -431,6 +432,53 @@ static MenuValueBinding imuOrientBinding = {
     4
 };
 
+// -- Tire profiles (story 04; Track-mode only) --
+// The selector and all edit fields bind to TireProfiles globals. The selector persists
+// via its own EEPROM byte here as a convenience, but TireProfiles::begin() is the
+// authority on the active slot at boot. The window/K/tau/baseline fields edit a working
+// copy (g_editProfile) that "Save Profile" commits into the selected slot. EEPROM
+// addresses 112..121 sit above the profile struct region (<=111) and below the menu
+// magic (127); TireProfiles reloads the edit buffer from the slot on boot, so these
+// tree-walked bytes are a harmless duplicate.
+static MenuValueBinding profileSelectBinding = {
+    VALUE_ENUM,
+    &g_profileSel,
+    nullptr,
+    0,
+    0,
+    112,
+    g_profileNameLabels,
+    PROFILE_COUNT
+};
+static MenuValueBinding profileWindowMinBinding = {
+    VALUE_BYTE, &g_editProfile.windowMin, nullptr, 0, 255, 113, nullptr, 0
+};
+static MenuValueBinding profileWindowIdealBinding = {
+    VALUE_BYTE, &g_editProfile.windowIdeal, nullptr, 0, 255, 114, nullptr, 0
+};
+static MenuValueBinding profileWindowMaxBinding = {
+    VALUE_BYTE, &g_editProfile.windowMax, nullptr, 0, 255, 115, nullptr, 0
+};
+static MenuValueBinding profileOffsetKBinding = {
+    VALUE_BYTE, &g_editProfile.offsetK, nullptr, 0, 80, 116, nullptr, 0
+};
+static MenuValueBinding profileTauBinding = {
+    VALUE_BYTE, &g_editProfile.tauSeconds, nullptr, 1, 60, 117, nullptr, 0
+};
+// Signed per-corner baselines. minByte/maxByte carry -40/+40 as int8_t bit patterns.
+static MenuValueBinding profileBaseFLBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[0], nullptr, (uint8_t)(int8_t)-40, 40, 118, nullptr, 0
+};
+static MenuValueBinding profileBaseFRBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[1], nullptr, (uint8_t)(int8_t)-40, 40, 119, nullptr, 0
+};
+static MenuValueBinding profileBaseRLBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[2], nullptr, (uint8_t)(int8_t)-40, 40, 120, nullptr, 0
+};
+static MenuValueBinding profileBaseRRBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[3], nullptr, (uint8_t)(int8_t)-40, 40, 121, nullptr, 0
+};
+
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
@@ -535,6 +583,29 @@ static MenuItem imuGateMenu[] = {
     { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
 };
 
+// Tire-profile action callbacks (defined in section 6).
+static void doLoadProfile();
+static void doNameProfile();
+static void doSaveProfile();
+static void doResetProfile();
+
+static MenuItem tireProfilesMenu[] = {
+    { "Profile",   MENU_VALUE,  nullptr,        nullptr, 0, &profileSelectBinding     },
+    { "Load",      MENU_ACTION, doLoadProfile,  nullptr, 0, nullptr                   },
+    { "Name",      MENU_ACTION, doNameProfile,  nullptr, 0, nullptr                   },
+    { "Min",       MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowMinBinding  },
+    { "Ideal",     MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowIdealBinding},
+    { "Max",       MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowMaxBinding  },
+    { "Offset K",  MENU_VALUE,  nullptr,        nullptr, 0, &profileOffsetKBinding    },
+    { "Tau s",     MENU_VALUE,  nullptr,        nullptr, 0, &profileTauBinding        },
+    { "Base FL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFLBinding     },
+    { "Base FR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFRBinding     },
+    { "Base RL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRLBinding     },
+    { "Base RR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRRBinding     },
+    { "Save Prof", MENU_ACTION, doSaveProfile,  nullptr, 0, nullptr                   },
+    { "Reset",     MENU_ACTION, doResetProfile, nullptr, 0, nullptr                   },
+};
+
 // ----------------------------------------------------
 //  4) Save/Load Action Callbacks
 // ----------------------------------------------------
@@ -618,6 +689,14 @@ static MenuItem mainMenu[] = {
       nullptr
     },
     {
+      "Tire Profiles",
+      MENU_SUBMENU,
+      nullptr,
+      tireProfilesMenu,
+      sizeof(tireProfilesMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
       "Save Config",
       MENU_ACTION,
       doSave,
@@ -639,6 +718,10 @@ static MenuSystem tireMenuSystem(
 static void doSave()
 {
     tireMenuSystem.saveToEEPROM();
+    // Persist tire profiles alongside the menu settings so one "Save Config" covers
+    // everything. Commit the on-screen edits into the selected slot first.
+    TireProfiles::commitEditToSelected();
+    TireProfiles::save();
     // Provide visual feedback
     menuRenderer.setStatusMessage("Settings Saved!");
     // Force a re-render if you want immediate update
@@ -648,6 +731,34 @@ static void doSave()
 static void doLoad()
 {
     tireMenuSystem.loadFromEEPROM();
+    TireProfiles::begin();
+}
+
+// -- Tire-profile actions (story 04) --
+static void doLoadProfile()
+{
+    // Pull the currently selected slot into the edit buffer for viewing/editing.
+    TireProfiles::loadEditFromSelected();
+    menuRenderer.setStatusMessage("Profile loaded");
+}
+
+static void doNameProfile()
+{
+    // Hand off to the small-screen name editor (swipe up/down = letter, right = lock).
+    menuRenderer.beginNameEdit(g_editProfile.name, PROFILE_NAME_LEN);
+}
+
+static void doSaveProfile()
+{
+    TireProfiles::commitEditToSelected();
+    TireProfiles::save();
+    menuRenderer.setStatusMessage("Profile saved");
+}
+
+static void doResetProfile()
+{
+    TireProfiles::resetSelectedToDefault();
+    menuRenderer.setStatusMessage("Profile reset");
 }
 
 // ----------------------------------------------------

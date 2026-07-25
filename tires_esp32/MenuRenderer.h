@@ -12,6 +12,9 @@ struct MenuRenderState {
     bool numericEditing;
     uint8_t dropdownIndex;
     const MenuItem* dropdownItem;
+    // Small-screen name entry (story 04): swipe up/down cycles the current letter,
+    // swipe right locks it and advances; finishing past the last slot commits.
+    bool nameEditing;
 };
 
 class MenuRenderer {
@@ -34,6 +37,15 @@ public:
     // 1) New status message setter
     void setStatusMessage(const char* msg);
 
+    // Name-entry mode (story 04). beginNameEdit copies the target string into the
+    // working buffer; nameCycle steps the current letter; nameAdvance locks it and
+    // moves on, returning true (and committing back into target) once past the last
+    // slot; nameCancel discards.
+    void beginNameEdit(char* target, uint8_t maxLen);
+    void nameCycle(int dir);
+    bool nameAdvance();
+    void nameCancel();
+
 private:
     MenuSystem &menu;
     Adafruit_ST7789 &display;
@@ -53,6 +65,14 @@ private:
     void drawBooleanValue(bool val, int16_t x, int16_t y);
     void drawEnumValue(uint8_t enumIndex, const MenuValueBinding *binding, int16_t x, int16_t y);
     void renderDropdown(const MenuItem &item);
+    void renderNameEditor();
+
+    // Name-editor working state.
+    static const uint8_t NAME_EDIT_MAX = 12;
+    char*   nameTarget = nullptr;
+    uint8_t nameMax = 0;
+    uint8_t namePos = 0;
+    char    nameBuf[NAME_EDIT_MAX + 1];
 
     // Layout constants
     static const int16_t SCREEN_WIDTH = 280; 

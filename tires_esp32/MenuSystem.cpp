@@ -107,6 +107,13 @@ void MenuSystem::increaseValue() {
       }
       break;
     }
+    case VALUE_SBYTE: {
+      int8_t* val = (int8_t*)b->valuePtr;
+      if (*val < (int8_t)b->maxByte) {
+        (*val)++;
+      }
+      break;
+    }
     case VALUE_BOOL: {
       bool* val = (bool*)b->valuePtr;
       *val = true;
@@ -139,6 +146,13 @@ void MenuSystem::decreaseValue() {
     case VALUE_BYTE: {
       uint8_t* val = (uint8_t*)b->valuePtr;
       if (*val > b->minByte) {
+        (*val)--;
+      }
+      break;
+    }
+    case VALUE_SBYTE: {
+      int8_t* val = (int8_t*)b->valuePtr;
+      if (*val > (int8_t)b->minByte) {
         (*val)--;
       }
       break;
@@ -202,6 +216,9 @@ static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
             USBSerial.println((String)addr);
           itemsSaved++;
           break;
+        case VALUE_SBYTE:
+          EEPROM.write(addr, (uint8_t)(*(int8_t*)b->valuePtr));
+          break;
         case VALUE_BOOL:
           EEPROM.write(addr, *(bool*)b->valuePtr);
           break;
@@ -245,6 +262,9 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
           itemsLoaded++;
           break;
         }
+        case VALUE_SBYTE:
+          *(int8_t*)b->valuePtr = (int8_t)EEPROM.read(addr);
+          break;
         case VALUE_BOOL:
           *(bool*)b->valuePtr = EEPROM.read(addr);
           break;

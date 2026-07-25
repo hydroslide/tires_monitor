@@ -9,6 +9,8 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
     state.numericEditing = false;
     state.dropdownIndex = 0;
     state.dropdownItem = nullptr;
+    state.nameEditing = false;
+    nameBuf[0] = '\0';
 
     // Initialize status message as empty
     statusMessage[0] = '\0';
@@ -17,6 +19,12 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
 void MenuRenderer::render() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
+
+    // Name-entry mode takes over the whole screen while active.
+    if (state.nameEditing) {
+        renderNameEditor();
+        return;
+    }
 
     // Retrieve current menu array, item count, selected index
     const MenuItem* items = menu.getCurrentMenuItems();
@@ -146,6 +154,12 @@ void MenuRenderer::drawMenuItem(const MenuItem &item, uint8_t index, bool select
                 display.print(currentVal);
                 break;
             }
+            case VALUE_SBYTE: {
+                int8_t currentVal = *(int8_t*)item.binding->valuePtr;
+                display.setCursor(SCREEN_WIDTH - 60, y);
+                display.print((int)currentVal);
+                break;
+            }
             case VALUE_STRING: {
                 char* strVal = (char*)item.binding->valuePtr;
                 display.setCursor(SCREEN_WIDTH - 80, y);
@@ -215,4 +229,94 @@ void MenuRenderer::renderDropdown(const MenuItem &item) {
             display.print(b->enumLabels[i]);
         }
     }
+}
+
+// --- Small-screen name entry (story 04) --------------------------------------------
+// The cycle order for a letter: space, A-Z, then 0-9. Swipe up/down walks this ring.
+static const char NAME_CHARSET[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+static int nameCharsetIndex(char c) {
+    for (int i = 0; NAME_CHARSET[i] != '\0'; i++)
+        if (NAME_CHARSET[i] == c) return i;
+    return 0; // default to space for anything unexpected
+}
+
+void MenuRenderer::beginNameEdit(char* target, uint8_t maxLen) {
+    if (!target) return;
+    nameTarget = target;
+    nameMax = (maxLen < NAME_EDIT_MAX) ? maxLen : NAME_EDIT_MAX;
+    // Seed the working buffer from the current name, uppercased and space-padded.
+    for (uint8_t i = 0; i < nameMax; i++) {
+        char c = target[i];
+        if (c == '\0') { for (uint8_t k = i; k < nameMax; k++) nameBuf[k] = ' '; break; }
+        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        if (nameCharsetIndex(c) == 0 && c != ' ') c = ' ';
+        nameBuf[i] = c;
+    }
+    nameBuf[nameMax] = '\0';
+    namePos = 0;
+    state.nameEditing = true;
+}
+
+void MenuRenderer::nameCycle(int dir) {
+    if (!state.nameEditing || namePos >= nameMax) return;
+    int len = (int)(sizeof(NAME_CHARSET) - 1); // excludes the null
+    int idx = nameCharsetIndex(nameBuf[namePos]);
+    idx = (idx + dir % len + len) % len;
+    nameBuf[namePos] = NAME_CHARSET[idx];
+}
+
+bool MenuRenderer::nameAdvance() {
+    if (!state.nameEditing) return true;
+    namePos++;
+    if (namePos >= nameMax) {
+        // Commit: trim trailing spaces so "ECF   " stores as "ECF".
+        int end = (int)nameMax;
+        while (end > 0 && nameBuf[end - 1] == ' ') end--;
+        if (nameTarget) {
+            for (int i = 0; i < end; i++) nameTarget[i] = nameBuf[i];
+            nameTarget[end] = '\0';
+        }
+        state.nameEditing = false;
+        nameTarget = nullptr;
+        return true;
+    }
+    return false;
+}
+
+void MenuRenderer::nameCancel() {
+    state.nameEditing = false;
+    nameTarget = nullptr;
+}
+
+void MenuRenderer::renderNameEditor() {
+    display.setFont(nullptr);
+    display.setTextColor(ST77XX_WHITE);
+    display.setTextSize(2);
+    display.setCursor(10, 20);
+    display.print(F("Name:"));
+
+    // Draw each character slot; highlight the active one.
+    int16_t x = 10;
+    int16_t y = 70;
+    display.setTextSize(3);
+    for (uint8_t i = 0; i < nameMax; i++) {
+        bool cur = (i == namePos);
+        int16_t cw = 20;
+        if (cur) {
+            display.fillRect(x - 2, y - 4, cw, 32, ST77XX_YELLOW);
+            display.setTextColor(ST77XX_BLACK);
+        } else {
+            display.setTextColor(ST77XX_WHITE);
+        }
+        display.setCursor(x, y);
+        char c = nameBuf[i];
+        display.print(c == ' ' ? '_' : c);
+        x += cw;
+    }
+
+    display.setTextSize(1);
+    display.setTextColor(ST77XX_WHITE);
+    display.setCursor(10, SCREEN_HEIGHT - 24);
+    display.print(F("Up/Dn: letter   Right: lock/next"));
 }

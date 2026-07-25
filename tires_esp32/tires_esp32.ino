@@ -13,6 +13,7 @@
 #include "NBPProtocol.h"
 #include "WifiSerial.h"
 #include "IMUGate.h"
+#include "TireProfiles.h"
 
 // #include "MyCST816Touch.h"
 #include "CST816Touch_SWMode.h"
@@ -34,8 +35,9 @@ int forceDrawAfterInit = 0;
 bool highFrequencyUpdates = false;
 bool enableThermalTemps = false;
 
-// Calculated (surface->carcass) mode defaults, story 03. K/tau are the literature
-// defaults here; story 04 sources them from the active tire profile instead.
+// Calculated (surface->carcass) mode defaults, story 03. Used only as a fallback in
+// Street mode / when no profile applies; in Track mode K and tau come from the active
+// tire profile (story 04).
 static const float CALC_TAU_DEFAULT_S    = 15.0f; // EMA smoothing time constant (s)
 static const float CALC_OFFSET_DEFAULT_F = 20.0f; // carcass offset K (+degrees F)
 
@@ -364,7 +366,7 @@ int nightBrightness=12;
 
 void setup()
 {
-  EEPROM.begin(50);
+  EEPROM.begin(EEPROM_SIZE);
 
   USBSerial.begin(9600);
   USBSerial.println("Top of ESP32 Tires Setup");
@@ -413,6 +415,10 @@ void setup()
   // Load config from EEPROM
   menuSystem.loadFromEEPROM();
   USBSerial.println("EEPROM values loaded");
+
+  // Load tire profiles (story 04) or seed defaults. Runs after the menu load so the
+  // active-slot selection and profile struct region are the authority.
+  TireProfiles::begin();
 
   // Bring up the on-board IMU and auto-calibrate orientation at rest. The car
   // should be stationary/level at boot; a manual axis override is the fallback.
@@ -540,16 +546,25 @@ static void initializeSystem()
                       (IMUGate::Orient)getImuOrient());
 
   float minTemp, idealTemp, maxTemp;
+  // Track-mode K/tau come from the active tire profile (story 04); default otherwise.
+  float calcTau = CALC_TAU_DEFAULT_S;
+  float calcK   = CALC_OFFSET_DEFAULT_F;
   if (modeVal == 0) {
-    // Street
+    // Street: tire profiles are inert; use the plain Street window.
     minTemp   = getStreetMin();
     idealTemp = getStreetIdeal();
     maxTemp   = getStreetMax();
   } else {
-    // Track
-    minTemp   = getTrackMin();
-    idealTemp = getTrackIdeal();
-    maxTemp   = getTrackMax();
+    // Track: the active tire profile bundles window + K + tau together, so selecting a
+    // profile swaps all of them at once.
+    const TireProfile& p = TireProfiles::active();
+    minTemp   = p.windowMin;
+    idealTemp = p.windowIdeal;
+    maxTemp   = p.windowMax;
+    calcTau   = p.tauSeconds;
+    calcK     = p.offsetK;
+    USBSerial.print("Active tire profile: ");
+    USBSerial.println(p.name);
   }
 
     ThermalDisplay::useGradient = getUseThermalGradient();
@@ -570,7 +585,7 @@ static void initializeSystem()
   // Story 03: calculated (surface->carcass) mode is a Track-mode feature. Enable only
   // when the Display setting is Calculated AND we are in Track mode; Street stays raw.
   tempReader->configureCalculated((getCalcDisplayMode() == 1) && (modeVal == 1),
-                                  CALC_TAU_DEFAULT_S, CALC_OFFSET_DEFAULT_F);
+                                  calcTau, calcK);
 
   bool fl3 = tempReader->tireSensorIsCamera[0]; //false;
   bool fr3 = tempReader->tireSensorIsCamera[1]; //false;

@@ -82,6 +82,31 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     unhandledSwipeRight=false;
     unhandledSwipeUp=false;
    
+    // Name-entry mode intercepts navigation: up/down cycle the current letter, right
+    // (or a tap) locks it and advances, a double-click cancels. Story 04.
+    if (menuActive && rState.nameEditing) {
+        switch (gesture) {
+        case TouchScreenController::gesture_t::GESTURE_UP:
+            render.nameCycle(+1);
+            break;
+        case TouchScreenController::gesture_t::GESTURE_DOWN:
+            render.nameCycle(-1);
+            break;
+        case TouchScreenController::gesture_t::GESTURE_RIGHT:
+        case TouchScreenController::gesture_t::GESTURE_LEFT:
+        case TouchScreenController::gesture_t::GESTURE_TOUCH_BUTTON:
+            render.nameAdvance();
+            break;
+        case TouchScreenController::gesture_t::GESTURE_DOUBLE_CLICK:
+        case TouchScreenController::gesture_t::GESTURE_LONG_PRESS:
+            render.nameCancel();
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
     if (!menuActive){
         if (gesture == TouchScreenController::gesture_t::GESTURE_LEFT)
             menuActive = true;
@@ -163,7 +188,8 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
                     render.openDropdown(currentItem, currentEnumVal);
                     break;
                 }
-                case VALUE_BYTE: {
+                case VALUE_BYTE:
+                case VALUE_SBYTE: {
                     // Enter numeric editing mode
                     rState.numericEditing = true;
                     break;
