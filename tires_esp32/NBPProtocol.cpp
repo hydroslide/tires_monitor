@@ -76,6 +76,46 @@ void NBPProtocol::setAllTireTemps(const Wheels::TireTemps &fl,
     sendUpdateAll();
 }
 
+void NBPProtocol::setRawTireTemps(const Wheels::TireTemps &fl,
+                      const Wheels::TireTemps &fr,
+                      const Wheels::TireTemps &rl,
+                      const Wheels::TireTemps &rr, bool farenheit){
+    clearChannels();
+    Unit tempUnit = (farenheit)? Unit::DegreesF:Unit::DegreesC;
+    // Same single- vs three-channel decision and O/C/I ordering as the active set,
+    // just under the distinct "... Raw" labels so both coexist in one log.
+    if (fl.count < 3)
+        addChannel(ChannelType::FrontLeftTireRaw, tempUnit, fl.values[0]);
+    else{
+        addChannel(ChannelType::FrontLeftTireRawO, tempUnit, fl.values[0]);
+        addChannel(ChannelType::FrontLeftTireRawC, tempUnit, fl.values[1]);
+        addChannel(ChannelType::FrontLeftTireRawI, tempUnit, fl.values[2]);
+    }
+    if (fr.count < 3)
+        addChannel(ChannelType::FrontRightTireRaw, tempUnit, fr.values[0]);
+    else{
+        addChannel(ChannelType::FrontRightTireRawI, tempUnit, fr.values[0]);
+        addChannel(ChannelType::FrontRightTireRawC, tempUnit, fr.values[1]);
+        addChannel(ChannelType::FrontRightTireRawO, tempUnit, fr.values[2]);
+    }
+    if (rl.count < 3)
+        addChannel(ChannelType::RearLeftTireRaw, tempUnit, rl.values[0]);
+    else{
+        addChannel(ChannelType::RearLeftTireRawO, tempUnit, rl.values[0]);
+        addChannel(ChannelType::RearLeftTireRawC, tempUnit, rl.values[1]);
+        addChannel(ChannelType::RearLeftTireRawI, tempUnit, rl.values[2]);
+    }
+    if (rr.count < 3)
+        addChannel(ChannelType::RearRightTireRaw, tempUnit, rr.values[0]);
+    else{
+        addChannel(ChannelType::RearRightTireRawI, tempUnit, rr.values[0]);
+        addChannel(ChannelType::RearRightTireRawC, tempUnit, rr.values[1]);
+        addChannel(ChannelType::RearRightTireRawO, tempUnit, rr.values[2]);
+    }
+
+    sendUpdateAll();
+}
+
 void NBPProtocol::sendIMU(float ax, float ay, float az,
                           float gx, float gy, float gz, float lateralG) {
     clearChannels();
@@ -148,6 +188,22 @@ const char* NBPProtocol::getChannelName(ChannelType channel) {
         case ChannelType::FrontRightTireI: return "Front Right Tire I";
         case ChannelType::RearLeftTireI: return "Rear Left Tire I";
         case ChannelType::RearRightTireI: return "Rear Right Tire I";
+        case ChannelType::FrontLeftTireRaw:  return "Front Left Tire Raw";
+        case ChannelType::FrontRightTireRaw: return "Front Right Tire Raw";
+        case ChannelType::RearLeftTireRaw:   return "Rear Left Tire Raw";
+        case ChannelType::RearRightTireRaw:  return "Rear Right Tire Raw";
+        case ChannelType::FrontLeftTireRawO:  return "Front Left Tire Raw O";
+        case ChannelType::FrontRightTireRawO: return "Front Right Tire Raw O";
+        case ChannelType::RearLeftTireRawO:   return "Rear Left Tire Raw O";
+        case ChannelType::RearRightTireRawO:  return "Rear Right Tire Raw O";
+        case ChannelType::FrontLeftTireRawC:  return "Front Left Tire Raw C";
+        case ChannelType::FrontRightTireRawC: return "Front Right Tire Raw C";
+        case ChannelType::RearLeftTireRawC:   return "Rear Left Tire Raw C";
+        case ChannelType::RearRightTireRawC:  return "Rear Right Tire Raw C";
+        case ChannelType::FrontLeftTireRawI:  return "Front Left Tire Raw I";
+        case ChannelType::FrontRightTireRawI: return "Front Right Tire Raw I";
+        case ChannelType::RearLeftTireRawI:   return "Rear Left Tire Raw I";
+        case ChannelType::RearRightTireRawI:  return "Rear Right Tire Raw I";
         case ChannelType::AccelX:        return "Accel X";
         case ChannelType::AccelY:        return "Accel Y";
         case ChannelType::AccelZ:        return "Accel Z";

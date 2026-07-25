@@ -27,6 +27,11 @@ static uint8_t trackMin   = 100;
 static uint8_t trackIdeal = 160;
 static uint8_t trackMax   = 180;
 
+// -- Calculated display mode (story 03; Track-mode only) --
+// 0=Raw surface, 1=Calculated (EMA_tau(surface)+K carcass estimate).
+static uint8_t calcDisplayMode = 0;
+static const char* calcDisplayModeLabels[] = {"Raw", "Calculated"};
+
 // -- Hardware Temp Sensor Indices --
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
@@ -163,6 +168,18 @@ static MenuValueBinding trackMaxBinding = {
     18,
     nullptr,
     0
+};
+
+// Calculated display mode (EEPROM addr 1; free byte, magic-sentinel load makes 0 safe)
+static MenuValueBinding calcDisplayModeBinding = {
+    VALUE_ENUM,
+    &calcDisplayMode,
+    nullptr,
+    0,
+    0,
+    1,
+    calcDisplayModeLabels,
+    2
 };
 
 // Hardware -> Temp Sensor Indices
@@ -424,9 +441,10 @@ static MenuItem streetSettingsMenu[] = {
 };
 
 static MenuItem trackSettingsMenu[] = {
-    { "Min",   MENU_VALUE,  nullptr, nullptr, 0, &trackMinBinding   },
-    { "Ideal", MENU_VALUE,  nullptr, nullptr, 0, &trackIdealBinding },
-    { "Max",   MENU_VALUE,  nullptr, nullptr, 0, &trackMaxBinding   }
+    { "Min",     MENU_VALUE,  nullptr, nullptr, 0, &trackMinBinding        },
+    { "Ideal",   MENU_VALUE,  nullptr, nullptr, 0, &trackIdealBinding      },
+    { "Max",     MENU_VALUE,  nullptr, nullptr, 0, &trackMaxBinding        },
+    { "Display", MENU_VALUE,  nullptr, nullptr, 0, &calcDisplayModeBinding }
 };
 
 static MenuItem tempSensorIndicesMenu[] = {
@@ -684,6 +702,10 @@ uint8_t getTrackIdeal() {
 
 uint8_t getTrackMax() {
     return trackMax;
+}
+
+uint8_t getCalcDisplayMode() {
+    return calcDisplayMode;
 }
 
 bool getShowPixelOffsets() {

@@ -34,6 +34,11 @@ int forceDrawAfterInit = 0;
 bool highFrequencyUpdates = false;
 bool enableThermalTemps = false;
 
+// Calculated (surface->carcass) mode defaults, story 03. K/tau are the literature
+// defaults here; story 04 sources them from the active tire profile instead.
+static const float CALC_TAU_DEFAULT_S    = 15.0f; // EMA smoothing time constant (s)
+static const float CALC_OFFSET_DEFAULT_F = 20.0f; // carcass offset K (+degrees F)
+
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
 Adafruit_ST7789 tft = Adafruit_ST7789(&hspi, LCD_CS, LCD_DC, LCD_RST);
@@ -267,6 +272,13 @@ void doRunningMode(int time_delta)
     // Read tire temps
     tempReader->readTemps();
 
+    // Story 03: fold the raw surface medians into the calculated (EMA_tau + K) working
+    // value on the read cadence. When calculated mode is active this replaces the
+    // working temps that feed every display and decision below; the raw surface is kept
+    // in rawSectionTemps for a separate diagnostic channel set. Runs after readTemps so
+    // the raw validity filter is untouched.
+    tempReader->updateCalculated(readDelta);
+
     // Advance the IMU capture gate + latch on the read cadence (feature acts only
     // in Track mode). Feed the interim inflation verdict and log the calibrated
     // accel/gyro over NBP. Kept off the 1 Hz display path so loop timing is intact.
@@ -304,8 +316,22 @@ void doRunningMode(int time_delta)
           rr = (tempReader->tireSensorIsCamera[3])? Wheels::TireTemps( tempReader->tireSectionTemps[3] ):  Wheels::TireTemps( tempReader->tireTemps[3]); 
         }
 
-      if (!testMode)
-        nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F')); 
+      if (!testMode) {
+        // Active value (calculated when enabled) under the original channel labels.
+        nbp.setAllTireTemps(fl, fr, rl, rr, (wheels->getTempUnit() == 'F'));
+
+        // Story 03: always keep the raw surface signal as its own channel set while the
+        // feature is in play (Track mode), so K/tau can be re-derived offline even when
+        // calculated mode is driving the original labels.
+        if (trackMode) {
+          bool farenheit = (wheels->getTempUnit() == 'F');
+          Wheels::TireTemps flRaw = (tempReader->tireSensorIsCamera[0]) ? Wheels::TireTemps(tempReader->rawSectionTemps[0]) : Wheels::TireTemps(tempReader->rawSectionTemps[0][0]);
+          Wheels::TireTemps frRaw = (tempReader->tireSensorIsCamera[1]) ? Wheels::TireTemps(tempReader->rawSectionTemps[1]) : Wheels::TireTemps(tempReader->rawSectionTemps[1][0]);
+          Wheels::TireTemps rlRaw = (tempReader->tireSensorIsCamera[2]) ? Wheels::TireTemps(tempReader->rawSectionTemps[2]) : Wheels::TireTemps(tempReader->rawSectionTemps[2][0]);
+          Wheels::TireTemps rrRaw = (tempReader->tireSensorIsCamera[3]) ? Wheels::TireTemps(tempReader->rawSectionTemps[3]) : Wheels::TireTemps(tempReader->rawSectionTemps[3][0]);
+          nbp.setRawTireTemps(flRaw, frRaw, rlRaw, rrRaw, farenheit);
+        }
+      }
 
       wheels->setTireTemps(fl, fr, rl, rr);
       if (forceDrawAfterInit>0){
@@ -477,6 +503,7 @@ static void initializeSystem()
   extern uint8_t getTrackMin();
   extern uint8_t getTrackIdeal();
   extern uint8_t getTrackMax();
+  extern uint8_t getCalcDisplayMode();
   
   extern bool getShowPixelOffsets();
   extern bool getHighFrequencyUpdates();
@@ -539,6 +566,11 @@ static void initializeSystem()
   tempReader = new TempReader();
   tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
+
+  // Story 03: calculated (surface->carcass) mode is a Track-mode feature. Enable only
+  // when the Display setting is Calculated AND we are in Track mode; Street stays raw.
+  tempReader->configureCalculated((getCalcDisplayMode() == 1) && (modeVal == 1),
+                                  CALC_TAU_DEFAULT_S, CALC_OFFSET_DEFAULT_F);
 
   bool fl3 = tempReader->tireSensorIsCamera[0]; //false;
   bool fr3 = tempReader->tireSensorIsCamera[1]; //false;

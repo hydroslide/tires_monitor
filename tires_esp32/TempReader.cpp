@@ -113,9 +113,50 @@ TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
             tireTemps[i] = 0;
             tireSectionTemps[i][j]=0;
             lastTireSectionTemps[i][j]=0;
+            rawSectionTemps[i][j]=0;
+            emaSectionTemps[i][j]=0;
+            emaInit[i][j]=false;
         }
     }
-    
+
+}
+
+// Calculated (surface->carcass) mode config, story 03. K is authored in degrees F;
+// convert the offset delta to the working unit (a difference, so no +32 term).
+void TempReader::configureCalculated(bool enabled, float tauSeconds, float offsetF){
+    calculatedMode = enabled;
+    calcTauSeconds = tauSeconds;
+    calcOffsetWorking = useFarenheit ? offsetF : (offsetF * 5.0f / 9.0f);
+}
+
+// Advance the per-band EMA of the raw surface medians and, when calculated mode is
+// active, fold EMA + K into the working temps (tireSectionTemps / tireTemps). Raw is
+// stashed in rawSectionTemps for the separate diagnostic channel set. A value of 0 is
+// the pipeline's "unread/invalid" sentinel, so those bands are skipped (no EMA, no
+// offset) to avoid seeding the filter with a fake +K reading during warm-up.
+void TempReader::updateCalculated(long dtMillis){
+    float dt = dtMillis / 1000.0f;
+    if (dt < 0.0f) dt = 0.0f;
+    // First-order low-pass: alpha = dt / (tau + dt).
+    float alpha = (calcTauSeconds > 0.0f) ? (dt / (calcTauSeconds + dt)) : 1.0f;
+    for (int i = 0; i < TIRE_COUNT; i++){
+        int bands = tireSensorIsCamera[i] ? 3 : 1; // point sensors carry band 0 only
+        for (int j = 0; j < 3; j++){
+            float raw = tireSectionTemps[i][j];
+            rawSectionTemps[i][j] = raw;
+            bool active = (j < bands) && (raw > 0.0f);
+            if (active){
+                if (!emaInit[i][j]){ emaSectionTemps[i][j] = raw; emaInit[i][j] = true; }
+                else emaSectionTemps[i][j] += alpha * (raw - emaSectionTemps[i][j]);
+                if (calculatedMode)
+                    tireSectionTemps[i][j] = emaSectionTemps[i][j] + calcOffsetWorking;
+            }
+        }
+        // Keep the single-value mirror consistent for non-camera tiles, which read
+        // tireTemps[] directly rather than tireSectionTemps[][0].
+        if (calculatedMode && !tireSensorIsCamera[i] && rawSectionTemps[i][0] > 0.0f)
+            tireTemps[i] = tireSectionTemps[i][0];
+    }
 }
 
 void TempReader::resetTireSensor(int i){

@@ -34,6 +34,12 @@ class TempReader {
         bool newTempIsInvalid(int i, int j);
         void resetTireSensor(int i);
 
+        // Calculated-mode state (story 03).
+        float calcTauSeconds = 15.0f;             // EMA time constant, seconds
+        float calcOffsetWorking = 0.0f;           // K as a delta in the working unit
+        float emaSectionTemps[TIRE_COUNT][3];     // smoothed raw surface per band
+        bool  emaInit[TIRE_COUNT][3];             // seeded on first valid sample
+
     public:
         TempReader();        
         void setup();        
@@ -53,6 +59,23 @@ class TempReader {
         bool useFarenheit;
         byte leftPixelOffset[TIRE_COUNT];
         byte rightPixelOffset[TIRE_COUNT];
-       
+
+        // --- Calculated (surface->carcass) mode, story 03 ---
+        // When calculatedMode is on, the working section temps (tireSectionTemps /
+        // tireTemps) are replaced by EMA_tau(surface) + K so every downstream display
+        // and decision runs on the smoothed carcass estimate. The untouched raw surface
+        // medians are preserved here for a separate NBP channel set.
+        float rawSectionTemps[TIRE_COUNT][3];
+        bool  calculatedMode = false;
+        // enabled: master switch (already ANDed with Track mode by the caller).
+        // tauSeconds: EMA time constant. offsetF: K in degrees F (converted to the
+        // working unit internally). tau/K are story-03 defaults; story 04 sources them
+        // from the active tire profile.
+        void  configureCalculated(bool enabled, float tauSeconds, float offsetF);
+        // Advance the EMA and, when active, fold EMA+K into the working temps. Call once
+        // per read (dtMillis = read cadence), AFTER readTemps() so the raw validity
+        // filter (which keys off lastTireSectionTemps) stays on the raw signal.
+        void  updateCalculated(long dtMillis);
+
 };
 #endif // TEMPREADER_H

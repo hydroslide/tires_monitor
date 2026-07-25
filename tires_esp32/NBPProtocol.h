@@ -26,6 +26,25 @@ enum class ChannelType {
     FrontRightTireI,
     RearLeftTireI,
     RearRightTireI,
+    // Raw surface channels (story 03): the untouched, unsmoothed surface reading,
+    // logged as its own channel set so calibration/tau can be re-derived offline even
+    // while calculated mode drives the original labels.
+    FrontLeftTireRaw,
+    FrontRightTireRaw,
+    RearLeftTireRaw,
+    RearRightTireRaw,
+    FrontLeftTireRawO,
+    FrontRightTireRawO,
+    RearLeftTireRawO,
+    RearRightTireRawO,
+    FrontLeftTireRawC,
+    FrontRightTireRawC,
+    RearLeftTireRawC,
+    RearRightTireRawC,
+    FrontLeftTireRawI,
+    FrontRightTireRawI,
+    RearLeftTireRawI,
+    RearRightTireRawI,
     // IMU (orientation-calibrated) channels
     AccelX,
     AccelY,
@@ -69,6 +88,13 @@ public:
     void setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit);
 
     void setAllTireTemps(const Wheels::TireTemps &fl,
+                      const Wheels::TireTemps &fr,
+                      const Wheels::TireTemps &rl,
+                      const Wheels::TireTemps &rr, bool farenheit);
+
+    // Emit the raw surface reading as its own UPDATEALL packet under the "... Raw"
+    // channel labels (story 03). Mirrors setAllTireTemps' O/C/I ordering per corner.
+    void setRawTireTemps(const Wheels::TireTemps &fl,
                       const Wheels::TireTemps &fr,
                       const Wheels::TireTemps &rl,
                       const Wheels::TireTemps &rr, bool farenheit);
