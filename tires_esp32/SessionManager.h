@@ -32,6 +32,11 @@ struct SessionSummary {
     uint16_t durationSec;      // sealed session length
     int16_t  frontRearDelta;   // avg(FL,FR) - avg(RL,RR), rounded (>0 => understeer)
     int16_t  leftRightDelta;   // avg(FL,RL) - avg(FR,RR), rounded (>0 => lefts hotter)
+    // Inflation verdict on-time (story 06). Fraction of CAPTURED (straight-line) time
+    // the latched indicator was on, and the dominant latched verdict. Surfaced on the
+    // summary only when on-time is >= 50% of the captured session.
+    uint8_t  inflationOnPct;   // 0..100, over captured time
+    int8_t   inflationVerdict; // +1 over, -1 under, 0 none/insufficient
 };
 
 class SessionManager {
@@ -57,6 +62,11 @@ public:
     // running). temps[] are the per-corner whole-tire working temps; valid[] flags the
     // readable corners. Frames after end() are never seen (running is false).
     void accumulate(long dtMillis, const float temps[4], const bool valid[4]);
+
+    // Accumulate inflation-indicator on-time (story 06). Call on the read cadence, Track
+    // mode only, while running. Only CAPTURED (straight-line) frames count toward the
+    // denominator; alert is the latched verdict this tick (+1 over, -1 under, 0 none).
+    void accumulateInflation(long dtMillis, bool capturing, int alert);
 
     // Best-effort auto-seal backstop (design 5.3): when enabled and the car has been
     // essentially still for a sustained dwell (IMU near-rest -- there is no speed
@@ -87,6 +97,11 @@ private:
     unsigned long overheatMs[4];
     long          firstReachedMs[4]; // elapsed ms when the corner first reached window
     unsigned long elapsedMs;
+
+    // Inflation on-time (story 06): captured (straight-line) time and time-in-over/under.
+    unsigned long capturedMs;
+    unsigned long inflOverMs;
+    unsigned long inflUnderMs;
 
     unsigned long stillMs;         // running still-time for the auto-seal backstop
 

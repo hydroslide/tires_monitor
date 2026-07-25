@@ -12,7 +12,9 @@ extern HWCDC USBSerial;
 // round-trip without the menu path's "byte can't store 0" caveat.
 static const int     SESSION_EEPROM_ADDR = 128;
 static const int     SESSION_MAGIC_ADDR  = 250;
-static const uint8_t SESSION_MAGIC       = 0x53;
+// Bumped 0x53 -> 0x54 when the summary struct grew the story-06 inflation fields, so a
+// pre-upgrade blob (different layout) is treated as "no summary" instead of misread.
+static const uint8_t SESSION_MAGIC       = 0x54;
 
 // Auto-seal backstop: seal after this much continuous IMU stillness.
 static const unsigned long AUTO_SEAL_STILL_MS = 15000UL;
@@ -45,6 +47,9 @@ void SessionManager::resetAccumulators() {
         firstReachedMs[i] = -1;
     }
     elapsedMs = 0;
+    capturedMs = 0;
+    inflOverMs = 0;
+    inflUnderMs = 0;
     stillMs = 0;
 }
 
@@ -91,6 +96,14 @@ void SessionManager::accumulate(long dtMillis, const float temps[4], const bool 
         if (t >= winMin && t <= winMax) inWindowMs[i] += (unsigned long)dtMillis;
         if (t > winMax)                 overheatMs[i] += (unsigned long)dtMillis;
     }
+}
+
+void SessionManager::accumulateInflation(long dtMillis, bool capturing, int alert) {
+    if (!running || dtMillis <= 0) return;
+    if (!capturing) return;                       // on-time is over captured frames only
+    capturedMs += (unsigned long)dtMillis;
+    if (alert > 0)      inflOverMs  += (unsigned long)dtMillis;
+    else if (alert < 0) inflUnderMs += (unsigned long)dtMillis;
 }
 
 void SessionManager::computeSummary() {
@@ -152,6 +165,19 @@ void SessionManager::computeSummary() {
     bool lok = pairAvg(0, 2, la), rrok = pairAvg(1, 3, rra);
     s.frontRearDelta = (fok && rok) ? (int16_t)lroundf(fa - ra) : 0;
     s.leftRightDelta = (lok && rrok) ? (int16_t)lroundf(la - rra) : 0;
+
+    // Inflation on-time (story 06): fraction of captured (straight-line) time the latched
+    // indicator was on, and the dominant latched verdict. Surfaced by renderSummary only
+    // when on-time is >= 50%.
+    unsigned long onMs = inflOverMs + inflUnderMs;
+    if (capturedMs > 0) {
+        unsigned long pct = (onMs * 100UL) / capturedMs;
+        s.inflationOnPct = (uint8_t)capUL(pct, 100UL);
+    } else {
+        s.inflationOnPct = 0;
+    }
+    s.inflationVerdict = (inflOverMs > inflUnderMs) ? 1
+                       : (inflUnderMs > inflOverMs) ? -1 : 0;
 
     s.valid = 1;
 }
@@ -315,6 +341,17 @@ void SessionManager::renderSummary(Adafruit_ST7789& d, const SessionSummary& s, 
         d.print(F("m "));
         d.print((int)(s.durationSec % 60));
         d.print('s');
+
+        // Inflation verdict (story 06): shown only when the latched indicator was on for
+        // >= 50% of the captured (straight-line) session time.
+        if (s.inflationOnPct >= 50 && s.inflationVerdict != 0) {
+            d.setTextSize(2);
+            d.setTextColor(s.inflationVerdict > 0 ? ST77XX_RED : ST77XX_CYAN);
+            d.setCursor(10, 200);
+            d.print(s.inflationVerdict > 0 ? F("Infl OVER ") : F("Infl UNDER "));
+            d.print((int)s.inflationOnPct);
+            d.print('%');
+        }
 
         d.setTextSize(1);
         d.setTextColor(0x7BEF);

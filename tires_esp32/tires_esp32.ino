@@ -257,9 +257,13 @@ void setThermalMode(uint8_t _thermalMode){
     wheels->draw(true);
 }
 
-// Interim over/under source for the latch (story 02). Computes the overall
-// center-hot vote across the camera tires from the raw section temps. Stories
-// 03/04/06 replace this with the calculated, baseline-corrected verdict.
+// Over/under source for the latch (story 02, refined by story 06). Computes the
+// overall center-hot vote across the camera tires from the working section temps --
+// which are the CALCULATED (offset + smoothed) values when calculated mode is on
+// (calculated-everywhere) -- with each corner's per-corner inflation baseline (the
+// honest straight-line residual, story 04) subtracted so a tire reading its normal
+// baseline no longer votes. The IMU gate only applies this vote on captured
+// (straight-line) frames, giving the gated, baseline-corrected verdict story 06 wants.
 extern byte getminInflationDeltaPct();
 static int computeInterimInflationCondition()
 {
@@ -272,6 +276,7 @@ static int computeInterimInflationCondition()
     float center = tempReader->tireSectionTemps[t][1];
     if (edge <= 0.0f) continue;                  // skip unread/invalid frames
     float delta = edge - center;                 // negative => center hotter
+    delta -= (float)TireProfiles::baselineF(t);  // subtract per-corner baseline (story 06)
     float minDelta = edge * pct;
     if (delta <= -minDelta) overVotes++;         // center-hot => over-inflation
     else if (delta >= minDelta) underVotes++;    // edges-hot => under-inflation
@@ -306,7 +311,12 @@ void doRunningMode(int time_delta)
     // accel/gyro over NBP. Kept off the 1 Hz display path so loop timing is intact.
     bool trackMode = (getCurrentModeValue() == 1);
     imuGate.update(readDelta, trackMode);
-    imuGate.feedCondition(computeInterimInflationCondition());
+    // Story 06: the inflation indicator is a Track-mode feature with its own on/off
+    // toggle. When off (or in Street), feed a neutral condition so the latch never
+    // triggers -- the verdict is inert / hidden, matching the acceptance criteria.
+    extern bool getInflationIndicator();
+    bool inflationOn = trackMode && getInflationIndicator();
+    imuGate.feedCondition(inflationOn ? computeInterimInflationCondition() : 0);
     if (!testMode && imuGate.isPresent()) {
       nbp.sendIMU(imuGate.accelG(0), imuGate.accelG(1), imuGate.accelG(2),
                   imuGate.gyroDps(0), imuGate.gyroDps(1), imuGate.gyroDps(2),
@@ -330,6 +340,15 @@ void doRunningMode(int time_delta)
         sValid[t] = (v > 0.0f);
       }
       sessionManager.accumulate(readDelta, sTemps, sValid);
+
+      // Story 06: track inflation-indicator on-time over captured (straight-line) frames
+      // while the indicator is enabled, so the summary can surface the verdict when it
+      // was on >= 50% of the captured session. Latched alert -> signed verdict.
+      if (inflationOn) {
+        int av = (imuGate.alertState() == IMUGate::ALERT_OVER)  ?  1
+               : (imuGate.alertState() == IMUGate::ALERT_UNDER) ? -1 : 0;
+        sessionManager.accumulateInflation(readDelta, imuGate.isCapturing(), av);
+      }
 
       // Auto-seal backstop: seal after sustained IMU stillness (near-zero horizontal
       // accel + gyro). Best-effort -- there is no speed channel -- and off by default.
@@ -578,6 +597,26 @@ static void drawSessionFeedback(){
   }
 }
 
+// Paint the latched inflation verdict over the running display (story 06). Track-mode
+// only and gated by the Inflation toggle; once the IMU gate latches OVER/UNDER on
+// straight-line frames it stays visible anywhere on track until the opposite threshold
+// clears it. Small badge top-left so it's glanceable without hiding the tire map.
+static void drawInflationIndicator(){
+  if (getCurrentModeValue() != 1) return;          // Track-mode only
+  extern bool getInflationIndicator();
+  if (!getInflationIndicator()) return;            // menu toggle off
+  IMUGate::Alert a = imuGate.alertState();
+  if (a == IMUGate::ALERT_NONE) return;            // nothing latched
+  uint16_t col = (a == IMUGate::ALERT_OVER) ? ST77XX_RED : ST77XX_CYAN;
+  tft.fillRect(2, 2, 52, 16, ST77XX_BLACK);
+  tft.drawRect(2, 2, 52, 16, col);
+  tft.setFont(nullptr);
+  tft.setTextSize(1);
+  tft.setTextColor(col);
+  tft.setCursor(6, 6);
+  tft.print((a == IMUGate::ALERT_OVER) ? F("OVER") : F("UNDER"));
+}
+
 void ToggleNightMode(){
     nightMode=!nightMode;
     int bright = (nightMode)?nightBrightness:255;
@@ -615,6 +654,7 @@ void loop() {
     } else {
       doRunningMode(time_delta);
       drawSessionFeedback();
+      drawInflationIndicator();
     }
   } else {
     menuWasActive = true;

@@ -44,6 +44,12 @@ static bool showBalance = true;
 // defaults off.
 static bool autoSealStationary = false;
 
+// -- Inflation indicator (story 06; Track-mode only) --
+// Gates & latches the over/under inflation verdict: computed only on straight-line
+// (captured) frames, from calculated temps, baseline-corrected, presented latched.
+// On by default; inert / hidden in Street mode.
+static bool inflationIndicator = true;
+
 // -- Hardware Temp Sensor Indices --
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
@@ -469,6 +475,19 @@ static MenuValueBinding imuOrientBinding = {
     4
 };
 
+// Inflation indicator on/off (EEPROM 49; last free menu-binding byte below the
+// tire-profile region at 50). On by default; the magic-sentinel load makes 0 safe.
+static MenuValueBinding inflationIndicatorBinding = {
+    VALUE_BOOL,
+    &inflationIndicator,
+    nullptr,
+    0,
+    0,
+    49,
+    nullptr,
+    0
+};
+
 // -- Tire profiles (story 04; Track-mode only) --
 // The selector and all edit fields bind to TireProfiles globals. The selector persists
 // via its own EEPROM byte here as a convenience, but TireProfiles::begin() is the
@@ -539,7 +558,8 @@ static MenuItem trackSettingsMenu[] = {
     { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
     { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 },
     { "View Summary", MENU_ACTION, doViewSummary,  nullptr, 0, nullptr                 },
-    { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding }
+    { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding },
+    { "Inflation",    MENU_VALUE,  nullptr,        nullptr, 0, &inflationIndicatorBinding }
 };
 
 static MenuItem tempSensorIndicesMenu[] = {
@@ -902,6 +922,10 @@ bool getShowBalance() {
 
 bool getAutoSealStationary() {
     return autoSealStationary;
+}
+
+bool getInflationIndicator() {
+    return inflationIndicator;
 }
 
 bool getShowPixelOffsets() {
