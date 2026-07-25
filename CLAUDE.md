@@ -1,3 +1,14 @@
+# Project workflow
+
+## Branching & PR policy
+
+**Promotion stops at `dev` for now — do NOT PR to `main`.** `dev` is the integration / flash branch; `main` is a stable baseline and is not a merge target until we explicitly decide otherwise.
+
+- **Every feature or bug fix gets its own branch off a _fresh_ `dev`.** Before starting: `git checkout dev && git pull` so the branch forks from the latest `dev`.
+- **Use git worktrees for safe parallel development**, per the global `~/.claude/CLAUDE.md` — invoke the `parallel-dev` skill before the first code change (branch isolation, auto-escalation to a sibling worktree on file conflict, strict explicit-path staging, merge-back cycle). Use `smart-merge` for conflicts and `read-parallel-sessions` to see what other sessions are doing.
+- **PRs target `dev` only.** When a feature/fix is ready, open a PR from its branch into `dev`. Never open or merge a PR into `main`.
+- Carry the issue key and run the tracker close-out at PR time per the tracker-config below.
+
 <!-- BEGIN tracker-config -->
 ## Issue tracker integration
 
@@ -28,6 +39,5 @@ across all your GitHub repos).
 **Status labels:** `backlog → todo → doing → done → deployed`. One-time per repo, after
 `gh auth login`: `for l in backlog todo doing done deployed; do gh label create "$l" --force; done`.
 
-_Note: this repo has no `dev` branch — PRs will target `main` (or another branch) after the PR
-workflow confirms with you; it won't assume `main` silently._
+_PR target: **`dev`** (the integration / flash branch). `main` is **not** a PR target for now — see the Branching & PR policy at the top of this file._
 <!-- END tracker-config -->
