@@ -11,4 +11,15 @@
  */
 MenuSystem &getTireMenuSystem();
 
+/**
+ * Snap the active tire profile to the current mode's default profile (#14).
+ *
+ * Modes no longer own a temp window -- each one names a default profile (Street Settings /
+ * Track Settings -> "Default Profile") and the active profile supplies the window. Call
+ * this once at boot (after TireProfiles::begin(), before the display is built) and again
+ * whenever Current Mode changes. A manual pick in Tire Profiles overrides it until the
+ * next mode change or reboot, which is why the active slot is never persisted.
+ */
+void applyModeDefaultProfile();
+
 #endif // TIRE_MENU_H

@@ -37,11 +37,9 @@ int forceDrawAfterInit = 0;
 bool highFrequencyUpdates = false;
 bool enableThermalTemps = false;
 
-// Calculated (surface->carcass) mode defaults, story 03. Used only as a fallback in
-// Street mode / when no profile applies; in Track mode K and tau come from the active
-// tire profile (story 04).
-static const float CALC_TAU_DEFAULT_S    = 15.0f; // EMA smoothing time constant (s)
-static const float CALC_OFFSET_DEFAULT_F = 20.0f; // carcass offset K (+degrees F)
+// Calculated (surface->carcass) mode K/tau come from the active tire profile (story 04),
+// which since #14 is the single source of truth in both modes -- there is no longer a
+// mode-level fallback pair here. The seed values live in TireProfiles::seedDefaults().
 
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
@@ -127,8 +125,13 @@ static void initializeSystem();
 static void sendBootMetadata();
 static void exitSummaryAutoView();
 static void toggleSession();
+static void serviceModeProfileSnap();
 extern uint8_t getCurrentModeValue();
 extern bool getAutoSealStationary();
+
+// Last Current Mode seen by the profile snap (#14). Seeded in setup() right after the
+// boot resolve so the watcher in loop() only fires on an actual mode change.
+static uint8_t lastModeForProfile = 0;
 
 void checkForWheelsReset(){
   if (tempReader->tireSensorIsCamera[0] != wheels->fl3 ||
@@ -526,8 +529,14 @@ void setup()
   USBSerial.println("EEPROM values loaded");
 
   // Load tire profiles (story 04) or seed defaults. Runs after the menu load so the
-  // active-slot selection and profile struct region are the authority.
+  // per-mode default-profile settings are already in hand.
   TireProfiles::begin();
+
+  // Resolve the active profile from the current mode's default (#14). The active slot is
+  // never persisted, so this -- not EEPROM -- is what decides the window at boot. Must
+  // run before initializeSystem() builds the display from the profile.
+  applyModeDefaultProfile();
+  lastModeForProfile = getCurrentModeValue();
 
   // Recall the last persisted session summary (story 01) so View Summary works after a
   // reboot. Its EEPROM region sits above the profiles; the menu load never touches it.
@@ -701,6 +710,18 @@ void ToggleNightMode(){
     analogWrite(LCD_BL, bright);
 }
 
+// Snap the active tire profile whenever Current Mode changes (#14). Polled every loop --
+// including while the menu is open -- so walking Current Mode -> Track and then into Tire
+// Profiles already shows Track's default profile. A manual profile pick afterwards sticks,
+// because the mode has not changed again. The window itself is rebuilt when the menu
+// closes (applyMenuConfig -> initializeSystem), as with every other setting.
+static void serviceModeProfileSnap(){
+  uint8_t mode = getCurrentModeValue();
+  if (mode == lastModeForProfile) return;
+  lastModeForProfile = mode;
+  applyModeDefaultProfile();
+}
+
 bool menuWasActive = false;
 
 // Add a 2 s grace period so USB‐Serial stays alive before heavy work
@@ -716,6 +737,7 @@ void loop() {
   }
   int time_delta = timeDelta();
   menuHandler.loop(time_delta);
+  serviceModeProfileSnap();
   if (!menuHandler.isMenuActive()) {
     if(menuWasActive){
       menuWasActive = false;
@@ -765,12 +787,6 @@ static void initializeSystem()
   extern uint8_t getNightBrightness();
   extern uint8_t getUseThermalGradient();
   extern bool getTestEnabled();
-  extern uint8_t getStreetMin();
-  extern uint8_t getStreetIdeal();
-  extern uint8_t getStreetMax();
-  extern uint8_t getTrackMin();
-  extern uint8_t getTrackIdeal();
-  extern uint8_t getTrackMax();
   extern uint8_t getCalcDisplayMode();
   
   extern bool getShowPixelOffsets();
@@ -807,27 +823,18 @@ static void initializeSystem()
                       (unsigned long)getAlertDwellTenths() * 100UL,
                       (IMUGate::Orient)getImuOrient());
 
-  float minTemp, idealTemp, maxTemp;
-  // Track-mode K/tau come from the active tire profile (story 04); default otherwise.
-  float calcTau = CALC_TAU_DEFAULT_S;
-  float calcK   = CALC_OFFSET_DEFAULT_F;
-  if (modeVal == 0) {
-    // Street: tire profiles are inert; use the plain Street window.
-    minTemp   = getStreetMin();
-    idealTemp = getStreetIdeal();
-    maxTemp   = getStreetMax();
-  } else {
-    // Track: the active tire profile bundles window + K + tau together, so selecting a
-    // profile swaps all of them at once.
-    const TireProfile& p = TireProfiles::active();
-    minTemp   = p.windowMin;
-    idealTemp = p.windowIdeal;
-    maxTemp   = p.windowMax;
-    calcTau   = p.tauSeconds;
-    calcK     = p.offsetK;
-    USBSerial.print("Active tire profile: ");
-    USBSerial.println(p.name);
-  }
+  // Single source of truth for the tire window (#14): BOTH modes read the active tire
+  // profile, which bundles window + K + tau + baselines, so switching profile swaps all
+  // of them at once. The mode only chooses which profile is the default -- see
+  // applyModeDefaultProfile(), which snaps the active slot at boot and on mode changes.
+  const TireProfile& p = TireProfiles::active();
+  float minTemp   = p.windowMin;
+  float idealTemp = p.windowIdeal;
+  float maxTemp   = p.windowMax;
+  float calcTau   = p.tauSeconds;
+  float calcK     = p.offsetK;
+  USBSerial.print("Active tire profile: ");
+  USBSerial.println(p.name);
 
     ThermalDisplay::useGradient = getUseThermalGradient();
     ThermalDisplay::showPixelOffsets = getShowPixelOffsets();
@@ -891,39 +898,30 @@ static void initializeSystem()
 }
 
 // Emit self-describing boot metadata (story 08 / #9): firmware SHA + the active config
-// so a dump is interpretable long after capture. Mirrors initializeSystem()'s Street-vs-
-// Track window/K/tau resolution (in Track the values come from the active tire profile).
+// so a dump is interpretable long after capture. Mirrors initializeSystem()'s window/K/tau
+// resolution: since #14 both modes report the active tire profile's values.
 static void sendBootMetadata()
 {
   extern uint8_t getTemperatureScaleValue();
-  extern uint8_t getStreetMin();
-  extern uint8_t getStreetIdeal();
-  extern uint8_t getStreetMax();
   extern byte getLeftPixelOffset(int index);
   extern byte getRightPixelOffset(int index);
 
   bool track = (getCurrentModeValue() == 1);
 
+  // The active profile is the mode's default profile (or a manual override), so it is the
+  // window actually on screen in either mode.
+  const TireProfile& p = TireProfiles::active();
+
   NBPProtocol::BootMetadata m;
   m.firmwareSha = FIRMWARE_GIT_SHA;
   m.modeName    = track ? "Track" : "Street";
   m.unit        = (getTemperatureScaleValue() == 0) ? 'F' : 'C';
-  m.profileName = TireProfiles::active().name; // reported even in Street (inert there)
-
-  if (track) {
-    const TireProfile& p = TireProfiles::active();
-    m.windowMin   = p.windowMin;
-    m.windowIdeal = p.windowIdeal;
-    m.windowMax   = p.windowMax;
-    m.offsetK     = p.offsetK;
-    m.tauSeconds  = p.tauSeconds;
-  } else {
-    m.windowMin   = getStreetMin();
-    m.windowIdeal = getStreetIdeal();
-    m.windowMax   = getStreetMax();
-    m.offsetK     = (int)CALC_OFFSET_DEFAULT_F;
-    m.tauSeconds  = (int)CALC_TAU_DEFAULT_S;
-  }
+  m.profileName = p.name;
+  m.windowMin   = p.windowMin;
+  m.windowIdeal = p.windowIdeal;
+  m.windowMax   = p.windowMax;
+  m.offsetK     = p.offsetK;
+  m.tauSeconds  = p.tauSeconds;
 
   for (int i = 0; i < 4; i++) {
     m.leftOffset[i]  = getLeftPixelOffset(i);

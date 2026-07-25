@@ -18,15 +18,12 @@ static const char* tempScaleLabels[] = {"F", "C"};
 
 static uint8_t nightBrightness   = 25;
 
-// -- Street Settings --
-static uint8_t streetMin   = 40;
-static uint8_t streetIdeal = 120;
-static uint8_t streetMax   = 160;
-
-// -- Track Settings --
-static uint8_t trackMin   = 100;
-static uint8_t trackIdeal = 160;
-static uint8_t trackMax   = 180;
+// -- Per-mode default tire profile (#14) --
+// A mode no longer carries its own temp window; it names the tire profile it starts from,
+// and the profile is the single source of truth for Min/Ideal/Max (plus K/tau/baselines).
+// Both are enum indices into the profile slots: Street -> EC02 (1), Track -> ECF (0).
+static uint8_t streetProfile = 1;
+static uint8_t trackProfile  = 0;
 
 // -- Calculated display mode (story 03; Track-mode only) --
 // 0=Raw surface, 1=Calculated (EMA_tau(surface)+K carcass estimate).
@@ -120,72 +117,30 @@ static MenuValueBinding nightBrightnessBinding = {
     0
 };
 
-// Street
-static MenuValueBinding streetMinBinding = {
-    VALUE_BYTE,
-    &streetMin,
+// Per-mode default tire profile (#14). Persisted at two of the addresses freed by the
+// removed Street/Track Min/Ideal/Max bytes (6 and 8); the rest (10, 14, 16, 18) are now
+// free. The labels are the live profile slot names, so renaming a profile renames the
+// choices here too.
+static MenuValueBinding streetProfileBinding = {
+    VALUE_ENUM,
+    &streetProfile,
     nullptr,
     0,
-    255,
-    8,
-    nullptr,
-    0
-};
-
-static MenuValueBinding streetIdealBinding = {
-    VALUE_BYTE,
-    &streetIdeal,
-    nullptr,
     0,
-    255,
     6,
-    nullptr,
-    0
+    g_profileNameLabels,
+    PROFILE_COUNT
 };
 
-static MenuValueBinding streetMaxBinding = {
-    VALUE_BYTE,
-    &streetMax,
+static MenuValueBinding trackProfileBinding = {
+    VALUE_ENUM,
+    &trackProfile,
     nullptr,
     0,
-    255,
-    10,
-    nullptr,
-    0
-};
-
-// Track
-static MenuValueBinding trackMinBinding = {
-    VALUE_BYTE,
-    &trackMin,
-    nullptr,
     0,
-    255,
-    14,
-    nullptr,
-    0
-};
-
-static MenuValueBinding trackIdealBinding = {
-    VALUE_BYTE,
-    &trackIdeal,
-    nullptr,
-    0,
-    255,
-    16,
-    nullptr,
-    0
-};
-
-static MenuValueBinding trackMaxBinding = {
-    VALUE_BYTE,
-    &trackMax,
-    nullptr,
-    0,
-    255,
-    18,
-    nullptr,
-    0
+    8,
+    g_profileNameLabels,
+    PROFILE_COUNT
 };
 
 // Calculated display mode (EEPROM addr 1; free byte, magic-sentinel load makes 0 safe)
@@ -488,13 +443,15 @@ static MenuValueBinding inflationIndicatorBinding = {
     0
 };
 
-// -- Tire profiles (story 04; Track-mode only) --
-// The selector and all edit fields bind to TireProfiles globals. The selector persists
-// via its own EEPROM byte here as a convenience, but TireProfiles::begin() is the
-// authority on the active slot at boot. The window/K/tau/baseline fields edit a working
+// -- Tire profiles (story 04) --
+// The selector and all edit fields bind to TireProfiles globals. Since #14 the selector
+// is TRANSIENT (EEPROM_NO_PERSIST): the active slot is always resolved from the current
+// mode's default profile at boot and on every mode change, so persisting a "last profile"
+// would only fight that. A manual pick here still takes effect immediately and holds
+// until the next mode change or reboot. The window/K/tau/baseline fields edit a working
 // copy (g_editProfile) that "Save Profile" commits into the selected slot. EEPROM
-// addresses 112..121 sit above the profile struct region (<=111) and below the menu
-// magic (127); TireProfiles reloads the edit buffer from the slot on boot, so these
+// addresses 113..121 sit above the profile struct region (<=111) and below the menu
+// magic (255); TireProfiles reloads the edit buffer from the slot on boot, so these
 // tree-walked bytes are a harmless duplicate.
 static MenuValueBinding profileSelectBinding = {
     VALUE_ENUM,
@@ -502,7 +459,7 @@ static MenuValueBinding profileSelectBinding = {
     nullptr,
     0,
     0,
-    112,
+    EEPROM_NO_PERSIST,
     g_profileNameLabels,
     PROFILE_COUNT
 };
@@ -539,9 +496,7 @@ static MenuValueBinding profileBaseRRBinding = {
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
 static MenuItem streetSettingsMenu[] = {
-    { "Min",   MENU_VALUE,  nullptr, nullptr, 0, &streetMinBinding   },
-    { "Ideal", MENU_VALUE,  nullptr, nullptr, 0, &streetIdealBinding },
-    { "Max",   MENU_VALUE,  nullptr, nullptr, 0, &streetMaxBinding   }
+    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding }
 };
 
 // Balance summary action (defined in section 6). Opens the front/rear + left/right
@@ -551,9 +506,7 @@ static void doShowBalance();
 static void doViewSummary();
 
 static MenuItem trackSettingsMenu[] = {
-    { "Min",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMinBinding        },
-    { "Ideal",        MENU_VALUE,  nullptr,        nullptr, 0, &trackIdealBinding      },
-    { "Max",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMaxBinding        },
+    { "Default Profile", MENU_VALUE, nullptr,      nullptr, 0, &trackProfileBinding    },
     { "Display",      MENU_VALUE,  nullptr,        nullptr, 0, &calcDisplayModeBinding },
     { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
     { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 },
@@ -799,6 +752,22 @@ static void doLoad()
 {
     tireMenuSystem.loadFromEEPROM();
     TireProfiles::begin();
+    // The active slot is transient: resolve it from the mode we just loaded (#14).
+    applyModeDefaultProfile();
+}
+
+// -- Mode -> default tire profile (#14) --
+// The mode picks which profile is active; the profile is the single source of truth for
+// the temp window. Runs at boot and on every mode change, so the window always matches
+// the mode's default profile without anything being persisted per-boot.
+void applyModeDefaultProfile()
+{
+    uint8_t sel = (currentMode == 1) ? trackProfile : streetProfile;
+    if (sel >= PROFILE_COUNT) sel = 0;   // guard against a stale/garbage stored index
+    g_profileSel = sel;
+    // Keep the Tire Profiles edit buffer pointed at the slot we just adopted, so the
+    // Min/Ideal/Max/K/tau items show the profile that is actually driving the display.
+    TireProfiles::loadEditFromSelected();
 }
 
 // -- Tire-profile actions (story 04) --
@@ -887,29 +856,14 @@ bool getTestEnabled() {
     return testEnabled;
 }
 
-uint8_t getStreetMin() {
-    return streetMin;
+// Per-mode default profile (#14). The sketch does not need these -- it reads the resolved
+// active profile -- but they keep the settings readable for logging/diagnostics.
+uint8_t getStreetProfile() {
+    return streetProfile;
 }
 
-
-uint8_t getStreetIdeal() {
-    return streetIdeal;
-}
-
-uint8_t getStreetMax() {
-    return streetMax;
-}
-
-uint8_t getTrackMin() {
-    return trackMin;
-}
-
-uint8_t getTrackIdeal() {
-    return trackIdeal;
-}
-
-uint8_t getTrackMax() {
-    return trackMax;
+uint8_t getTrackProfile() {
+    return trackProfile;
 }
 
 uint8_t getCalcDisplayMode() {

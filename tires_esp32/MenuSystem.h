@@ -14,6 +14,14 @@ extern "C" {
 // 128..~172 with its own magic at 250, and the menu magic sits at EEPROM_SIZE-1 (255).
 #define EEPROM_SIZE 256
 
+// Sentinel eepromAddress for a transient binding: the value is menu-editable but is
+// never written to / read from EEPROM (the save/load tree walk skips it). Used for
+// runtime-only selections that something else derives at boot -- e.g. the active tire
+// profile, which follows the current mode's default profile (#14). Deliberately out of
+// EEPROM range so an accidental read/write would be caught rather than silently land on
+// a real byte.
+#define EEPROM_NO_PERSIST 0xFFFF
+
 // Menu item types
 typedef enum {
   MENU_ACTION,   // Executes an action when selected

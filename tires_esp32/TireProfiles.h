@@ -5,9 +5,15 @@
 
 // Tire profiles (story 04). A profile bundles all the tire-specific calibration so
 // switching tires swaps window + offset K + smoothing tau + per-corner baselines at
-// once, instead of re-tuning each by hand. Track-mode only: the sketch reads the
-// active profile to drive the window and the calculated-mode K/tau only when
-// currentMode == 1; in Street mode the profile is inert.
+// once, instead of re-tuning each by hand.
+//
+// Since #14 a profile is the single source of truth for the tire temp window in BOTH
+// modes: Street and Track no longer carry their own Min/Ideal/Max, they each name a
+// default profile (Street Settings / Track Settings -> "Default Profile") and the active
+// profile supplies the window. The active selection is transient -- it is resolved from
+// the current mode's default at boot and re-snapped on every mode change (see
+// applyModeDefaultProfile() in TireMenu), and is never persisted. Only the Track-only
+// calc features (calculated display, inflation) still gate on currentMode == 1.
 
 #define PROFILE_COUNT     3
 #define PROFILE_NAME_LEN  7   // visible characters (buffer is +1 for the null)
@@ -24,10 +30,11 @@ struct TireProfile {
 };
 
 namespace TireProfiles {
-    // Load persisted profiles + active selection from EEPROM, or seed the built-in
-    // defaults (ECF / EC02 / Custom) on first boot. Must run after EEPROM.begin().
+    // Load persisted profiles from EEPROM, or seed the built-in defaults (ECF / EC02 /
+    // Custom) on first boot. Must run after EEPROM.begin(). The active slot is NOT read
+    // back here (#14) -- the caller resolves it from the current mode's default profile.
     void begin();
-    // Persist all slots + the active selection to EEPROM.
+    // Persist all slots to EEPROM. The active selection is transient and not saved.
     void save();
 
     // Runtime accessors (the sketch uses these to drive window / K / tau).
@@ -46,7 +53,7 @@ namespace TireProfiles {
 }
 
 // Menu-facing globals (bound by TireMenu.cpp / edited by MenuRenderer's name editor).
-extern uint8_t     g_profileSel;                     // active/selected slot (0..2)
+extern uint8_t     g_profileSel;                     // active/selected slot (0..2), transient
 extern const char* g_profileNameLabels[PROFILE_COUNT]; // enum labels -> slot names
 extern TireProfile g_editProfile;                    // working copy for the menu
 
