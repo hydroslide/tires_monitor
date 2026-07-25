@@ -52,6 +52,13 @@ static bool showSegmentDeltas = false;
 static uint8_t minInflationDeltaPct = 10;
 static uint8_t minAlignmentDeltaPct = 15;
 
+// -- IMU capture gate (global; story 02) --
+static bool    imuGateEnabled       = true; // suppress reads while cornering
+static uint8_t lateralGateCentiG    = 35;   // |lateral g| threshold, centi-g (0.35 g)
+static uint8_t alertDwellTenths     = 25;   // latch dwell, tenths of a second (2.5 s)
+static uint8_t imuOrient            = 0;    // lateral-axis map: 0=Auto,1=X,2=Y,3=Z
+static const char* imuOrientLabels[] = {"Auto", "X", "Y", "Z"};
+
 
 // ----------------------------------------------------
 //  2) MenuValueBindings
@@ -365,6 +372,48 @@ static MenuValueBinding minAlignmentDeltaPctBinding = {
     0
 };
 
+// IMU capture gate settings (EEPROM 45..48; magic-sentinel load makes 0 safe)
+static MenuValueBinding imuGateEnabledBinding = {
+    VALUE_BOOL,
+    &imuGateEnabled,
+    nullptr,
+    0,
+    0,
+    45,
+    nullptr,
+    0
+};
+static MenuValueBinding lateralGateCentiGBinding = {
+    VALUE_BYTE,
+    &lateralGateCentiG,
+    nullptr,
+    10,   // 0.10 g
+    100,  // 1.00 g
+    46,
+    nullptr,
+    0
+};
+static MenuValueBinding alertDwellTenthsBinding = {
+    VALUE_BYTE,
+    &alertDwellTenths,
+    nullptr,
+    5,    // 0.5 s
+    100,  // 10 s
+    47,
+    nullptr,
+    0
+};
+static MenuValueBinding imuOrientBinding = {
+    VALUE_ENUM,
+    &imuOrient,
+    nullptr,
+    0,
+    0,
+    48,
+    imuOrientLabels,
+    4
+};
+
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
@@ -461,6 +510,13 @@ static MenuItem pixelOffsetsMenu[] = {
 
 
 
+static MenuItem imuGateMenu[] = {
+    { "Gate Enable",     MENU_VALUE, nullptr, nullptr, 0, &imuGateEnabledBinding   },
+    { "Lateral cg",      MENU_VALUE, nullptr, nullptr, 0, &lateralGateCentiGBinding },
+    { "Dwell 0.1s",      MENU_VALUE, nullptr, nullptr, 0, &alertDwellTenthsBinding  },
+    { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
+};
+
 // ----------------------------------------------------
 //  4) Save/Load Action Callbacks
 // ----------------------------------------------------
@@ -533,6 +589,14 @@ static MenuItem mainMenu[] = {
       nullptr,
       pixelOffsetsMenu,
       sizeof(pixelOffsetsMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
+      "IMU Gate",
+      MENU_SUBMENU,
+      nullptr,
+      imuGateMenu,
+      sizeof(imuGateMenu)/sizeof(MenuItem),
       nullptr
     },
     {
@@ -640,6 +704,22 @@ uint8_t getminInflationDeltaPct() {
 
 uint8_t getminAlignmentDeltaPct() {
     return minAlignmentDeltaPct;
+}
+
+bool getImuGateEnabled() {
+    return imuGateEnabled;
+}
+
+uint8_t getLateralGateCentiG() {
+    return lateralGateCentiG;
+}
+
+uint8_t getAlertDwellTenths() {
+    return alertDwellTenths;
+}
+
+uint8_t getImuOrient() {
+    return imuOrient;
 }
 
 byte getLeftPixelOffset(int index){

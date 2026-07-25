@@ -26,6 +26,14 @@ enum class ChannelType {
     FrontRightTireI,
     RearLeftTireI,
     RearRightTireI,
+    // IMU (orientation-calibrated) channels
+    AccelX,
+    AccelY,
+    AccelZ,
+    GyroX,
+    GyroY,
+    GyroZ,
+    LateralG,
     // Add additional types as needed
 };
 
@@ -35,6 +43,8 @@ enum class Unit {
     Degrees,   // Degrees
     DegreesF,
     DegreesC,
+    G,         // g (acceleration)
+    DegPerSec, // deg/s (angular rate)
     None       // No unit
 };
 
@@ -62,6 +72,11 @@ public:
                       const Wheels::TireTemps &fr,
                       const Wheels::TireTemps &rl,
                       const Wheels::TireTemps &rr, bool farenheit);
+
+    // Emit the orientation-calibrated IMU sample (accel in g, gyro in deg/s) plus
+    // the gated lateral-g value as its own UPDATEALL packet.
+    void sendIMU(float ax, float ay, float az,
+                 float gx, float gy, float gz, float lateralG);
 
 private:
     // Reference to the Stream object for communication

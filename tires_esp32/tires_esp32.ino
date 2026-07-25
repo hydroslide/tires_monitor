@@ -12,6 +12,7 @@
 #include "TempReader.h"
 #include "NBPProtocol.h"
 #include "WifiSerial.h"
+#include "IMUGate.h"
 
 // #include "MyCST816Touch.h"
 #include "CST816Touch_SWMode.h"
@@ -44,6 +45,9 @@ NBPProtocol nbp(wifiSerial);
 // Existing objects
 Wheels* wheels = nullptr;
 TempReader* tempReader = nullptr;
+
+// On-board QMI8658C IMU: lateral-g capture gate + latched over/under (story 02).
+IMUGate imuGate;
 
 // ... after initializing tft in setup() ...
 QuadrantFactory factory(tft, /*margin=*/ 5);
@@ -95,6 +99,7 @@ long timeDelta()
 static void applyMenuConfig();
 static void cleanupObjects();
 static void initializeSystem();
+extern uint8_t getCurrentModeValue();
 
 void checkForWheelsReset(){
   if (tempReader->tireSensorIsCamera[0] != wheels->fl3 ||
@@ -225,6 +230,30 @@ void setThermalMode(uint8_t _thermalMode){
     wheels->draw(true);
 }
 
+// Interim over/under source for the latch (story 02). Computes the overall
+// center-hot vote across the camera tires from the raw section temps. Stories
+// 03/04/06 replace this with the calculated, baseline-corrected verdict.
+extern byte getminInflationDeltaPct();
+static int computeInterimInflationCondition()
+{
+  int overVotes = 0, underVotes = 0;
+  float pct = getminInflationDeltaPct() / 100.0f;
+  for (int t = 0; t < TIRE_COUNT; t++) {
+    if (!tempReader->tireSensorIsCamera[t]) continue;
+    float edge = (tempReader->tireSectionTemps[t][0] +
+                  tempReader->tireSectionTemps[t][2]) / 2.0f;
+    float center = tempReader->tireSectionTemps[t][1];
+    if (edge <= 0.0f) continue;                  // skip unread/invalid frames
+    float delta = edge - center;                 // negative => center hotter
+    float minDelta = edge * pct;
+    if (delta <= -minDelta) overVotes++;         // center-hot => over-inflation
+    else if (delta >= minDelta) underVotes++;    // edges-hot => under-inflation
+  }
+  if (overVotes > underVotes) return 1;
+  if (underVotes > overVotes) return -1;
+  return 0;
+}
+
 // Normal Running Mode
 void doRunningMode(int time_delta)
 {
@@ -232,10 +261,23 @@ void doRunningMode(int time_delta)
   millisSinceLastRead += time_delta;
   if (millisSinceLastRead >= readIntervalMillis)
   {
+    long readDelta = millisSinceLastRead;
     millisSinceLastRead = 0;
 
     // Read tire temps
     tempReader->readTemps();
+
+    // Advance the IMU capture gate + latch on the read cadence (feature acts only
+    // in Track mode). Feed the interim inflation verdict and log the calibrated
+    // accel/gyro over NBP. Kept off the 1 Hz display path so loop timing is intact.
+    bool trackMode = (getCurrentModeValue() == 1);
+    imuGate.update(readDelta, trackMode);
+    imuGate.feedCondition(computeInterimInflationCondition());
+    if (!testMode && imuGate.isPresent()) {
+      nbp.sendIMU(imuGate.accelG(0), imuGate.accelG(1), imuGate.accelG(2),
+                  imuGate.gyroDps(0), imuGate.gyroDps(1), imuGate.gyroDps(2),
+                  imuGate.lateralG());
+    }
 
     updateThermalDisplays();
 
@@ -346,6 +388,13 @@ void setup()
   menuSystem.loadFromEEPROM();
   USBSerial.println("EEPROM values loaded");
 
+  // Bring up the on-board IMU and auto-calibrate orientation at rest. The car
+  // should be stationary/level at boot; a manual axis override is the fallback.
+  if (imuGate.begin(Wire))
+    USBSerial.println("QMI8658C IMU initialized + orientation calibrated");
+  else
+    USBSerial.println("QMI8658C IMU not detected; capture gate inert");
+
   UL->isActive=false;
   UR->isActive=false;
   LL->isActive=false;
@@ -437,6 +486,11 @@ static void initializeSystem()
   extern byte getminInflationDeltaPct();
   extern byte getminAlignmentDeltaPct();
 
+  extern bool getImuGateEnabled();
+  extern uint8_t getLateralGateCentiG();
+  extern uint8_t getAlertDwellTenths();
+  extern uint8_t getImuOrient();
+
 
   uint8_t modeVal = getCurrentModeValue();         // 0=Street,1=Track
   uint8_t scaleVal = getTemperatureScaleValue();   // 0=F,1=C
@@ -451,6 +505,12 @@ static void initializeSystem()
     THERMAL_MODES = 3;
   else
     THERMAL_MODES=4;
+
+  // Push IMU capture-gate settings (global; centi-g and tenths-of-a-second encodings).
+  imuGate.applyConfig(getImuGateEnabled(),
+                      getLateralGateCentiG() / 100.0f,
+                      (unsigned long)getAlertDwellTenths() * 100UL,
+                      (IMUGate::Orient)getImuOrient());
 
   float minTemp, idealTemp, maxTemp;
   if (modeVal == 0) {

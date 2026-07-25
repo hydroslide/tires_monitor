@@ -76,6 +76,19 @@ void NBPProtocol::setAllTireTemps(const Wheels::TireTemps &fl,
     sendUpdateAll();
 }
 
+void NBPProtocol::sendIMU(float ax, float ay, float az,
+                          float gx, float gy, float gz, float lateralG) {
+    clearChannels();
+    addChannel(ChannelType::AccelX, Unit::G, ax);
+    addChannel(ChannelType::AccelY, Unit::G, ay);
+    addChannel(ChannelType::AccelZ, Unit::G, az);
+    addChannel(ChannelType::GyroX, Unit::DegPerSec, gx);
+    addChannel(ChannelType::GyroY, Unit::DegPerSec, gy);
+    addChannel(ChannelType::GyroZ, Unit::DegPerSec, gz);
+    addChannel(ChannelType::LateralG, Unit::G, lateralG);
+    sendUpdateAll();
+}
+
 void NBPProtocol::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit) {
     
     clearChannels();
@@ -135,6 +148,13 @@ const char* NBPProtocol::getChannelName(ChannelType channel) {
         case ChannelType::FrontRightTireI: return "Front Right Tire I";
         case ChannelType::RearLeftTireI: return "Rear Left Tire I";
         case ChannelType::RearRightTireI: return "Rear Right Tire I";
+        case ChannelType::AccelX:        return "Accel X";
+        case ChannelType::AccelY:        return "Accel Y";
+        case ChannelType::AccelZ:        return "Accel Z";
+        case ChannelType::GyroX:         return "Gyro X";
+        case ChannelType::GyroY:         return "Gyro Y";
+        case ChannelType::GyroZ:         return "Gyro Z";
+        case ChannelType::LateralG:      return "Lateral G";
         default:                         return "";
     }
 }
@@ -147,6 +167,8 @@ const char* NBPProtocol::getUnitName(Unit unit) {
         case Unit::Degrees:  return "deg";
         case Unit::DegreesF:  return "degF";
         case Unit::DegreesC:  return "degC";
+        case Unit::G:         return "G";
+        case Unit::DegPerSec: return "deg/s";
         case Unit::None:     return "";
         default:             return "";
     }
