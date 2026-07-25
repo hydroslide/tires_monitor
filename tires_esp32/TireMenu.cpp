@@ -811,7 +811,7 @@ static void doLoadProfile()
 
 static void doNameProfile()
 {
-    // Hand off to the small-screen name editor (swipe up/down = letter, right = lock).
+    // Hand off to the small-screen name editor (swipe up/down = letter, left = lock).
     menuRenderer.beginNameEdit(g_editProfile.name, PROFILE_NAME_LEN);
 }
 

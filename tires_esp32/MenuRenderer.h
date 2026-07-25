@@ -13,7 +13,8 @@ struct MenuRenderState {
     uint8_t dropdownIndex;
     const MenuItem* dropdownItem;
     // Small-screen name entry (story 04): swipe up/down cycles the current letter,
-    // swipe right locks it and advances; finishing past the last slot commits.
+    // swipe left (the menu's confirm direction) locks it and advances to the next slot
+    // to the right; finishing past the last slot commits.
     bool nameEditing;
     // Balance summary screen (story 05): a full-screen Track-mode readout of the
     // front/rear and left/right thermal balance. Any gesture dismisses it.
@@ -53,8 +54,9 @@ public:
     void nameCycle(int dir);
     bool nameAdvance();
     void nameCancel();
-    // Move the cursor to the previous slot; retreating past the first slot cancels
-    // the whole edit (discards the working buffer, restores the prior name).
+    // Move the cursor to the previous slot (the menu's back direction, swipe right);
+    // retreating past the first slot cancels the whole edit (discards the working
+    // buffer, restores the prior name).
     void nameRetreat();
 
     // Balance summary screen (story 05). showBalance takes over the whole screen with

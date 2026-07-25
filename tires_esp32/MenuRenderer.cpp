@@ -359,7 +359,7 @@ void MenuRenderer::nameCancel() {
 void MenuRenderer::nameRetreat() {
     if (!state.nameEditing) return;
     if (namePos == 0) {
-        // Swiped left past the first slot -> cancel the whole edit (nameBuf is
+        // Backed out past the first slot -> cancel the whole edit (nameBuf is
         // discarded and nameTarget was never modified, so the prior name stands).
         nameCancel();
         return;
@@ -396,9 +396,9 @@ void MenuRenderer::renderNameEditor() {
     display.setTextSize(1);
     display.setTextColor(ST77XX_WHITE);
     display.setCursor(10, SCREEN_HEIGHT - 30);
-    display.print(F("Up/Dn: letter   L/R: move slot"));
+    display.print(F("Up/Dn: letter   Swipe L: next/save"));
     display.setCursor(10, SCREEN_HEIGHT - 16);
-    display.print(F("L@start: cancel   R@end: save"));
+    display.print(F("Swipe R: back   R@start: cancel"));
 }
 
 // --- Balance summary screen (story 05) ----------------------------------------------

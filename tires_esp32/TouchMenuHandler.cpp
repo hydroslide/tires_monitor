@@ -101,9 +101,11 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
         return;
     }
 
-    // Name-entry mode intercepts navigation: up/down cycle the current letter, right
-    // (or a tap) advances a slot (past the last slot saves & exits), left retreats a
-    // slot (swiping left past the first slot cancels), a double-click cancels. Story 04.
+    // Name-entry mode intercepts navigation: up/down cycle the current letter, left
+    // (or a tap) advances a slot (past the last slot saves & exits), right retreats a
+    // slot (swiping right past the first slot cancels), a double-click cancels. Left is
+    // the confirm swipe and right is the back swipe here so the editor matches the rest
+    // of the menu (left selects/descends, right goes back). Story 04.
     if (menuActive && rState.nameEditing) {
         switch (gesture) {
         case TouchScreenController::gesture_t::GESTURE_UP:
@@ -112,13 +114,13 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
         case TouchScreenController::gesture_t::GESTURE_DOWN:
             render.nameCycle(-1);
             break;
-        case TouchScreenController::gesture_t::GESTURE_RIGHT:
+        case TouchScreenController::gesture_t::GESTURE_LEFT:
         case TouchScreenController::gesture_t::GESTURE_TOUCH_BUTTON:
-            // next slot; past the last slot commits/saves the name and exits
+            // next slot (rightward through the name); past the last slot commits/saves
             render.nameAdvance();
             break;
-        case TouchScreenController::gesture_t::GESTURE_LEFT:
-            // previous slot; past the first slot cancels the edit
+        case TouchScreenController::gesture_t::GESTURE_RIGHT:
+            // previous slot (leftward); past the first slot backs out of the edit
             render.nameRetreat();
             break;
         case TouchScreenController::gesture_t::GESTURE_DOUBLE_CLICK:

@@ -32,8 +32,10 @@ known-good pressure (e.g. FL −3, RL −6, FR +4 at 31 psi) that defines each c
 - **Persist to EEPROM, including the active-profile selection** so the same profile
   reloads on boot — the standard settings-persistence pattern (see global
   constraints; it applies to *all* settings, not just profiles).
-- **Naming UI (small screen):** swipe up/down to cycle a letter, swipe right to lock
-  it in.
+- **Naming UI (small screen):** swipe up/down to cycle a letter, swipe **left** to lock
+  it in and move to the next slot to the right (locking past the last slot saves);
+  swipe **right** to step back a slot, and backing out past the first slot cancels.
+  Left/right follow the rest of the menu, where left confirms/descends and right goes back.
 
 ## Menu / settings
 
@@ -52,4 +54,4 @@ known-good pressure (e.g. FL −3, RL −6, FR +4 at 31 psi) that defines each c
 ## Implementation notes
 
 - Baseline encoding — signed byte vs offset-encoded (blocked on story 07e).
-- Small-screen name-entry UX (swipe up/down letters, swipe right to lock).
+- Small-screen name-entry UX (swipe up/down letters, swipe left to lock).
