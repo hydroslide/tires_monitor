@@ -632,13 +632,26 @@ static void serviceFeedback(){
   }
 }
 
-// Paint the small upper-right swipe-feedback indicator over the running display.
+// Upper-right swipe-feedback indicator geometry. The panel has rounded corners, so the
+// badge is inset FB_INSET from both edges -- hard against the corner it gets clipped and
+// is effectively invisible. Both shapes share the same center so start/end land in the
+// same spot.
+static const int FB_R      = 12;                     // recording-dot radius
+static const int FB_INSET  = 14;                     // clearance from the rounded corner
+static const int FB_CX     = 280 - FB_INSET - FB_R;  // 254
+static const int FB_CY     = FB_INSET + FB_R;        // 26
+
+// Paint the upper-right swipe-feedback indicator over the running display.
 static void drawSessionFeedback(){
   if (fbState == FB_START){
-    tft.fillCircle(271, 9, 6, ST77XX_RED);          // recording dot
+    tft.fillCircle(FB_CX, FB_CY, FB_R, ST77XX_RED);  // recording dot
   } else if (fbState == FB_END){
-    tft.fillRect(264, 3, 13, 13, ST77XX_BLACK);     // stop square
-    tft.drawRect(264, 3, 13, 13, ST77XX_WHITE);     // outline so it reads on black
+    const int s = FB_R * 2;                          // stop square, same footprint
+    const int x = FB_CX - FB_R, y = FB_CY - FB_R;
+    tft.fillRect(x, y, s, s, ST77XX_BLACK);
+    // 2 px outline so it reads on black at a glance
+    tft.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
+    tft.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
   }
 }
 
