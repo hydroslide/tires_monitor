@@ -95,6 +95,11 @@ private:
     uint8_t menuVisibleRows() const;
     void drawBooleanValue(bool val, int16_t x, int16_t y);
     void drawEnumValue(uint8_t enumIndex, const MenuValueBinding *binding, int16_t x, int16_t y);
+    // Draw `s` at (x,y) with the current font/size/color, clipped to `maxW` pixels.
+    // If the string is wider than maxW it is trimmed and given a trailing ".."
+    // marker so it never wraps onto (or overlaps) the next row. Strings that
+    // already fit are drawn unchanged.
+    void drawClipped(const char *s, int16_t x, int16_t y, int16_t maxW);
     void renderDropdown(const MenuItem &item);
     void renderNameEditor();
     void renderBalanceView();
@@ -114,6 +119,9 @@ private:
     static const int16_t MENU_ITEM_HEIGHT = 20;
     static const int16_t MENU_LEFT_MARGIN = 10;
     static const int16_t MENU_TOP_MARGIN = 30;
+    // Right-edge breathing room for value-column text so it clears the screen
+    // edge (and the overflow scrollbar) instead of running off it.
+    static const int16_t VALUE_RIGHT_PAD = 6;
 
     static const int16_t DROPDOWN_ITEM_HEIGHT = 18;
     static const int16_t DROPDOWN_WIDTH = 120;
