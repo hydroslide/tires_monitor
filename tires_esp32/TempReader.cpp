@@ -70,13 +70,24 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
     int colsInRange = COLS - (leftOffset+rightOffset);
 
-    // For each section 0,1,2:
-    for (int section = 0; section < 3; ++section) {
-        // Calculate column range: [startCol, endCol)
-        int startCol = ((section * colsInRange) / 3)+leftOffset;         // section*32/3
-        int   endCol = (((section + 1) * colsInRange) / 3)+leftOffset;   // (section+1)*32/3
+    // Distribute the remainder of an uneven column count symmetrically so the two
+    // shoulder bands (left/right) stay equal width and only the center absorbs the
+    // odd column. Integer division alone made the left band systematically narrowest
+    // (e.g. 6/7/7 for 20 cols), which biased the alignment (O-I) metric.
+    int base = colsInRange / 3;
+    int rem  = colsInRange % 3;
+    int bandWidths[3] = { base, base, base };
+    if (rem == 1) {
+        bandWidths[1] += 1;             // give the odd column to the center band
+    } else if (rem == 2) {
+        bandWidths[0] += 1;             // keep the two shoulders symmetric
+        bandWidths[2] += 1;
+    }
 
-        sectionCols = endCol - startCol;             // e.g. 10, 11, or 11
+    // For each section 0,1,2:
+    int startCol = leftOffset;
+    for (int section = 0; section < 3; ++section) {
+        sectionCols = bandWidths[section];
 
         // Gather all values in this section into temp[]
         count = 0;
@@ -89,6 +100,8 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
         // Compute median on the collected values
         medians_out[section] = computeMedianFloat(temp, count);
+
+        startCol += sectionCols;
     }
 }
 
@@ -143,7 +156,7 @@ bool TempReader::newTempIsInvalid(int i, int j){
 
   // 4) Normal step check vs last accepted
   if (fabsf(curr - last) > MAX_STEP){
-    for (int tj; tj<3; tj++){
+    for (int tj = 0; tj<3; tj++){
         if (tj!=j){
             float tjCurr = tireSectionTemps[i][tj];
             if (tjCurr!=0.0 && fabsf(curr - tjCurr) <= MAX_STEP)
@@ -170,18 +183,22 @@ void TempReader::readTemps(){
                 if(readFrame(i)){
                     fillTireFrame(i);
                     getSectionMedians(frame, true, tireSectionTemps[i], leftPixelOffset[i], rightPixelOffset[i]);
+                    // Convert ALL bands to the working unit FIRST, then validate. The
+                    // validity filter's cross-band "rescue" compares a band against its
+                    // siblings, so every band must already be in the same unit before any
+                    // validation runs — otherwise an already-°F band was compared against
+                    // sibling bands still in °C (~85-unit gap at operating temp), causing
+                    // asymmetric band rejection and latched stale values during warm-up.
+                    if (useFarenheit){
+                        for(int j=0; j<3; j++)
+                            tireSectionTemps[i][j] = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
+                    }
                     for(int j=0; j<3; j++){
-                        float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
-                        if (useFarenheit)
-                        tireSectionTemps[i][j] = valueF;
                         if (newTempIsInvalid(i,j))
                             tireSectionTemps[i][j] = lastTireSectionTemps[i][j];
                         else
                             lastTireSectionTemps[i][j] = tireSectionTemps[i][j];
-                        //  USBSerial.print("|");
-                        //  USBSerial.print(valueF);
-                        //     USBSerial.print("F");
-                    }    
+                    }
                     // USBSerial.println("|");            
                 }
             }else{

@@ -75,12 +75,20 @@ bool ThreeSectionTire::anySectionColorChanged(){
       if (sectionFillColors[i] != lastSectionFillColors[i])
         return true;
     }
+    return false;
 }
 
 void ThreeSectionTire::draw(bool force, bool textOnly) {
 
+  // initialize() is a virtual override that the base Tire constructor cannot reach
+  // (the vtable is still Tire's during base construction), so run it once here on the
+  // first draw to seed lastDeltaColors[]/currentDeltaColors[]/lastSectionFillColors[].
+  if (!deltaColorsInitialized) {
+    initialize();
+    deltaColorsInitialized = true;
+  }
 
-    // if (drawsSinceForce>= forceInterval){      
+    // if (drawsSinceForce>= forceInterval){
     //   force=true;
     // }
     // drawsSinceForce++;
@@ -93,7 +101,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     int lastTemp = lastTemps[i];
     int temperature = sectionTemps[i];
     if (temperature > 300 || temperature < -30)
-      return; // F
+      continue; // out-of-range band: skip just this section, keep drawing the rest
     if (lastTemp != temperature) {
       changed = true;
       sectionChanged[i]=true;

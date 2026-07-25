@@ -2,6 +2,15 @@
 
 extern HWCDC USBSerial;
 
+// "Settings written" sentinel. A VALUE_BYTE could never be persisted as 0 (nor a
+// signed value offset-encoded to 0) because loading skipped any stored byte of 0 —
+// it was overloaded to mean "erased / never written". Instead of guessing per byte,
+// we stamp a magic marker once saveToEEPROM() has run. On load: if the marker is
+// absent (never saved by this firmware), keep the compiled-in defaults; if present,
+// every byte 0..255 is a legitimate stored value and is loaded verbatim.
+static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 49; above all binding addrs
+static const uint8_t  SETTINGS_MAGIC      = 0xA5;
+
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
 static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count);
@@ -223,18 +232,19 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
       MenuValueBinding* b = item->binding;
       uint16_t addr = b->eepromAddress;
       switch (b->valueType) {
-        case VALUE_BYTE:
-          if (EEPROM.read(addr) > 0 && EEPROM.read(addr) < 255){            
-            *(uint8_t*)b->valuePtr = EEPROM.read(addr);
-            
-            USBSerial.print(item->title);
-            USBSerial.print(": ");
-            USBSerial.print((String)*(uint8_t*)b->valuePtr);
-            USBSerial.print(" read from: ");
-            USBSerial.println((String)addr);
-            itemsLoaded++;
-          }
+        case VALUE_BYTE: {
+          // The caller only reaches the helper once the "written" sentinel is present,
+          // so any stored byte (including 0) is a real value — load it verbatim.
+          *(uint8_t*)b->valuePtr = EEPROM.read(addr);
+
+          USBSerial.print(item->title);
+          USBSerial.print(": ");
+          USBSerial.print((String)*(uint8_t*)b->valuePtr);
+          USBSerial.print(" read from: ");
+          USBSerial.println((String)addr);
+          itemsLoaded++;
           break;
+        }
         case VALUE_BOOL:
           *(bool*)b->valuePtr = EEPROM.read(addr);
           break;
@@ -263,6 +273,7 @@ void MenuSystem::saveToEEPROM() {
   // The root is always at stackDepth=0
   const MenuContext& rootCtx = menuStack[0];
   saveMenuToEEPROMHelper(rootCtx.menu, rootCtx.count);
+  EEPROM.write(SETTINGS_MAGIC_ADDR, SETTINGS_MAGIC); // mark settings as written
   EEPROM.commit();
   USBSerial.print(String(itemsSaved));
   USBSerial.println(" items saved into EEPROM");
@@ -273,6 +284,12 @@ void MenuSystem::saveToEEPROM() {
 void MenuSystem::loadFromEEPROM() {
   const MenuContext& rootCtx = menuStack[0];
   itemsLoaded=0;
+  // No saved settings by this firmware yet: keep compiled-in defaults rather than
+  // pulling in erased/garbage EEPROM contents.
+  if (EEPROM.read(SETTINGS_MAGIC_ADDR) != SETTINGS_MAGIC) {
+    USBSerial.println("No saved settings found; using defaults");
+    return;
+  }
   loadMenuFromEEPROMHelper(rootCtx.menu, rootCtx.count);
   USBSerial.print(String(itemsLoaded));
   USBSerial.println(" items loaded from EEPROM");

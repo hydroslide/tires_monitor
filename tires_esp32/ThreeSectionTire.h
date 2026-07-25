@@ -69,6 +69,7 @@ private:
     
     
     bool initialized = false;
+    bool deltaColorsInitialized = false;
     bool crossedThreshold = true;
     bool shouldResetThreshold = false;
     int forceInterval = 5;

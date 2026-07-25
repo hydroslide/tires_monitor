@@ -40,28 +40,32 @@ void NBPProtocol::setAllTireTemps(const Wheels::TireTemps &fl,
                       const Wheels::TireTemps &rr, bool farenheit){
     clearChannels();
     Unit tempUnit = (farenheit)? Unit::DegreesF:Unit::DegreesC;
-    if (fl.values[1] == 0)
+    // Use the explicit section count to decide single- vs three-channel emission.
+    // Previously a value of 0 in the middle band was overloaded as "single sensor",
+    // so a legitimate 0 (or a startup-rejected band) silently changed the channel set
+    // mid-file — a parsing hazard for the logged dumps.
+    if (fl.count < 3)
         addChannel(ChannelType::FrontLeftTire, tempUnit, fl.values[0]);
     else{
         addChannel(ChannelType::FrontLeftTireO, tempUnit, fl.values[0]);
         addChannel(ChannelType::FrontLeftTireC, tempUnit, fl.values[1]);
         addChannel(ChannelType::FrontLeftTireI, tempUnit, fl.values[2]);
     }
-    if (fr.values[1] == 0)
+    if (fr.count < 3)
         addChannel(ChannelType::FrontRightTire, tempUnit, fr.values[0]);
     else{
         addChannel(ChannelType::FrontRightTireI, tempUnit, fr.values[0]);
         addChannel(ChannelType::FrontRightTireC, tempUnit, fr.values[1]);
         addChannel(ChannelType::FrontRightTireO, tempUnit, fr.values[2]);
     }
-    if (rl.values[1] == 0)
+    if (rl.count < 3)
         addChannel(ChannelType::RearLeftTire, tempUnit, rl.values[0]);
     else{
         addChannel(ChannelType::RearLeftTireO, tempUnit, rl.values[0]);
         addChannel(ChannelType::RearLeftTireC, tempUnit, rl.values[1]);
         addChannel(ChannelType::RearLeftTireI, tempUnit, rl.values[2]);
     }
-    if (rr.values[1] == 0)
+    if (rr.count < 3)
         addChannel(ChannelType::RearRightTire, tempUnit, rr.values[0]);
     else{
         addChannel(ChannelType::RearRightTireI, tempUnit, rr.values[0]);
