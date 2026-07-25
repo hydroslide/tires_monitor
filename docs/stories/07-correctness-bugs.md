@@ -5,6 +5,8 @@
 - **Status:** draft — not filed
 
 ## Summary
+
+> **Not Track-gated** — correctness fixes apply in all modes (Street and Track).
 A cluster of correctness bugs verified in the firmware while reading it. Two
 matter for the data/calibration work and should lead; the rest are cleanups.
 Decide during review whether to file as one tracking issue with a checklist or

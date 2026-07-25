@@ -38,6 +38,7 @@ mechanism-specific fix, not a heuristic.
 - Capture-gate enable/disable.
 
 ## Acceptance criteria
+- [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
 - [ ] No inflation/segment accumulation while |lateral g| > threshold.
 - [ ] Alert fires only after the dwell time in-condition, and latches until clear.
 - [ ] Orientation calibration correctly maps the box's axes to lateral/longitudinal.

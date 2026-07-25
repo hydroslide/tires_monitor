@@ -8,6 +8,11 @@ at a time, tweak each, *then* create the real GitHub issues in `hydroslide/tires
 Nothing is filed until reviewed. GitHub Issues isn't configured as this repo's
 tracker yet — the first filing pass should set that up (labels/states) first.
 
+## Global constraints (apply to every story)
+
+- **Track-mode only.** Every feature here is enabled only in the menu's **Track** mode (`currentMode == 1`, via `getCurrentModeValue()`); in **Street** mode it stays inert / hidden. Track mode is the master switch for the whole redesign. (This is the Street/Track `currentMode`, *not* the thermal `thermalMode`.) Excludes **07** (bug fixes apply in all modes) and the raw-logging half of **08**.
+- **UI/UX latitude.** Redesign menu UI/UX as needed, and fix wonky / broken / buggy behavior found along the way — note each such fix in the relevant issue (or file a new one).
+
 ## The slate
 
 | File | Story | Design § | Type |

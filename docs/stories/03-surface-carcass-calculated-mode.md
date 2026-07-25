@@ -37,6 +37,7 @@ briefly flashes "ideal" on transient spikes. Fixed with an offset + smoothing.
   τ = 15 s, K = +20 °F.
 
 ## Acceptance criteria
+- [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
 - [ ] Calculated value = EMA_τ(surface) + K, using the active profile's τ/K.
 - [ ] Raw mode shows unsmoothed surface.
 - [ ] Raw is always logged regardless of display mode.

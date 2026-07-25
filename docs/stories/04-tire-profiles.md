@@ -34,6 +34,7 @@ known-good pressure (e.g. FL −3, RL −6, FR +4 at 31 psi) that defines each c
 - Create / name / delete profile.
 
 ## Acceptance criteria
+- [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
 - [ ] Selecting a profile swaps window, K, τ, and baselines together.
 - [ ] Profiles persist across power cycles.
 - [ ] Signed per-corner baselines store and load correctly (needs story 07e).

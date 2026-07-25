@@ -21,6 +21,7 @@ Sign convention used throughout (matches `ThreeSectionTire.cpp`):
 
 ## 2. Executive summary
 
+- **Everything new is gated to "Track" mode.** The whole redesign activates only when the menu mode is **Track** (`currentMode == 1`); in **Street** mode the new capture, gating, alerts, summary, and calculated-display behavior stay inert and their menu items hidden, so the everyday street display is unchanged.
 - **The spread measures LOAD, not pressure.** Under cornering load the left-tire spread balloons to ~−18/−19 °F center-hot; on straights it sits near −3/−6 °F. The verdict tracks how hard the tire is working, not how much air is in it.
 - **The OVER pin is a mid-corner body-roll geometry artifact.** As the car rolls and steers, the camera's crop bleeds onto cooler sidewall, manufacturing center-hot that scales with lateral g. It is *opposite* to real load physics (a loaded outside tire should read outer-shoulder-hot).
 - **The metric is pressure-blind.** Raising hot pressure 28.5 → 31 psi — a change the driver clearly felt (mushy → good) — moved the spread by **≤0.5 °F**.
@@ -120,6 +121,12 @@ The classic Inner/Center/Outer matrix is confirmed valid ([JOES Racing](https://
 ---
 
 ## 5. Functional design
+
+### 5.0 Global constraints (apply to every feature below)
+
+**Track-mode gating.** Every feature in this section is enabled **only in the menu's "Track" mode** (`currentMode == 1`, read via `getCurrentModeValue()`; the other mode is "Street"). In Street mode the new behavior is inert and its menu items hidden or disabled, so the everyday street display is unchanged. **Track mode is the single master switch for this redesign.** (This is the Street/Track `currentMode` — distinct from the thermal-display `thermalMode`, which is a separate setting.)
+
+**UI/UX latitude.** The hand-built menu, touch handling, and display have rough edges. The implementer has explicit latitude to redesign menu UI/UX where it serves these features and to fix wonky, broken, or buggy behavior found along the way — record any such fix in the relevant issue (or file a new one) so it stays tracked.
 
 ### 5.1 (a) Inflation verdict — demoted
 

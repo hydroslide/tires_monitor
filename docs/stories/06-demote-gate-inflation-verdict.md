@@ -26,6 +26,7 @@ segment-delta indicator is already a menu toggle; this story finishes the demoti
 - (If kept) hint display style — between-session summary line vs live.
 
 ## Acceptance criteria
+- [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
 - [ ] Indicator is off on a fresh config.
 - [ ] When on, the verdict is only produced from straight-line (captured) frames.
 - [ ] Baseline-corrected before classification.

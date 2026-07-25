@@ -30,6 +30,7 @@ smoothed/calculated working temp, not raw spiky surface.
 - Live front/rear bias arrow: on/off.
 
 ## Acceptance criteria
+- [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
 - [ ] F/R and L/R computed from the calculated working temp.
 - [ ] Each shown as a pair plus the delta, with a plain-language bias hint.
 - [ ] RR excluded from the averages.

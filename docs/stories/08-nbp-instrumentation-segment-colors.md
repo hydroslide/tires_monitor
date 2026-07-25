@@ -31,6 +31,7 @@ a log is interpretable months later (§3.3).
 - Instrumentation verbosity (minimal / full) — optional, to keep the stream lean.
 
 ## Acceptance criteria
+- [ ] Track-only channels (verdict / colors) follow Track mode; raw median / temp logging stays on in all modes.
 - [ ] New per-corner Delta/Threshold/Verdict channels present in the dump.
 - [ ] Per-segment colors emitted and directly renderable.
 - [ ] Boot metadata (offsets, thresholds, profile, ambient, firmware SHA) emitted.
