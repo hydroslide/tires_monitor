@@ -102,7 +102,8 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     }
 
     // Name-entry mode intercepts navigation: up/down cycle the current letter, right
-    // (or a tap) locks it and advances, a double-click cancels. Story 04.
+    // (or a tap) advances a slot (past the last slot saves & exits), left retreats a
+    // slot (swiping left past the first slot cancels), a double-click cancels. Story 04.
     if (menuActive && rState.nameEditing) {
         switch (gesture) {
         case TouchScreenController::gesture_t::GESTURE_UP:
@@ -112,9 +113,13 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
             render.nameCycle(-1);
             break;
         case TouchScreenController::gesture_t::GESTURE_RIGHT:
-        case TouchScreenController::gesture_t::GESTURE_LEFT:
         case TouchScreenController::gesture_t::GESTURE_TOUCH_BUTTON:
+            // next slot; past the last slot commits/saves the name and exits
             render.nameAdvance();
+            break;
+        case TouchScreenController::gesture_t::GESTURE_LEFT:
+            // previous slot; past the first slot cancels the edit
+            render.nameRetreat();
             break;
         case TouchScreenController::gesture_t::GESTURE_DOUBLE_CLICK:
         case TouchScreenController::gesture_t::GESTURE_LONG_PRESS:
