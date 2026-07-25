@@ -41,8 +41,9 @@ public:
     void dropdownDown();
     void selectDropdownValue();
 
-    // 1) New status message setter
-    void setStatusMessage(const char* msg);
+    // 1) New status message setter. Renders in the reserved bottom strip (see
+    // drawStatusStrip) for `ms` milliseconds, then auto-clears.
+    void setStatusMessage(const char* msg, uint16_t ms = 2000);
 
     // Name-entry mode (story 04). beginNameEdit copies the target string into the
     // working buffer; nameCycle steps the current letter; nameAdvance locks it and
@@ -52,6 +53,9 @@ public:
     void nameCycle(int dir);
     bool nameAdvance();
     void nameCancel();
+    // Move the cursor to the previous slot; retreating past the first slot cancels
+    // the whole edit (discards the working buffer, restores the prior name).
+    void nameRetreat();
 
     // Balance summary screen (story 05). showBalance takes over the whole screen with
     // the front/rear + left/right readout; exitBalance dismisses it.
@@ -71,6 +75,9 @@ private:
 
     byte textSize=2;
 
+    // First visible item index — the menu list scrolls so the selection stays visible.
+    int16_t menuScrollOffset = 0;
+
     unsigned long messageSetMillis;
     uint16_t messageDurationMs;
 
@@ -80,6 +87,10 @@ private:
 
     // Helper methods
     void drawMenuItem(const MenuItem &item, uint8_t index, bool selected);
+    // Draws the reserved status strip at the bottom (separator + any active message).
+    void drawStatusStrip();
+    // Number of menu rows that fit above the reserved status strip.
+    uint8_t menuVisibleRows() const;
     void drawBooleanValue(bool val, int16_t x, int16_t y);
     void drawEnumValue(uint8_t enumIndex, const MenuValueBinding *binding, int16_t x, int16_t y);
     void renderDropdown(const MenuItem &item);
@@ -95,8 +106,9 @@ private:
     char    nameBuf[NAME_EDIT_MAX + 1];
 
     // Layout constants
-    static const int16_t SCREEN_WIDTH = 280; 
+    static const int16_t SCREEN_WIDTH = 280;
     static const int16_t SCREEN_HEIGHT = 240;
+    static const int16_t STATUS_STRIP_HEIGHT = 22; // reserved bottom strip for status messages
     static const int16_t MENU_ITEM_HEIGHT = 20;
     static const int16_t MENU_LEFT_MARGIN = 10;
     static const int16_t MENU_TOP_MARGIN = 30;

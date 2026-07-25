@@ -56,10 +56,39 @@ void MenuRenderer::render() {
     uint8_t itemCount = menu.getCurrentMenuCount();
     uint8_t selectedIndex = menu.getCurrentSelectedIndex();
 
-    // Render menu items
-    for (uint8_t i = 0; i < itemCount; i++) {
-        bool isSelected = (i == selectedIndex);
-        drawMenuItem(items[i], i, isSelected);
+    // Scroll the list so the selection stays visible above the reserved status strip.
+    uint8_t visibleRows = menuVisibleRows();
+    if (itemCount <= visibleRows) {
+        menuScrollOffset = 0;
+    } else {
+        if (selectedIndex < menuScrollOffset)
+            menuScrollOffset = selectedIndex;
+        else if (selectedIndex >= menuScrollOffset + visibleRows)
+            menuScrollOffset = selectedIndex - visibleRows + 1;
+        int16_t maxOffset = (int16_t)itemCount - visibleRows;
+        if (menuScrollOffset > maxOffset) menuScrollOffset = maxOffset;
+        if (menuScrollOffset < 0) menuScrollOffset = 0;
+    }
+
+    // Render only the visible window; drawMenuItem positions by on-screen row.
+    uint8_t firstItem = (uint8_t)menuScrollOffset;
+    uint8_t lastItem  = firstItem + visibleRows;
+    if (lastItem > itemCount) lastItem = itemCount;
+    for (uint8_t i = firstItem; i < lastItem; i++) {
+        drawMenuItem(items[i], (uint8_t)(i - firstItem), (i == selectedIndex));
+    }
+
+    // Subtle scrollbar on the right edge when the list overflows the window.
+    if (itemCount > visibleRows) {
+        int16_t trackX  = SCREEN_WIDTH - 4;
+        int16_t trackTop = MENU_TOP_MARGIN;
+        int16_t trackH  = visibleRows * MENU_ITEM_HEIGHT;
+        int16_t thumbH  = trackH * visibleRows / itemCount;
+        if (thumbH < 8) thumbH = 8;
+        int16_t denom   = (int16_t)itemCount - visibleRows;
+        int16_t thumbY  = trackTop + (denom > 0 ? (trackH - thumbH) * menuScrollOffset / denom : 0);
+        display.fillRect(trackX, trackTop, 3, trackH, 0x2104); // dark track
+        display.fillRect(trackX, thumbY, 3, thumbH, 0x7BEF);   // gray thumb
     }
 
     // If a dropdown is open, draw the overlay
@@ -67,31 +96,44 @@ void MenuRenderer::render() {
         renderDropdown(*state.dropdownItem);
     }
 
-
-
-    // 3) Draw the status message (if any)
-    if (statusMessage[0] != '\0') {
-        if (millis() - messageSetMillis >= messageDurationMs) {
-            statusMessage[0] = '\\0'; // clear the message
-        } else {
-            // Example: draw near bottom-left
-            display.setCursor(10, SCREEN_HEIGHT - 20);
-            display.setTextColor(ST77XX_WHITE);
-            display.setTextSize(textSize);
-            display.print(statusMessage);
-        }
-    }
+    // Reserved bottom strip for transient status messages ("Saved", etc.).
+    drawStatusStrip();
 }
 
-void MenuRenderer::setStatusMessage(const char* msg) {
+void MenuRenderer::setStatusMessage(const char* msg, uint16_t ms) {
     if (!msg) {
-        statusMessage[0] = '\\0';
+        statusMessage[0] = '\0';
         return;
     }
     strncpy(statusMessage, msg, STATUS_MSG_LEN);
-    statusMessage[STATUS_MSG_LEN] = '\\0';
+    statusMessage[STATUS_MSG_LEN] = '\0';
     messageSetMillis = millis();
-    messageDurationMs = 2000;//durationMs;
+    messageDurationMs = ms;
+}
+
+uint8_t MenuRenderer::menuVisibleRows() const {
+    int16_t listBottom = SCREEN_HEIGHT - STATUS_STRIP_HEIGHT;
+    int16_t avail = listBottom - MENU_TOP_MARGIN;
+    if (avail < MENU_ITEM_HEIGHT) return 1;
+    return (uint8_t)(avail / MENU_ITEM_HEIGHT);
+}
+
+// Reserved strip along the bottom for transient status text. Always draws its
+// separator so the layout is stable whether or not a message is showing.
+void MenuRenderer::drawStatusStrip() {
+    int16_t stripTop = SCREEN_HEIGHT - STATUS_STRIP_HEIGHT;
+    display.drawFastHLine(0, stripTop, SCREEN_WIDTH, 0x7BEF);
+
+    if (statusMessage[0] == '\0') return;
+    if (millis() - messageSetMillis >= messageDurationMs) {
+        statusMessage[0] = '\0'; // timed out -> clear
+        return;
+    }
+    display.setFont(nullptr);
+    display.setTextSize(2);
+    display.setTextColor(ST77XX_WHITE);
+    display.setCursor(6, stripTop + 4);
+    display.print(statusMessage);
 }
 
 
@@ -314,6 +356,17 @@ void MenuRenderer::nameCancel() {
     nameTarget = nullptr;
 }
 
+void MenuRenderer::nameRetreat() {
+    if (!state.nameEditing) return;
+    if (namePos == 0) {
+        // Swiped left past the first slot -> cancel the whole edit (nameBuf is
+        // discarded and nameTarget was never modified, so the prior name stands).
+        nameCancel();
+        return;
+    }
+    namePos--;
+}
+
 void MenuRenderer::renderNameEditor() {
     display.setFont(nullptr);
     display.setTextColor(ST77XX_WHITE);
@@ -342,8 +395,10 @@ void MenuRenderer::renderNameEditor() {
 
     display.setTextSize(1);
     display.setTextColor(ST77XX_WHITE);
-    display.setCursor(10, SCREEN_HEIGHT - 24);
-    display.print(F("Up/Dn: letter   Right: lock/next"));
+    display.setCursor(10, SCREEN_HEIGHT - 30);
+    display.print(F("Up/Dn: letter   L/R: move slot"));
+    display.setCursor(10, SCREEN_HEIGHT - 16);
+    display.print(F("L@start: cancel   R@end: save"));
 }
 
 // --- Balance summary screen (story 05) ----------------------------------------------
