@@ -58,6 +58,17 @@ public:
     byte minInflationDeltaPct;
     byte minAlignmentDeltaPct;
 
+    // Instrumentation getters (story 08 / issue #9). Expose the per-band colors the
+    // display actually computed so the NBP stream can ship them as hex for the renderer
+    // without re-deriving the classifier. fill = temp/window band color; delta =
+    // over/under/alignment band color. Both are RGB565.
+    uint16_t sectionFillColor(int i) const {
+        return (i >= 0 && i < 3) ? sectionFillColors[i] : 0;
+    }
+    uint16_t sectionDeltaColor(int i) const {
+        return (i >= 0 && i < 3) ? currentDeltaColors[i] : 0;
+    }
+
 
 private:
 

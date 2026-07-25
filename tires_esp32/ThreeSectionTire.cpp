@@ -136,13 +136,18 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     }
 
      
-    if (showSegmentDeltas){
-      int outer = 2; 
+    // Segment-delta classification (story 08 / issue #9): compute the per-band delta
+    // color unconditionally so the NBP instrumentation stream can ship the real,
+    // displayed over/under/alignment color for the renderer even when the on-screen
+    // overlay toggle is off. Only the painting of the delta rects stays gated by
+    // showSegmentDeltas below.
+    {
+      int outer = 2;
       int inner = 0;
       if (tireIndex == 0 || tireIndex == 2){
         outer = 0;
         inner = 2;
-      }      
+      }
       int center = 1;
       float avgEdge = (float)(sectionTemps[outer]+sectionTemps[inner]) / 2.0f;
       float delta = avgEdge-sectionTemps[center]; // First measure for inflation delta
@@ -174,18 +179,20 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
           currentDeltaColors[inner] = normalDeltaColor;
         }
       }
-      for (int i = 0; i < 3; i++) {
-        if (rectsDrawn || currentDeltaColors[i] != lastDeltaColors[i]){
-          lastDeltaColors[i] = currentDeltaColors[i];
-          int bx = x + i * bandW;
-          int bw = bandW; 
-          int bandH = height/8;
-          int startY = (y+height) - (bandH *2);
-          tft.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
-          //tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+      if (showSegmentDeltas){
+        for (int i = 0; i < 3; i++) {
+          if (rectsDrawn || currentDeltaColors[i] != lastDeltaColors[i]){
+            lastDeltaColors[i] = currentDeltaColors[i];
+            int bx = x + i * bandW;
+            int bw = bandW;
+            int bandH = height/8;
+            int startY = (y+height) - (bandH *2);
+            tft.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
+            //tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+            //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+          }
         }
-      }       
+      }
     }
   
 

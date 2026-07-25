@@ -15,6 +15,7 @@
 #include "IMUGate.h"
 #include "TireProfiles.h"
 #include "SessionManager.h"
+#include "Version.h"
 
 // #include "MyCST816Touch.h"
 #include "CST816Touch_SWMode.h"
@@ -123,6 +124,7 @@ long timeDelta()
 static void applyMenuConfig();
 static void cleanupObjects();
 static void initializeSystem();
+static void sendBootMetadata();
 static void exitSummaryAutoView();
 static void toggleSession();
 extern uint8_t getCurrentModeValue();
@@ -414,6 +416,44 @@ void doRunningMode(int time_delta)
       else
         wheels->draw();
 
+      // Story 08 (#9): emit the device's own verdict + per-segment colors so the
+      // downstream renderer applies them directly with no re-derivation. Track-mode
+      // only -- the raw/active temp channel sets above stay on in all modes. Runs after
+      // draw() so the per-band colors are exactly the ones just painted. Delta is the
+      // baseline-corrected edge-vs-center spread (story 06 frame); a center-hot spread
+      // beyond Threshold votes OVER (+1), edge-hot votes UNDER (-1); Overall is the
+      // latched IMU state.
+      if (!testMode && trackMode) {
+        float   insDelta[TIRE_COUNT]  = {0};
+        float   insThresh[TIRE_COUNT] = {0};
+        int8_t  insVerdict[TIRE_COUNT] = {0};
+        bool    insCam[TIRE_COUNT];
+        uint16_t fillCols[TIRE_COUNT][3]  = {{0}};
+        uint16_t deltaCols[TIRE_COUNT][3] = {{0}};
+        float pct = getminInflationDeltaPct() / 100.0f;
+        for (int c = 0; c < TIRE_COUNT; c++) {
+          insCam[c] = tempReader->tireSensorIsCamera[c];
+          if (!insCam[c]) continue;
+          float edge = (tempReader->tireSectionTemps[c][0] +
+                        tempReader->tireSectionTemps[c][2]) / 2.0f;
+          float center = tempReader->tireSectionTemps[c][1];
+          float d   = edge - center - (float)TireProfiles::baselineF(c);
+          float thr = edge * pct;
+          insDelta[c]  = d;
+          insThresh[c] = thr;
+          if (edge > 0.0f) {                       // skip unread/invalid frames
+            if (d <= -thr)      insVerdict[c] = 1;  // center-hot => over-inflation
+            else if (d >= thr)  insVerdict[c] = -1; // edges-hot  => under-inflation
+          }
+          wheels->cornerColors(c, fillCols[c], deltaCols[c]);
+        }
+        int8_t overall = (imuGate.alertState() == IMUGate::ALERT_OVER)  ?  1
+                       : (imuGate.alertState() == IMUGate::ALERT_UNDER) ? -1 : 0;
+        nbp.sendInstrumentation(insDelta, insThresh, insVerdict, overall,
+                                insCam, fillCols, deltaCols,
+                                (wheels->getTempUnit() == 'F'));
+      }
+
           // WifiSerial
       wifiSerial.loop();
     }
@@ -507,6 +547,11 @@ void setup()
 
   // Initialize system objects
   initializeSystem();
+
+  // Story 08 (#9): emit the self-describing boot metadata once, after the active config
+  // (profile / window / K / tau / crop offsets) is resolved, so a log is interpretable
+  // months later without external notes.
+  if (!testMode) sendBootMetadata();
 
   USBSerial.println("Bottom of ESP32 Tires Setup");
 }
@@ -810,6 +855,53 @@ static void initializeSystem()
   wheels->draw(true);
   //tft.fillScreen(ST77XX_BLACK);
   forceDrawAfterInit = 2;
+}
+
+// Emit self-describing boot metadata (story 08 / #9): firmware SHA + the active config
+// so a dump is interpretable long after capture. Mirrors initializeSystem()'s Street-vs-
+// Track window/K/tau resolution (in Track the values come from the active tire profile).
+static void sendBootMetadata()
+{
+  extern uint8_t getTemperatureScaleValue();
+  extern uint8_t getStreetMin();
+  extern uint8_t getStreetIdeal();
+  extern uint8_t getStreetMax();
+  extern byte getLeftPixelOffset(int index);
+  extern byte getRightPixelOffset(int index);
+
+  bool track = (getCurrentModeValue() == 1);
+
+  NBPProtocol::BootMetadata m;
+  m.firmwareSha = FIRMWARE_GIT_SHA;
+  m.modeName    = track ? "Track" : "Street";
+  m.unit        = (getTemperatureScaleValue() == 0) ? 'F' : 'C';
+  m.profileName = TireProfiles::active().name; // reported even in Street (inert there)
+
+  if (track) {
+    const TireProfile& p = TireProfiles::active();
+    m.windowMin   = p.windowMin;
+    m.windowIdeal = p.windowIdeal;
+    m.windowMax   = p.windowMax;
+    m.offsetK     = p.offsetK;
+    m.tauSeconds  = p.tauSeconds;
+  } else {
+    m.windowMin   = getStreetMin();
+    m.windowIdeal = getStreetIdeal();
+    m.windowMax   = getStreetMax();
+    m.offsetK     = (int)CALC_OFFSET_DEFAULT_F;
+    m.tauSeconds  = (int)CALC_TAU_DEFAULT_S;
+  }
+
+  for (int i = 0; i < 4; i++) {
+    m.leftOffset[i]  = getLeftPixelOffset(i);
+    m.rightOffset[i] = getRightPixelOffset(i);
+  }
+
+  // No dedicated ambient/cabin sensor on this board; report the source honestly so a
+  // reader knows the ambient field is absent, not zero-valued data.
+  m.ambientSource = "none";
+
+  nbp.sendBootMetadata(m);
 }
 
 static void activateTires(){

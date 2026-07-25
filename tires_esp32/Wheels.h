@@ -90,6 +90,13 @@ struct TireTemps {
     bool rlIsActive = true;
     bool rrIsActive = true;
 
+    // Instrumentation accessor (story 08 / issue #9). For a 3-section (camera) corner,
+    // fills fill[3]/delta[3] with the per-band RGB565 colors the display computed and
+    // returns true; returns false for a single-sensor corner (no bands). Corner order
+    // matches the firmware: 0=FL, 1=FR, 2=RL, 3=RR. Uses the fl3/fr3/rl3/rr3 flags to
+    // decide the concrete type (no RTTI on this build).
+    bool cornerColors(int corner, uint16_t fill[3], uint16_t delta[3]) const;
+
 private:
     Tire *frontLeft, *frontRight, *rearLeft, *rearRight;
 

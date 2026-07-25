@@ -165,6 +165,95 @@ void NBPProtocol::sendSessionSummary(const SessionSummary& s) {
     sendUpdateAll();
 }
 
+// Append a raw "name":value line, matching addChannel's newline separator handling.
+void NBPProtocol::addNamedChannel(const char* name, const String& value) {
+    if (data.length() > 0) data += "\n";
+    data += "\"" + String(name) + "\":" + value;
+}
+
+// Convert an RGB565 color to a quoted "#RRGGBB" hex string channel. The 5/6/5 fields are
+// expanded to 8 bits (replicate the high bits) so full-scale reads as FF, not F8/FC.
+void NBPProtocol::addHexChannel(const char* name, uint16_t rgb565) {
+    uint8_t r5 = (rgb565 >> 11) & 0x1F;
+    uint8_t g6 = (rgb565 >> 5)  & 0x3F;
+    uint8_t b5 =  rgb565        & 0x1F;
+    uint8_t r = (r5 << 3) | (r5 >> 2);
+    uint8_t g = (g6 << 2) | (g6 >> 4);
+    uint8_t b = (b5 << 3) | (b5 >> 2);
+    char buf[10];
+    snprintf(buf, sizeof(buf), "\"#%02X%02X%02X\"", r, g, b);
+    addNamedChannel(name, String(buf));
+}
+
+void NBPProtocol::sendInstrumentation(const float delta[4], const float threshold[4],
+                                      const int8_t verdict[4], int8_t overall,
+                                      const bool cornerIsCamera[4],
+                                      const uint16_t fillColors[4][3],
+                                      const uint16_t deltaColors[4][3],
+                                      bool farenheit) {
+    clearChannels();
+    Unit tempUnit = (farenheit) ? Unit::DegreesF : Unit::DegreesC;
+
+    // Per-corner numeric verdict channels, enum-ordered FL/FR/RL/RR.
+    static const ChannelType dCh[4] = { ChannelType::FLDelta, ChannelType::FRDelta,
+                                        ChannelType::RLDelta, ChannelType::RRDelta };
+    static const ChannelType tCh[4] = { ChannelType::FLThreshold, ChannelType::FRThreshold,
+                                        ChannelType::RLThreshold, ChannelType::RRThreshold };
+    static const ChannelType vCh[4] = { ChannelType::FLVerdict, ChannelType::FRVerdict,
+                                        ChannelType::RLVerdict, ChannelType::RRVerdict };
+    // Stable band suffixes for the color channels. Outer/Center/Inner in array order.
+    static const char* fillNames[4][3] = {
+        { "FL Fill O Color", "FL Fill C Color", "FL Fill I Color" },
+        { "FR Fill O Color", "FR Fill C Color", "FR Fill I Color" },
+        { "RL Fill O Color", "RL Fill C Color", "RL Fill I Color" },
+        { "RR Fill O Color", "RR Fill C Color", "RR Fill I Color" },
+    };
+    static const char* deltaNames[4][3] = {
+        { "FL Delta O Color", "FL Delta C Color", "FL Delta I Color" },
+        { "FR Delta O Color", "FR Delta C Color", "FR Delta I Color" },
+        { "RL Delta O Color", "RL Delta C Color", "RL Delta I Color" },
+        { "RR Delta O Color", "RR Delta C Color", "RR Delta I Color" },
+    };
+
+    for (int c = 0; c < 4; c++) {
+        if (!cornerIsCamera[c]) continue;        // single-sensor corner: no band data
+        addChannel(dCh[c], tempUnit, delta[c]);
+        addChannel(tCh[c], tempUnit, threshold[c]);
+        addChannel(vCh[c], Unit::None, (float)verdict[c]);
+        for (int i = 0; i < 3; i++) {
+            addHexChannel(fillNames[c][i], fillColors[c][i]);
+            addHexChannel(deltaNames[c][i], deltaColors[c][i]);
+        }
+    }
+
+    addChannel(ChannelType::OverallVerdict, Unit::None, (float)overall);
+    sendUpdateAll();
+}
+
+void NBPProtocol::sendBootMetadata(const BootMetadata& m) {
+    sendMetadata("FIRMWARE_SHA", m.firmwareSha);
+    sendMetadata("MODE", m.modeName);
+    sendMetadata("TIRE_PROFILE", m.profileName);
+
+    char buf[64];
+    const char* u = (m.unit == 'C') ? "degC" : "degF";
+    snprintf(buf, sizeof(buf), "%d/%d/%d %s", m.windowMin, m.windowIdeal, m.windowMax, u);
+    sendMetadata("WINDOW", buf);
+    snprintf(buf, sizeof(buf), "%d degF", m.offsetK);
+    sendMetadata("OFFSET_K", buf);
+    snprintf(buf, sizeof(buf), "%d s", m.tauSeconds);
+    sendMetadata("TAU", buf);
+
+    static const char* cornerTag[4] = { "CROP_FL", "CROP_FR", "CROP_RL", "CROP_RR" };
+    for (int c = 0; c < 4; c++) {
+        snprintf(buf, sizeof(buf), "L%u/R%u",
+                 (unsigned)m.leftOffset[c], (unsigned)m.rightOffset[c]);
+        sendMetadata(cornerTag[c], buf);
+    }
+
+    sendMetadata("AMBIENT_SOURCE", m.ambientSource);
+}
+
 void NBPProtocol::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit) {
     
     clearChannels();
@@ -267,6 +356,19 @@ const char* NBPProtocol::getChannelName(ChannelType channel) {
         case ChannelType::SumLeftRight:  return "Summary Left Right";
         case ChannelType::SumWarmup:     return "Summary Warmup";
         case ChannelType::SumLength:     return "Summary Length";
+        case ChannelType::FLDelta:       return "FL Delta";
+        case ChannelType::FRDelta:       return "FR Delta";
+        case ChannelType::RLDelta:       return "RL Delta";
+        case ChannelType::RRDelta:       return "RR Delta";
+        case ChannelType::FLThreshold:   return "FL Threshold";
+        case ChannelType::FRThreshold:   return "FR Threshold";
+        case ChannelType::RLThreshold:   return "RL Threshold";
+        case ChannelType::RRThreshold:   return "RR Threshold";
+        case ChannelType::FLVerdict:     return "FL Verdict";
+        case ChannelType::FRVerdict:     return "FR Verdict";
+        case ChannelType::RLVerdict:     return "RL Verdict";
+        case ChannelType::RRVerdict:     return "RR Verdict";
+        case ChannelType::OverallVerdict: return "Overall Verdict";
         default:                         return "";
     }
 }
