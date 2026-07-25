@@ -14,9 +14,11 @@ extern HWCDC USBSerial;
 // different setting (#14 freed the Street/Track Min/Ideal/Max bytes and re-used two of
 // them for the per-mode default profile, so an old streetIdeal=120 would have loaded as a
 // wildly out-of-range profile index). A new magic makes the first boot after the flash
-// fall back to the compiled-in defaults and re-seed cleanly.
+// fall back to the compiled-in defaults and re-seed cleanly. (#15 then freed the eight
+// camera-offset bytes at 31..38 and re-purposed 31 for the inflation indicator, so an old
+// stored offset would have loaded as that toggle.)
 static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 255; above all binding addrs
-static const uint8_t  SETTINGS_MAGIC      = 0xA6;
+static const uint8_t  SETTINGS_MAGIC      = 0xA7;
 
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
