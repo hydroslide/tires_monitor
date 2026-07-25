@@ -33,6 +33,12 @@ void MenuRenderer::render() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
 
+    // Guardrail: never let GFX wrap text onto the next line. A value too wide for
+    // its column would otherwise advance the cursor down and paint over the row
+    // below it (issue #12); with wrap off, over-long text is clipped/truncated
+    // instead. Also keeps getTextBounds measurements from inflating on overflow.
+    display.setTextWrap(false);
+
     // Session summary takes over the whole screen while active (story 01).
     if (state.summaryViewing) {
         renderSummaryView();
@@ -229,8 +235,8 @@ void MenuRenderer::drawMenuItem(const MenuItem &item, uint8_t index, bool select
             }
             case VALUE_STRING: {
                 char* strVal = (char*)item.binding->valuePtr;
-                display.setCursor(SCREEN_WIDTH - 80, y);
-                display.print(strVal);
+                int16_t vx = SCREEN_WIDTH - 80;
+                drawClipped(strVal, vx, y, SCREEN_WIDTH - vx - VALUE_RIGHT_PAD);
                 break;
             }
             case VALUE_ENUM: {
@@ -257,9 +263,44 @@ void MenuRenderer::drawEnumValue(uint8_t enumIndex, const MenuValueBinding *bind
 {
     // We'll assume binding->enumLabels is valid
     if (enumIndex < binding->enumCount) {
-        display.setCursor(x, y);
-        display.print(binding->enumLabels[enumIndex]);
+        drawClipped(binding->enumLabels[enumIndex], x, y,
+                    SCREEN_WIDTH - x - VALUE_RIGHT_PAD);
     }
+}
+
+// Draw `s` clipped to `maxW` pixels. Measures with getTextBounds; if the whole
+// string fits it is printed as-is, otherwise the longest prefix that fits with a
+// trailing ".." marker is drawn. The built-in 5x7 font has no real ellipsis
+// glyph (it is CP437, not Unicode), so ".." is used as the truncation marker.
+void MenuRenderer::drawClipped(const char *s, int16_t x, int16_t y, int16_t maxW) {
+    if (!s || maxW <= 0) return;
+    display.setCursor(x, y);
+
+    int16_t bx, by;
+    uint16_t bw, bh;
+    display.getTextBounds(s, x, y, &bx, &by, &bw, &bh);
+    if ((int16_t)bw <= maxW) {
+        display.print(s);          // fits as-is, no marker needed
+        return;
+    }
+
+    // Too wide: find the longest prefix such that "<prefix>.." fits in maxW.
+    static const char MARKER[] = "..";
+    char buf[40];
+    int len = (int)strlen(s);
+    for (int n = len; n >= 0; n--) {
+        int m = 0;
+        for (int i = 0; i < n && m < (int)sizeof(buf) - 3; i++) buf[m++] = s[i];
+        buf[m++] = MARKER[0];
+        buf[m++] = MARKER[1];
+        buf[m]   = '\0';
+        display.getTextBounds(buf, x, y, &bx, &by, &bw, &bh);
+        if ((int16_t)bw <= maxW) {
+            display.print(buf);
+            return;
+        }
+    }
+    // Even ".." alone won't fit — leave the column blank rather than overflow.
 }
 
 // Render the dropdown overlay for the specified item
@@ -268,14 +309,34 @@ void MenuRenderer::renderDropdown(const MenuItem &item) {
     if (!item.binding || item.binding->valueType != VALUE_ENUM) return;
     MenuValueBinding* b = item.binding;
 
-    // We'll center the dropdown in the middle of the screen, or place it near the selected item
-    // For simplicity, let's place it near the middle
-    int16_t ddX = (SCREEN_WIDTH - DROPDOWN_WIDTH) / 2;
+    display.setFont(nullptr);
+    display.setTextSize(textSize);
+
+    const int16_t pad = 5;
+
+    // Size the box to its widest label (capped to the screen) so options aren't
+    // clipped in the common case; drawClipped below is the safety net if even the
+    // capped width is too small. DROPDOWN_WIDTH is the minimum.
+    int16_t ddWidth = DROPDOWN_WIDTH;
+    if (b->enumLabels) {
+        for (uint8_t i = 0; i < b->enumCount; i++) {
+            if (!b->enumLabels[i]) continue;
+            int16_t bx, by; uint16_t bw, bh;
+            display.getTextBounds(b->enumLabels[i], 0, 0, &bx, &by, &bw, &bh);
+            int16_t need = (int16_t)bw + 2 * pad;
+            if (need > ddWidth) ddWidth = need;
+        }
+    }
+    const int16_t maxBox = SCREEN_WIDTH - 8;
+    if (ddWidth > maxBox) ddWidth = maxBox;
+
+    // Center the (possibly widened) box on screen.
+    int16_t ddX = (SCREEN_WIDTH - ddWidth) / 2;
     int16_t ddY = (SCREEN_HEIGHT - (b->enumCount * DROPDOWN_ITEM_HEIGHT)) / 2;
 
     // Draw a background rectangle
     int16_t ddHeight = b->enumCount * DROPDOWN_ITEM_HEIGHT;
-    display.fillRect(ddX, ddY, DROPDOWN_WIDTH, ddHeight, DROPDOWN_BG_COLOR);
+    display.fillRect(ddX, ddY, ddWidth, ddHeight, DROPDOWN_BG_COLOR);
 
     // Draw each option
     for (uint8_t i = 0; i < b->enumCount; i++) {
@@ -284,16 +345,14 @@ void MenuRenderer::renderDropdown(const MenuItem &item) {
         int16_t optionY = ddY + i * DROPDOWN_ITEM_HEIGHT;
 
         if (isSelected) {
-            display.fillRect(ddX, optionY, DROPDOWN_WIDTH, DROPDOWN_ITEM_HEIGHT, DROPDOWN_HIGHLIGHT_COLOR);
+            display.fillRect(ddX, optionY, ddWidth, DROPDOWN_ITEM_HEIGHT, DROPDOWN_HIGHLIGHT_COLOR);
             display.setTextColor(ST77XX_BLACK);
         } else {
             display.setTextColor(ST77XX_WHITE);
         }
 
-        display.setCursor(ddX + 5, optionY + 2); // Some padding
-        display.setTextSize(textSize);
-        if (b->enumLabels && i < b->enumCount) {
-            display.print(b->enumLabels[i]);
+        if (b->enumLabels && b->enumLabels[i]) {
+            drawClipped(b->enumLabels[i], ddX + pad, optionY + 2, ddWidth - 2 * pad);
         }
     }
 }
