@@ -146,6 +146,25 @@ void Wheels::setTireTemps(const TireTemps &fl,
     }
 }
 
+bool Wheels::cornerColors(int corner, uint16_t fill[3], uint16_t delta[3]) const {
+    Tire* t;
+    bool three;
+    switch (corner) {
+      case 0: t = frontLeft;  three = fl3; break;
+      case 1: t = frontRight; three = fr3; break;
+      case 2: t = rearLeft;   three = rl3; break;
+      case 3: t = rearRight;  three = rr3; break;
+      default: return false;
+    }
+    if (!three) return false;
+    ThreeSectionTire* ts = static_cast<ThreeSectionTire*>(t);
+    for (int i = 0; i < 3; i++) {
+      fill[i]  = ts->sectionFillColor(i);
+      delta[i] = ts->sectionDeltaColor(i);
+    }
+    return true;
+}
+
     char Wheels::getTempUnit(){ return
      tempUnit;}
     void Wheels::setTempUnit(char _tempUnit){

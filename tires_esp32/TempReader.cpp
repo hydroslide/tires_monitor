@@ -70,13 +70,24 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
     int colsInRange = COLS - (leftOffset+rightOffset);
 
-    // For each section 0,1,2:
-    for (int section = 0; section < 3; ++section) {
-        // Calculate column range: [startCol, endCol)
-        int startCol = ((section * colsInRange) / 3)+leftOffset;         // section*32/3
-        int   endCol = (((section + 1) * colsInRange) / 3)+leftOffset;   // (section+1)*32/3
+    // Distribute the remainder of an uneven column count symmetrically so the two
+    // shoulder bands (left/right) stay equal width and only the center absorbs the
+    // odd column. Integer division alone made the left band systematically narrowest
+    // (e.g. 6/7/7 for 20 cols), which biased the alignment (O-I) metric.
+    int base = colsInRange / 3;
+    int rem  = colsInRange % 3;
+    int bandWidths[3] = { base, base, base };
+    if (rem == 1) {
+        bandWidths[1] += 1;             // give the odd column to the center band
+    } else if (rem == 2) {
+        bandWidths[0] += 1;             // keep the two shoulders symmetric
+        bandWidths[2] += 1;
+    }
 
-        sectionCols = endCol - startCol;             // e.g. 10, 11, or 11
+    // For each section 0,1,2:
+    int startCol = leftOffset;
+    for (int section = 0; section < 3; ++section) {
+        sectionCols = bandWidths[section];
 
         // Gather all values in this section into temp[]
         count = 0;
@@ -89,6 +100,8 @@ void TempReader::getSectionMedians(const float frame[PIXEL_COUNT],
 
         // Compute median on the collected values
         medians_out[section] = computeMedianFloat(temp, count);
+
+        startCol += sectionCols;
     }
 }
 
@@ -100,9 +113,50 @@ TempReader::TempReader() : sensorIndices{0, 7, 3, 4}{
             tireTemps[i] = 0;
             tireSectionTemps[i][j]=0;
             lastTireSectionTemps[i][j]=0;
+            rawSectionTemps[i][j]=0;
+            emaSectionTemps[i][j]=0;
+            emaInit[i][j]=false;
         }
     }
-    
+
+}
+
+// Calculated (surface->carcass) mode config, story 03. K is authored in degrees F;
+// convert the offset delta to the working unit (a difference, so no +32 term).
+void TempReader::configureCalculated(bool enabled, float tauSeconds, float offsetF){
+    calculatedMode = enabled;
+    calcTauSeconds = tauSeconds;
+    calcOffsetWorking = useFarenheit ? offsetF : (offsetF * 5.0f / 9.0f);
+}
+
+// Advance the per-band EMA of the raw surface medians and, when calculated mode is
+// active, fold EMA + K into the working temps (tireSectionTemps / tireTemps). Raw is
+// stashed in rawSectionTemps for the separate diagnostic channel set. A value of 0 is
+// the pipeline's "unread/invalid" sentinel, so those bands are skipped (no EMA, no
+// offset) to avoid seeding the filter with a fake +K reading during warm-up.
+void TempReader::updateCalculated(long dtMillis){
+    float dt = dtMillis / 1000.0f;
+    if (dt < 0.0f) dt = 0.0f;
+    // First-order low-pass: alpha = dt / (tau + dt).
+    float alpha = (calcTauSeconds > 0.0f) ? (dt / (calcTauSeconds + dt)) : 1.0f;
+    for (int i = 0; i < TIRE_COUNT; i++){
+        int bands = tireSensorIsCamera[i] ? 3 : 1; // point sensors carry band 0 only
+        for (int j = 0; j < 3; j++){
+            float raw = tireSectionTemps[i][j];
+            rawSectionTemps[i][j] = raw;
+            bool active = (j < bands) && (raw > 0.0f);
+            if (active){
+                if (!emaInit[i][j]){ emaSectionTemps[i][j] = raw; emaInit[i][j] = true; }
+                else emaSectionTemps[i][j] += alpha * (raw - emaSectionTemps[i][j]);
+                if (calculatedMode)
+                    tireSectionTemps[i][j] = emaSectionTemps[i][j] + calcOffsetWorking;
+            }
+        }
+        // Keep the single-value mirror consistent for non-camera tiles, which read
+        // tireTemps[] directly rather than tireSectionTemps[][0].
+        if (calculatedMode && !tireSensorIsCamera[i] && rawSectionTemps[i][0] > 0.0f)
+            tireTemps[i] = tireSectionTemps[i][0];
+    }
 }
 
 void TempReader::resetTireSensor(int i){
@@ -143,7 +197,7 @@ bool TempReader::newTempIsInvalid(int i, int j){
 
   // 4) Normal step check vs last accepted
   if (fabsf(curr - last) > MAX_STEP){
-    for (int tj; tj<3; tj++){
+    for (int tj = 0; tj<3; tj++){
         if (tj!=j){
             float tjCurr = tireSectionTemps[i][tj];
             if (tjCurr!=0.0 && fabsf(curr - tjCurr) <= MAX_STEP)
@@ -170,18 +224,22 @@ void TempReader::readTemps(){
                 if(readFrame(i)){
                     fillTireFrame(i);
                     getSectionMedians(frame, true, tireSectionTemps[i], leftPixelOffset[i], rightPixelOffset[i]);
+                    // Convert ALL bands to the working unit FIRST, then validate. The
+                    // validity filter's cross-band "rescue" compares a band against its
+                    // siblings, so every band must already be in the same unit before any
+                    // validation runs — otherwise an already-°F band was compared against
+                    // sibling bands still in °C (~85-unit gap at operating temp), causing
+                    // asymmetric band rejection and latched stale values during warm-up.
+                    if (useFarenheit){
+                        for(int j=0; j<3; j++)
+                            tireSectionTemps[i][j] = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
+                    }
                     for(int j=0; j<3; j++){
-                        float valueF = tireSectionTemps[i][j] * 9.0f / 5.0f + 32.0f;
-                        if (useFarenheit)
-                        tireSectionTemps[i][j] = valueF;
                         if (newTempIsInvalid(i,j))
                             tireSectionTemps[i][j] = lastTireSectionTemps[i][j];
                         else
                             lastTireSectionTemps[i][j] = tireSectionTemps[i][j];
-                        //  USBSerial.print("|");
-                        //  USBSerial.print(valueF);
-                        //     USBSerial.print("F");
-                    }    
+                    }
                     // USBSerial.println("|");            
                 }
             }else{

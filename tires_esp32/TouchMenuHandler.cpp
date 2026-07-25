@@ -82,6 +82,55 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     unhandledSwipeRight=false;
     unhandledSwipeUp=false;
    
+    // Session summary screen (story 01) takes over the whole screen; up/down page
+    // through it, any other gesture dismisses it and returns to the menu.
+    if (menuActive && rState.summaryViewing) {
+        if (gesture == TouchScreenController::gesture_t::GESTURE_UP)
+            render.summaryPageStep(+1);
+        else if (gesture == TouchScreenController::gesture_t::GESTURE_DOWN)
+            render.summaryPageStep(-1);
+        else
+            render.exitSummary();
+        return;
+    }
+
+    // Balance summary screen (story 05) takes over the whole screen; any gesture
+    // dismisses it and returns to the menu.
+    if (menuActive && rState.balanceViewing) {
+        render.exitBalance();
+        return;
+    }
+
+    // Name-entry mode intercepts navigation: up/down cycle the current letter, right
+    // (or a tap) advances a slot (past the last slot saves & exits), left retreats a
+    // slot (swiping left past the first slot cancels), a double-click cancels. Story 04.
+    if (menuActive && rState.nameEditing) {
+        switch (gesture) {
+        case TouchScreenController::gesture_t::GESTURE_UP:
+            render.nameCycle(+1);
+            break;
+        case TouchScreenController::gesture_t::GESTURE_DOWN:
+            render.nameCycle(-1);
+            break;
+        case TouchScreenController::gesture_t::GESTURE_RIGHT:
+        case TouchScreenController::gesture_t::GESTURE_TOUCH_BUTTON:
+            // next slot; past the last slot commits/saves the name and exits
+            render.nameAdvance();
+            break;
+        case TouchScreenController::gesture_t::GESTURE_LEFT:
+            // previous slot; past the first slot cancels the edit
+            render.nameRetreat();
+            break;
+        case TouchScreenController::gesture_t::GESTURE_DOUBLE_CLICK:
+        case TouchScreenController::gesture_t::GESTURE_LONG_PRESS:
+            render.nameCancel();
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
     if (!menuActive){
         if (gesture == TouchScreenController::gesture_t::GESTURE_LEFT)
             menuActive = true;
@@ -163,7 +212,8 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
                     render.openDropdown(currentItem, currentEnumVal);
                     break;
                 }
-                case VALUE_BYTE: {
+                case VALUE_BYTE:
+                case VALUE_SBYTE: {
                     // Enter numeric editing mode
                     rState.numericEditing = true;
                     break;

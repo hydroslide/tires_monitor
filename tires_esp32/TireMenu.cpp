@@ -1,5 +1,6 @@
 #include "TireMenu.h"
 #include "MenuRenderer.h"
+#include "TireProfiles.h"
 
 extern MenuRenderer menuRenderer;
 
@@ -27,6 +28,28 @@ static uint8_t trackMin   = 100;
 static uint8_t trackIdeal = 160;
 static uint8_t trackMax   = 180;
 
+// -- Calculated display mode (story 03; Track-mode only) --
+// 0=Raw surface, 1=Calculated (EMA_tau(surface)+K carcass estimate).
+static uint8_t calcDisplayMode = 0;
+static const char* calcDisplayModeLabels[] = {"Raw", "Calculated"};
+
+// -- Balance summary show/hide (story 05; Track-mode only) --
+// Governs whether the front/rear + left/right balance readout is offered. When off the
+// "Balance" summary item reports that it is hidden instead of opening.
+static bool showBalance = true;
+
+// -- Auto-seal on stationary (story 01; Track-mode only) --
+// When on, a running session self-seals after a sustained still period (a backstop for
+// a forgotten swipe-to-end). Best-effort IMU-stillness only (no speed channel), so it
+// defaults off.
+static bool autoSealStationary = false;
+
+// -- Inflation indicator (story 06; Track-mode only) --
+// Gates & latches the over/under inflation verdict: computed only on straight-line
+// (captured) frames, from calculated temps, baseline-corrected, presented latched.
+// On by default; inert / hidden in Street mode.
+static bool inflationIndicator = true;
+
 // -- Hardware Temp Sensor Indices --
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
@@ -51,6 +74,13 @@ static bool highFrequencyUpdates = false;
 static bool showSegmentDeltas = false;
 static uint8_t minInflationDeltaPct = 10;
 static uint8_t minAlignmentDeltaPct = 15;
+
+// -- IMU capture gate (global; story 02) --
+static bool    imuGateEnabled       = true; // suppress reads while cornering
+static uint8_t lateralGateCentiG    = 35;   // |lateral g| threshold, centi-g (0.35 g)
+static uint8_t alertDwellTenths     = 25;   // latch dwell, tenths of a second (2.5 s)
+static uint8_t imuOrient            = 0;    // lateral-axis map: 0=Auto,1=X,2=Y,3=Z
+static const char* imuOrientLabels[] = {"Auto", "X", "Y", "Z"};
 
 
 // ----------------------------------------------------
@@ -154,6 +184,44 @@ static MenuValueBinding trackMaxBinding = {
     0,
     255,
     18,
+    nullptr,
+    0
+};
+
+// Calculated display mode (EEPROM addr 1; free byte, magic-sentinel load makes 0 safe)
+static MenuValueBinding calcDisplayModeBinding = {
+    VALUE_ENUM,
+    &calcDisplayMode,
+    nullptr,
+    0,
+    0,
+    1,
+    calcDisplayModeLabels,
+    2
+};
+
+// Balance summary show/hide (EEPROM addr 49; free byte between the menu bindings and
+// the tire-profile region at 50+). The magic-sentinel load makes the false/0 case safe.
+static MenuValueBinding showBalanceBinding = {
+    VALUE_BOOL,
+    &showBalance,
+    nullptr,
+    0,
+    0,
+    49,
+    nullptr,
+    0
+};
+
+// Auto-seal on stationary (EEPROM addr 3; free byte among the menu bindings). The
+// magic-sentinel load makes the false/0 case safe.
+static MenuValueBinding autoSealStationaryBinding = {
+    VALUE_BOOL,
+    &autoSealStationary,
+    nullptr,
+    0,
+    0,
+    3,
     nullptr,
     0
 };
@@ -365,6 +433,108 @@ static MenuValueBinding minAlignmentDeltaPctBinding = {
     0
 };
 
+// IMU capture gate settings (EEPROM 45..48; magic-sentinel load makes 0 safe)
+static MenuValueBinding imuGateEnabledBinding = {
+    VALUE_BOOL,
+    &imuGateEnabled,
+    nullptr,
+    0,
+    0,
+    45,
+    nullptr,
+    0
+};
+static MenuValueBinding lateralGateCentiGBinding = {
+    VALUE_BYTE,
+    &lateralGateCentiG,
+    nullptr,
+    10,   // 0.10 g
+    100,  // 1.00 g
+    46,
+    nullptr,
+    0
+};
+static MenuValueBinding alertDwellTenthsBinding = {
+    VALUE_BYTE,
+    &alertDwellTenths,
+    nullptr,
+    5,    // 0.5 s
+    100,  // 10 s
+    47,
+    nullptr,
+    0
+};
+static MenuValueBinding imuOrientBinding = {
+    VALUE_ENUM,
+    &imuOrient,
+    nullptr,
+    0,
+    0,
+    48,
+    imuOrientLabels,
+    4
+};
+
+// Inflation indicator on/off (EEPROM 49; last free menu-binding byte below the
+// tire-profile region at 50). On by default; the magic-sentinel load makes 0 safe.
+static MenuValueBinding inflationIndicatorBinding = {
+    VALUE_BOOL,
+    &inflationIndicator,
+    nullptr,
+    0,
+    0,
+    49,
+    nullptr,
+    0
+};
+
+// -- Tire profiles (story 04; Track-mode only) --
+// The selector and all edit fields bind to TireProfiles globals. The selector persists
+// via its own EEPROM byte here as a convenience, but TireProfiles::begin() is the
+// authority on the active slot at boot. The window/K/tau/baseline fields edit a working
+// copy (g_editProfile) that "Save Profile" commits into the selected slot. EEPROM
+// addresses 112..121 sit above the profile struct region (<=111) and below the menu
+// magic (127); TireProfiles reloads the edit buffer from the slot on boot, so these
+// tree-walked bytes are a harmless duplicate.
+static MenuValueBinding profileSelectBinding = {
+    VALUE_ENUM,
+    &g_profileSel,
+    nullptr,
+    0,
+    0,
+    112,
+    g_profileNameLabels,
+    PROFILE_COUNT
+};
+static MenuValueBinding profileWindowMinBinding = {
+    VALUE_BYTE, &g_editProfile.windowMin, nullptr, 0, 255, 113, nullptr, 0
+};
+static MenuValueBinding profileWindowIdealBinding = {
+    VALUE_BYTE, &g_editProfile.windowIdeal, nullptr, 0, 255, 114, nullptr, 0
+};
+static MenuValueBinding profileWindowMaxBinding = {
+    VALUE_BYTE, &g_editProfile.windowMax, nullptr, 0, 255, 115, nullptr, 0
+};
+static MenuValueBinding profileOffsetKBinding = {
+    VALUE_BYTE, &g_editProfile.offsetK, nullptr, 0, 80, 116, nullptr, 0
+};
+static MenuValueBinding profileTauBinding = {
+    VALUE_BYTE, &g_editProfile.tauSeconds, nullptr, 1, 60, 117, nullptr, 0
+};
+// Signed per-corner baselines. minByte/maxByte carry -40/+40 as int8_t bit patterns.
+static MenuValueBinding profileBaseFLBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[0], nullptr, (uint8_t)(int8_t)-40, 40, 118, nullptr, 0
+};
+static MenuValueBinding profileBaseFRBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[1], nullptr, (uint8_t)(int8_t)-40, 40, 119, nullptr, 0
+};
+static MenuValueBinding profileBaseRLBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[2], nullptr, (uint8_t)(int8_t)-40, 40, 120, nullptr, 0
+};
+static MenuValueBinding profileBaseRRBinding = {
+    VALUE_SBYTE, &g_editProfile.baseline[3], nullptr, (uint8_t)(int8_t)-40, 40, 121, nullptr, 0
+};
+
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
@@ -374,10 +544,22 @@ static MenuItem streetSettingsMenu[] = {
     { "Max",   MENU_VALUE,  nullptr, nullptr, 0, &streetMaxBinding   }
 };
 
+// Balance summary action (defined in section 6). Opens the front/rear + left/right
+// readout; Track-mode-only and honors the Show Balance toggle.
+static void doShowBalance();
+// Session summary recall action (story 01). Opens the last sealed summary; Track-only.
+static void doViewSummary();
+
 static MenuItem trackSettingsMenu[] = {
-    { "Min",   MENU_VALUE,  nullptr, nullptr, 0, &trackMinBinding   },
-    { "Ideal", MENU_VALUE,  nullptr, nullptr, 0, &trackIdealBinding },
-    { "Max",   MENU_VALUE,  nullptr, nullptr, 0, &trackMaxBinding   }
+    { "Min",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMinBinding        },
+    { "Ideal",        MENU_VALUE,  nullptr,        nullptr, 0, &trackIdealBinding      },
+    { "Max",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMaxBinding        },
+    { "Display",      MENU_VALUE,  nullptr,        nullptr, 0, &calcDisplayModeBinding },
+    { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
+    { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 },
+    { "View Summary", MENU_ACTION, doViewSummary,  nullptr, 0, nullptr                 },
+    { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding },
+    { "Inflation",    MENU_VALUE,  nullptr,        nullptr, 0, &inflationIndicatorBinding }
 };
 
 static MenuItem tempSensorIndicesMenu[] = {
@@ -461,6 +643,36 @@ static MenuItem pixelOffsetsMenu[] = {
 
 
 
+static MenuItem imuGateMenu[] = {
+    { "Gate Enable",     MENU_VALUE, nullptr, nullptr, 0, &imuGateEnabledBinding   },
+    { "Lateral cg",      MENU_VALUE, nullptr, nullptr, 0, &lateralGateCentiGBinding },
+    { "Dwell 0.1s",      MENU_VALUE, nullptr, nullptr, 0, &alertDwellTenthsBinding  },
+    { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
+};
+
+// Tire-profile action callbacks (defined in section 6).
+static void doLoadProfile();
+static void doNameProfile();
+static void doSaveProfile();
+static void doResetProfile();
+
+static MenuItem tireProfilesMenu[] = {
+    { "Profile",   MENU_VALUE,  nullptr,        nullptr, 0, &profileSelectBinding     },
+    { "Load",      MENU_ACTION, doLoadProfile,  nullptr, 0, nullptr                   },
+    { "Name",      MENU_ACTION, doNameProfile,  nullptr, 0, nullptr                   },
+    { "Min",       MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowMinBinding  },
+    { "Ideal",     MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowIdealBinding},
+    { "Max",       MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowMaxBinding  },
+    { "Offset K",  MENU_VALUE,  nullptr,        nullptr, 0, &profileOffsetKBinding    },
+    { "Tau s",     MENU_VALUE,  nullptr,        nullptr, 0, &profileTauBinding        },
+    { "Base FL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFLBinding     },
+    { "Base FR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFRBinding     },
+    { "Base RL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRLBinding     },
+    { "Base RR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRRBinding     },
+    { "Save Prof", MENU_ACTION, doSaveProfile,  nullptr, 0, nullptr                   },
+    { "Reset",     MENU_ACTION, doResetProfile, nullptr, 0, nullptr                   },
+};
+
 // ----------------------------------------------------
 //  4) Save/Load Action Callbacks
 // ----------------------------------------------------
@@ -536,6 +748,22 @@ static MenuItem mainMenu[] = {
       nullptr
     },
     {
+      "IMU Gate",
+      MENU_SUBMENU,
+      nullptr,
+      imuGateMenu,
+      sizeof(imuGateMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
+      "Tire Profiles",
+      MENU_SUBMENU,
+      nullptr,
+      tireProfilesMenu,
+      sizeof(tireProfilesMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
       "Save Config",
       MENU_ACTION,
       doSave,
@@ -557,6 +785,10 @@ static MenuSystem tireMenuSystem(
 static void doSave()
 {
     tireMenuSystem.saveToEEPROM();
+    // Persist tire profiles alongside the menu settings so one "Save Config" covers
+    // everything. Commit the on-screen edits into the selected slot first.
+    TireProfiles::commitEditToSelected();
+    TireProfiles::save();
     // Provide visual feedback
     menuRenderer.setStatusMessage("Settings Saved!");
     // Force a re-render if you want immediate update
@@ -566,6 +798,64 @@ static void doSave()
 static void doLoad()
 {
     tireMenuSystem.loadFromEEPROM();
+    TireProfiles::begin();
+}
+
+// -- Tire-profile actions (story 04) --
+static void doLoadProfile()
+{
+    // Pull the currently selected slot into the edit buffer for viewing/editing.
+    TireProfiles::loadEditFromSelected();
+    menuRenderer.setStatusMessage("Profile loaded");
+}
+
+static void doNameProfile()
+{
+    // Hand off to the small-screen name editor (swipe up/down = letter, right = lock).
+    menuRenderer.beginNameEdit(g_editProfile.name, PROFILE_NAME_LEN);
+}
+
+static void doSaveProfile()
+{
+    TireProfiles::commitEditToSelected();
+    TireProfiles::save();
+    menuRenderer.setStatusMessage("Profile saved");
+}
+
+static void doResetProfile()
+{
+    TireProfiles::resetSelectedToDefault();
+    menuRenderer.setStatusMessage("Profile reset");
+}
+
+// -- Balance summary action (story 05) --
+static void doShowBalance()
+{
+    // Track-mode-only feature: inert in Street mode.
+    if (currentMode != 1) {
+        menuRenderer.setStatusMessage("Track mode only");
+        return;
+    }
+    // Respect the show/hide setting.
+    if (!showBalance) {
+        menuRenderer.setStatusMessage("Balance hidden");
+        return;
+    }
+    // Hand off to the full-screen readout; the touch loop re-renders it and any gesture
+    // returns to the menu.
+    menuRenderer.showBalance();
+}
+
+// -- Session summary recall action (story 01) --
+static void doViewSummary()
+{
+    // Track-mode-only feature: inert in Street mode.
+    if (currentMode != 1) {
+        menuRenderer.setStatusMessage("Track mode only");
+        return;
+    }
+    // Full-screen multi-page recall; the touch loop pages/dismisses it.
+    menuRenderer.showSummary();
 }
 
 // ----------------------------------------------------
@@ -622,6 +912,22 @@ uint8_t getTrackMax() {
     return trackMax;
 }
 
+uint8_t getCalcDisplayMode() {
+    return calcDisplayMode;
+}
+
+bool getShowBalance() {
+    return showBalance;
+}
+
+bool getAutoSealStationary() {
+    return autoSealStationary;
+}
+
+bool getInflationIndicator() {
+    return inflationIndicator;
+}
+
 bool getShowPixelOffsets() {
     return showPixelOffsets;
 }
@@ -640,6 +946,22 @@ uint8_t getminInflationDeltaPct() {
 
 uint8_t getminAlignmentDeltaPct() {
     return minAlignmentDeltaPct;
+}
+
+bool getImuGateEnabled() {
+    return imuGateEnabled;
+}
+
+uint8_t getLateralGateCentiG() {
+    return lateralGateCentiG;
+}
+
+uint8_t getAlertDwellTenths() {
+    return alertDwellTenths;
+}
+
+uint8_t getImuOrient() {
+    return imuOrient;
 }
 
 byte getLeftPixelOffset(int index){

@@ -8,8 +8,11 @@
 extern "C" {
 #endif
 
-// define the number of bytes you want to access
-#define EEPROM_SIZE 50
+// define the number of bytes you want to access. Bumped 50 -> 128 for the tire-profile
+// region (story 04), then 128 -> 256 for the session-summary blob (story 01): menu
+// bindings stay at 0..49, TireProfiles owns 50..111, the session summary lives at
+// 128..~172 with its own magic at 250, and the menu magic sits at EEPROM_SIZE-1 (255).
+#define EEPROM_SIZE 256
 
 // Menu item types
 typedef enum {
@@ -23,7 +26,8 @@ typedef enum {
   VALUE_BYTE,
   VALUE_BOOL,
   VALUE_STRING,
-  VALUE_ENUM
+  VALUE_ENUM,
+  VALUE_SBYTE   // signed 8-bit value; min/max carried in minByte/maxByte as int8_t
 } MenuValueType;
 
 // Forward declaration for MenuItem structure
