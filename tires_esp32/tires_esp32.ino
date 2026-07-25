@@ -609,7 +609,7 @@ void checkForSwipes(){
   }
 }
 
-// Advance the swipe-feedback timers (story 01). The red dot / black square each show for
+// Advance the swipe-feedback timers (story 01). The red dot / black square each blink for
 // FB_MS; when the end square expires the summary takes over the screen.
 static void serviceFeedback(){
   if (fbState == FB_NONE) return;
@@ -641,14 +641,34 @@ static const int FB_INSET  = 14;                     // clearance from the round
 static const int FB_CX     = 280 - FB_INSET - FB_R;  // 254
 static const int FB_CY     = FB_INSET + FB_R;        // 26
 
-// Paint the upper-right swipe-feedback indicator over the running display.
+// Blink cadence: 500 ms lit, 500 ms dark, for as long as the badge is up (FB_MS / 5 s =>
+// five full cycles). A blinking badge reads as "live" at a glance where a static one can
+// be mistaken for a painted-on artifact of the tire map.
+static const unsigned long FB_BLINK_MS = 500;
+
+// Paint the upper-right swipe-feedback indicator over the running display. Called every
+// loop iteration -- deliberately, not just on the blink edge: the tire map repaints on the
+// (slower) read cadence and would otherwise wipe the badge mid-phase, so each pass
+// re-asserts whichever half of the blink is current.
 static void drawSessionFeedback(){
+  if (fbState == FB_NONE) return;
+
+  const int s = FB_R * 2;                            // both shapes share this footprint
+  const int x = FB_CX - FB_R, y = FB_CY - FB_R;
+
+  // The dark half paints the footprint black rather than restoring the tire underneath.
+  // That costs nothing visually: the badge occludes that patch of the front-right tire for
+  // the whole FB_MS either way, and expiry repaints the screen (FB_START) or hands off to
+  // the summary (FB_END), so nothing is left behind.
+  if ((((millis() - fbSetMs) / FB_BLINK_MS) & 1UL) != 0){
+    tft.fillRect(x, y, s, s, ST77XX_BLACK);
+    return;
+  }
+
   if (fbState == FB_START){
     tft.fillCircle(FB_CX, FB_CY, FB_R, ST77XX_RED);  // recording dot
-  } else if (fbState == FB_END){
-    const int s = FB_R * 2;                          // stop square, same footprint
-    const int x = FB_CX - FB_R, y = FB_CY - FB_R;
-    tft.fillRect(x, y, s, s, ST77XX_BLACK);
+  } else { // FB_END
+    tft.fillRect(x, y, s, s, ST77XX_BLACK);          // stop square
     // 2 px outline so it reads on black at a glance
     tft.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
     tft.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
