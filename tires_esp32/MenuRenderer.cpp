@@ -1,6 +1,13 @@
 
 #include "MenuRenderer.h"
 #include <string.h> // for strncpy
+#include "TempReader.h"
+#include "TireBalance.h"
+
+// The active reader and temperature-scale selection live in the sketch; the balance
+// summary reads the current working temps straight from them (story 05).
+extern TempReader* tempReader;
+extern uint8_t getTemperatureScaleValue();
 
 MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
 : menu(menuSystem), display(tft)
@@ -10,6 +17,7 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
     state.dropdownIndex = 0;
     state.dropdownItem = nullptr;
     state.nameEditing = false;
+    state.balanceViewing = false;
     nameBuf[0] = '\0';
 
     // Initialize status message as empty
@@ -19,6 +27,12 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
 void MenuRenderer::render() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
+
+    // Balance summary takes over the whole screen while active (story 05).
+    if (state.balanceViewing) {
+        renderBalanceView();
+        return;
+    }
 
     // Name-entry mode takes over the whole screen while active.
     if (state.nameEditing) {
@@ -319,4 +333,68 @@ void MenuRenderer::renderNameEditor() {
     display.setTextColor(ST77XX_WHITE);
     display.setCursor(10, SCREEN_HEIGHT - 24);
     display.print(F("Up/Dn: letter   Right: lock/next"));
+}
+
+// --- Balance summary screen (story 05) ----------------------------------------------
+void MenuRenderer::showBalance() {
+    state.balanceViewing = true;
+}
+
+void MenuRenderer::exitBalance() {
+    state.balanceViewing = false;
+}
+
+// Draw one balance row: label, the pair "<a> / <b> <unit>", then the signed delta and
+// the plain-language bias hint on the next line.
+static void drawBalanceRow(Adafruit_ST7789& d, int16_t y, const char* label,
+                           float a, float b, float delta, const char* hint, char unit) {
+    d.setTextSize(2);
+    d.setTextColor(ST77XX_WHITE);
+    d.setCursor(10, y);
+    d.print(label);
+    d.print(' ');
+    d.print((int)lroundf(a));
+    d.print(F(" / "));
+    d.print((int)lroundf(b));
+    d.print(' ');
+    d.print(unit);
+
+    long dRounded = lroundf(delta);
+    d.setTextSize(2);
+    d.setCursor(24, y + 22);
+    d.setTextColor(ST77XX_YELLOW);
+    d.print(F("d="));
+    if (dRounded > 0) d.print('+');
+    d.print(dRounded);
+    d.print(F("  "));
+    d.print(hint);
+}
+
+void MenuRenderer::renderBalanceView() {
+    display.setFont(nullptr);
+    display.setTextColor(ST77XX_WHITE);
+    display.setTextSize(2);
+    display.setCursor(10, 6);
+    display.print(F("Balance"));
+
+    char unit = (getTemperatureScaleValue() == 0) ? 'F' : 'C';
+    BalanceResult b = TireBalance::compute(tempReader);
+
+    if (!b.valid) {
+        display.setTextSize(2);
+        display.setCursor(10, 70);
+        display.print(F("No tire data"));
+    } else {
+        // Front/Rear: fronts hotter => understeer, rears hotter => oversteer.
+        drawBalanceRow(display, 50, "F/R", b.frontAvg, b.rearAvg,
+                       b.frontRearDelta, b.frBias, unit);
+        // Left/Right: expected lopsided at a directional track; flags the unexpected.
+        drawBalanceRow(display, 120, "L/R", b.leftAvg, b.rightAvg,
+                       b.leftRightDelta, b.lrBias, unit);
+    }
+
+    display.setTextSize(1);
+    display.setTextColor(ST77XX_WHITE);
+    display.setCursor(10, SCREEN_HEIGHT - 20);
+    display.print(F("Tap to return"));
 }

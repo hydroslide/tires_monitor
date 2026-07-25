@@ -33,6 +33,11 @@ static uint8_t trackMax   = 180;
 static uint8_t calcDisplayMode = 0;
 static const char* calcDisplayModeLabels[] = {"Raw", "Calculated"};
 
+// -- Balance summary show/hide (story 05; Track-mode only) --
+// Governs whether the front/rear + left/right balance readout is offered. When off the
+// "Balance" summary item reports that it is hidden instead of opening.
+static bool showBalance = true;
+
 // -- Hardware Temp Sensor Indices --
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
@@ -181,6 +186,19 @@ static MenuValueBinding calcDisplayModeBinding = {
     1,
     calcDisplayModeLabels,
     2
+};
+
+// Balance summary show/hide (EEPROM addr 49; free byte between the menu bindings and
+// the tire-profile region at 50+). The magic-sentinel load makes the false/0 case safe.
+static MenuValueBinding showBalanceBinding = {
+    VALUE_BOOL,
+    &showBalance,
+    nullptr,
+    0,
+    0,
+    49,
+    nullptr,
+    0
 };
 
 // Hardware -> Temp Sensor Indices
@@ -488,11 +506,17 @@ static MenuItem streetSettingsMenu[] = {
     { "Max",   MENU_VALUE,  nullptr, nullptr, 0, &streetMaxBinding   }
 };
 
+// Balance summary action (defined in section 6). Opens the front/rear + left/right
+// readout; Track-mode-only and honors the Show Balance toggle.
+static void doShowBalance();
+
 static MenuItem trackSettingsMenu[] = {
-    { "Min",     MENU_VALUE,  nullptr, nullptr, 0, &trackMinBinding        },
-    { "Ideal",   MENU_VALUE,  nullptr, nullptr, 0, &trackIdealBinding      },
-    { "Max",     MENU_VALUE,  nullptr, nullptr, 0, &trackMaxBinding        },
-    { "Display", MENU_VALUE,  nullptr, nullptr, 0, &calcDisplayModeBinding }
+    { "Min",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMinBinding        },
+    { "Ideal",        MENU_VALUE,  nullptr,        nullptr, 0, &trackIdealBinding      },
+    { "Max",          MENU_VALUE,  nullptr,        nullptr, 0, &trackMaxBinding        },
+    { "Display",      MENU_VALUE,  nullptr,        nullptr, 0, &calcDisplayModeBinding },
+    { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
+    { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 }
 };
 
 static MenuItem tempSensorIndicesMenu[] = {
@@ -761,6 +785,24 @@ static void doResetProfile()
     menuRenderer.setStatusMessage("Profile reset");
 }
 
+// -- Balance summary action (story 05) --
+static void doShowBalance()
+{
+    // Track-mode-only feature: inert in Street mode.
+    if (currentMode != 1) {
+        menuRenderer.setStatusMessage("Track mode only");
+        return;
+    }
+    // Respect the show/hide setting.
+    if (!showBalance) {
+        menuRenderer.setStatusMessage("Balance hidden");
+        return;
+    }
+    // Hand off to the full-screen readout; the touch loop re-renders it and any gesture
+    // returns to the menu.
+    menuRenderer.showBalance();
+}
+
 // ----------------------------------------------------
 //  7) Provide global access to the Tire MenuSystem
 // ----------------------------------------------------
@@ -817,6 +859,10 @@ uint8_t getTrackMax() {
 
 uint8_t getCalcDisplayMode() {
     return calcDisplayMode;
+}
+
+bool getShowBalance() {
+    return showBalance;
 }
 
 bool getShowPixelOffsets() {

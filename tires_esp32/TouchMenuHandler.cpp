@@ -82,6 +82,13 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     unhandledSwipeRight=false;
     unhandledSwipeUp=false;
    
+    // Balance summary screen (story 05) takes over the whole screen; any gesture
+    // dismisses it and returns to the menu.
+    if (menuActive && rState.balanceViewing) {
+        render.exitBalance();
+        return;
+    }
+
     // Name-entry mode intercepts navigation: up/down cycle the current letter, right
     // (or a tap) locks it and advances, a double-click cancels. Story 04.
     if (menuActive && rState.nameEditing) {

@@ -15,6 +15,9 @@ struct MenuRenderState {
     // Small-screen name entry (story 04): swipe up/down cycles the current letter,
     // swipe right locks it and advances; finishing past the last slot commits.
     bool nameEditing;
+    // Balance summary screen (story 05): a full-screen Track-mode readout of the
+    // front/rear and left/right thermal balance. Any gesture dismisses it.
+    bool balanceViewing;
 };
 
 class MenuRenderer {
@@ -46,6 +49,11 @@ public:
     bool nameAdvance();
     void nameCancel();
 
+    // Balance summary screen (story 05). showBalance takes over the whole screen with
+    // the front/rear + left/right readout; exitBalance dismisses it.
+    void showBalance();
+    void exitBalance();
+
 private:
     MenuSystem &menu;
     Adafruit_ST7789 &display;
@@ -66,6 +74,7 @@ private:
     void drawEnumValue(uint8_t enumIndex, const MenuValueBinding *binding, int16_t x, int16_t y);
     void renderDropdown(const MenuItem &item);
     void renderNameEditor();
+    void renderBalanceView();
 
     // Name-editor working state.
     static const uint8_t NAME_EDIT_MAX = 12;
