@@ -1,59 +1,66 @@
 # Session lifecycle + end-of-session summary
 
 - **Area:** design §5.3 · feature
-- **Depends on:** 03 (calculated working temp), 04 (window from profile), 05 (balance), 02 (auto-start/seal)
-- **Status:** draft — not filed
+- **Depends on:** 03 (calculated working temp), 04 (window from profile), 05 (balance), 02 (stationary auto-seal backstop), 08 (summary over NBP)
+- **Status:** reconciled from review notes
 
 ## User story
 
-As a driver, I want to start and end a session on the device and then read a
-per-corner summary, so that I can review how each tire behaved without the
+As a driver, I want to start and end a session with a simple gesture and then read
+a per-corner summary, so that I can review how each tire behaved without the
 cooldown lap and the drive back to the paddock spoiling the data.
 
 ## Context
 
 Real-time IR's unique value is per-session **warm-up, overheat, and balance**.
 That only works with clean session boundaries — the slow cruise back and paddock
-idle must not dilute peaks/averages/time-in-window. See §5.3, §2 (research: the
-temporal use cases are the ones a post-session pyrometer can't serve).
+idle must not dilute peaks/averages/time-in-window. A menu start/stop is awkward to
+hit while driving, so session control is a gesture.
 
 ## Functional behavior
 
-- **Start:** a menu "Start Session" action begins accumulation; optional
-  motion-based auto-start (story 02).
-- **End / Seal:** a menu "End Session" action the driver hits **at the start of
-  the cooldown lap**. It freezes accumulation (peaks, averages, balance,
-  time-in-window) at that instant. Everything after the seal is ignored.
-- **Auto-seal backstop:** seal automatically on sustained low speed / stationary
-  if the driver forgets; optional "trim last N seconds" so a late manual press
-  still cuts the cruise.
-- **Summary screen (2×2 car map, FL FR / RL RR):** per corner —
-  peak temp (large), average steady temp (small), time-in-window (color or tiny
-  bar), overheat flag (exceeded threshold, and roughly how long).
-- **Session screen:** F/R and L/R balance (story 05); warm-up time (laps/minutes
-  until all four first reached the window).
-- **History:** retain the last 1–3 sessions for on-device comparison (e.g. S2 vs S3).
-- Readable while stationary, from the menu, at roughly the current font size.
+- **Start / end by swipe (Track mode).** Commandeer the existing left/right swipe
+  gesture. In **Track** mode the swipe toggles the **session** (and does *not*
+  toggle Night Mode); in **Street** mode the swipe still toggles Night Mode and
+  never a session. Swipe with no session running → **start**; swipe with a session
+  running → **end**.
+- **Swipe feedback:** on **start**, a small red "recording" dot in the upper-right
+  corner for 5 s; on **end**, a small black "stop" square in the same spot for 5 s,
+  then the session summary is shown.
+- **Seal on end:** ending freezes accumulation (peaks, averages, balance,
+  time-in-window) at that instant; everything after is ignored. Swipe-end at the
+  start of the cooldown lap so the cruise back isn't included.
+- **Auto-seal backstop:** optionally seal on sustained low speed / stationary
+  (story 02) if the driver forgets to swipe.
+- **Summary screen (2×2 car map, FL FR / RL RR):** per corner — peak temp (large),
+  average steady temp (small), time-in-window (color or bar), overheat flag
+  (exceeded threshold, and roughly how long). All temps are **calculated** values.
+- **Session-level screen(s):** F/R and L/R balance (story 05); warm-up time (time
+  until all four first reached the window); and — if the inflation on-time is high
+  enough (story 06) — the inflation verdict. The summary may span **multiple
+  swipeable pages**.
+- **Persist + recall:** the last summary is written to **EEPROM** and **overwrites**
+  the previous one; the menu's **View Summary** recalls it any time. The summary is
+  also **emitted over NBP** (story 08) so it's captured off-device.
+- Whole-session **aggregates only** — the device has no concept of laps.
+- Readable while stationary, at roughly the current font size.
 
 ## Menu / settings
 
-- Actions: Start Session, End Session, View Summary (+ history).
-- Settings: auto-start on motion (on/off), auto-seal on stationary (on/off),
-  trim-last-N-seconds, history depth (1–3).
-
+- Action: **View Summary** (recall the last summary from EEPROM).
+- Setting: auto-seal on stationary (on/off).
 
 ## Acceptance criteria
 
 - [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
+- [ ] Left/right swipe starts/ends a session in Track mode and does **not** toggle Night Mode; in Street mode the swipe toggles Night Mode and never a session.
+- [ ] Start shows the red dot for 5 s; end shows the black square for 5 s, then the summary.
 - [ ] Sealing stops accumulation immediately; post-seal frames excluded from all stats.
-- [ ] Summary shows per-corner peak, avg, time-in-window, overheat flag.
+- [ ] Summary shows per-corner peak, avg, time-in-window, overheat flag (calculated temps).
 - [ ] Warm-up time and F/R + L/R balance shown at session level.
-- [ ] Last N sessions retained and viewable stationary.
-- [ ] RR excluded from balance/averages.
+- [ ] Last summary persisted to EEPROM (overwriting the previous), recallable via View Summary, and emitted over NBP.
 
-## Open questions / tweaks to discuss
+## Implementation notes
 
-- Does the summary auto-display on seal, or only when opened from the menu?
-- Peak/avg computed from **raw** or **calculated** temp? (Recommend calculated.)
-- How many sessions to retain (EEPROM/PSRAM budget)?
-- Any per-lap breakdown wanted, or session-aggregate only?
+- EEPROM budget for the summary blob (per-corner peak/avg/time-in-window/overheat + balance + warm-up).
+- Multi-page summary layout and how pages are swiped through (shares the swipe gesture).
