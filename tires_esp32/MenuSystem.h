@@ -10,14 +10,18 @@ extern "C" {
 
 // define the number of bytes you want to access. Bumped 50 -> 128 for the tire-profile
 // region (story 04), then 128 -> 256 for the session-summary blob (story 01): menu
-// bindings stay at 0..49, TireProfiles owns 50..111, the session summary lives at
-// 128..~172 with its own magic at 250, and the menu magic sits at EEPROM_SIZE-1 (255).
+// bindings stay at 0..49, TireProfiles owns 50..125 (three 25-byte slots at 50..124 plus
+// its magic at 125, grown from 50..111 by the per-profile camera offsets in #15), the
+// session summary lives at 128..~175 with its own magic at 250, and the menu magic sits
+// at EEPROM_SIZE-1 (255). Bytes 126..127 and ~176..249 are free.
 #define EEPROM_SIZE 256
 
 // Sentinel eepromAddress for a transient binding: the value is menu-editable but is
 // never written to / read from EEPROM (the save/load tree walk skips it). Used for
-// runtime-only selections that something else derives at boot -- e.g. the active tire
-// profile, which follows the current mode's default profile (#14). Deliberately out of
+// runtime-only values that something else derives -- the active tire profile, which
+// follows the current mode's default profile (#14), and the whole tire-profile edit
+// buffer, which is reloaded from the selected slot and persisted with the slot (#15).
+// Deliberately out of
 // EEPROM range so an accidental read/write would be caught rather than silently land on
 // a real byte.
 #define EEPROM_NO_PERSIST 0xFFFF

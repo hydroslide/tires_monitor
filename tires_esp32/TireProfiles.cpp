@@ -8,18 +8,28 @@ extern HWCDC USBSerial;
 // Menu bindings live at 0..49 and the menu "settings written" magic at EEPROM_SIZE-1
 // (255). Profiles get their own region above the menu bindings so the two persistence
 // paths never collide. Using EEPROM.put on the raw struct writes each byte verbatim,
-// so signed baselines (including 0) round-trip correctly without the menu binding
-// path's "byte can't store 0" caveat.
+// so signed baselines and camera offsets (including 0) round-trip correctly without the
+// menu binding path's "byte can't store 0" caveat.
 //
-// Byte 111 used to hold the active slot. Since #14 the active profile is transient (it
-// follows the current mode's default profile), so nothing is written there; the byte is
-// left reserved rather than re-purposed, keeping this region's map predictable.
+// Region map since #15 (sizeof(TireProfile) grew 17 -> 25 with the per-corner camera
+// offsets, so three slots now run to 124 instead of 100):
+//   50..74   slot 0      100..124  slot 2      126,127  free
+//   75..99   slot 1      125       PROFILE_MAGIC        128..    session summary
+// The magic moved 110 -> 125 because 110 now falls INSIDE slot 2. Byte 111 -- reserved
+// when #14 stopped persisting the active slot -- is likewise absorbed by slot 2. The
+// static_assert below is the guard: it fails the build rather than letting a future field
+// silently run the last slot over the magic (or into the session blob at 128).
 static const uint16_t PROFILE_BASE        = 50;
-static const uint16_t PROFILE_MAGIC_ADDR  = 110;
-// Bumped for #14: the ECF / EC02 seed windows were retuned, so devices that already have
-// saved profiles must re-seed for the new values to take effect. This intentionally wipes
-// on-device profile customizations back to the seeds.
-static const uint8_t  PROFILE_MAGIC       = 0x5B;
+static const uint16_t PROFILE_MAGIC_ADDR  = 125;
+// Bumped for #14 (retuned ECF / EC02 seed windows) and again for #15 (the struct grew the
+// leftOffset/rightOffset arrays, so the old layout would be misread field-for-field --
+// garbage windows AND garbage crop offsets). A new magic forces a clean re-seed on the
+// first boot after the flash; it intentionally wipes on-device profile customizations.
+static const uint8_t  PROFILE_MAGIC       = 0x5C;
+
+static_assert(PROFILE_BASE + PROFILE_COUNT * sizeof(TireProfile) <= PROFILE_MAGIC_ADDR,
+              "TireProfile slots overrun PROFILE_MAGIC_ADDR -- move the magic and check "
+              "the menu bindings / session blob for collisions before growing the struct");
 
 // Menu-facing globals.
 uint8_t     g_profileSel = 0;
@@ -28,6 +38,13 @@ const char* g_profileNameLabels[PROFILE_COUNT] = { "", "", "" };
 
 // The three slots.
 static TireProfile s_profiles[PROFILE_COUNT];
+
+// Camera crop offsets seeded into EVERY slot (#15). The cameras are mounted the same way
+// regardless of which tire is fitted, so all three profiles start from one shared set and
+// only diverge once somebody deliberately tunes a profile. Corner order FL, FR, RL, RR;
+// still all-zero until they are re-tuned on the car.
+static const uint8_t SEED_LEFT_OFFSET[4]  = { 0, 0, 0, 0 };
+static const uint8_t SEED_RIGHT_OFFSET[4] = { 0, 0, 0, 0 };
 
 // Compiled-in seed defaults. Windows are carcass-frame degrees F; K/tau are the
 // literature defaults (design section 6). Baselines are the straight-line spread at
@@ -58,6 +75,13 @@ static void seedDefaults() {
     s_profiles[2].offsetK = 20; s_profiles[2].tauSeconds = 15;
     s_profiles[2].baseline[0] = 0; s_profiles[2].baseline[1] = 0;
     s_profiles[2].baseline[2] = 0; s_profiles[2].baseline[3] = 0;
+
+    // Camera crop offsets: identical in all three slots (#15). Seeding here also gives
+    // resetSelectedToDefault() the right behaviour for free.
+    for (int i = 0; i < PROFILE_COUNT; i++) {
+        memcpy(s_profiles[i].leftOffset,  SEED_LEFT_OFFSET,  sizeof(SEED_LEFT_OFFSET));
+        memcpy(s_profiles[i].rightOffset, SEED_RIGHT_OFFSET, sizeof(SEED_RIGHT_OFFSET));
+    }
 }
 
 // Ensure a loaded slot's name is always null-terminated regardless of EEPROM contents.

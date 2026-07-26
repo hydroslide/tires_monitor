@@ -54,15 +54,9 @@ static uint8_t rearLeftTempIndex   = 0;
 static uint8_t rearRightTempIndex  = 0;
 
 // -- Camera Offsets --
-static uint8_t leftOffsetFrontLeft = 0;
-static uint8_t leftOffsetFrontRight = 0;
-static uint8_t leftOffsetRearLeft = 0;
-static uint8_t leftOffsetRearRight = 0;
-
-static uint8_t rightOffsetFrontLeft = 0;
-static uint8_t rightOffsetFrontRight = 0;
-static uint8_t rightOffsetRearLeft = 0;
-static uint8_t rightOffsetRearRight = 0;
+// Per-corner crop offsets are no longer globals (#15): they live in TireProfile, are
+// edited under Tire Profiles -> Offsets, and are read back through the accessors at the
+// bottom of this file. "Camera Settings" keeps only the device-wide display toggles.
 
 static bool useThermalGradient = true;
 static bool testEnabled = true;
@@ -237,93 +231,9 @@ static MenuValueBinding useThermalGradientBinding = {
     0
 };
 
-static MenuValueBinding leftOffsetFrontLeftBinding = {
-    VALUE_BYTE,
-    &leftOffsetFrontLeft,
-    nullptr,
-    0,
-    16,
-    31,
-    nullptr,
-    0
-};
-
-static MenuValueBinding leftOffsetFrontRightBinding = {
-    VALUE_BYTE,
-    &leftOffsetFrontRight,
-    nullptr,
-    0,
-    16,
-    32,
-    nullptr,
-    0
-};
-
-static MenuValueBinding leftOffsetRearLeftBinding = {
-    VALUE_BYTE,
-    &leftOffsetRearLeft,
-    nullptr,
-    0,
-    16,
-    33,
-    nullptr,
-    0
-};
-
-static MenuValueBinding leftOffsetRearRightBinding = {
-    VALUE_BYTE,
-    &leftOffsetRearRight,
-    nullptr,
-    0,
-    16,
-    34,
-    nullptr,
-    0
-};
-
-static MenuValueBinding rightOffsetFrontLeftBinding = {
-    VALUE_BYTE,
-    &rightOffsetFrontLeft,
-    nullptr,
-    0,
-    16,
-    35,
-    nullptr,
-    0
-};
-
-static MenuValueBinding rightOffsetFrontRightBinding = {
-    VALUE_BYTE,
-    &rightOffsetFrontRight,
-    nullptr,
-    0,
-    16,
-    36,
-    nullptr,
-    0
-};
-
-static MenuValueBinding rightOffsetRearLeftBinding = {
-    VALUE_BYTE,
-    &rightOffsetRearLeft,
-    nullptr,
-    0,
-    16,
-    37,
-    nullptr,
-    0
-};
-
-static MenuValueBinding rightOffsetRearRightBinding = {
-    VALUE_BYTE,
-    &rightOffsetRearRight,
-    nullptr,
-    0,
-    16,
-    38,
-    nullptr,
-    0
-};
+// EEPROM 31..38 used to hold the eight global camera offsets. #15 moved the offsets into
+// the tire profile (persisted verbatim in the profile region), so 31 was re-purposed for
+// the inflation indicator (see below) and 32..38 are now free.
 
 static MenuValueBinding showPixelOffsetsBinding = {
     VALUE_BOOL,
@@ -430,15 +340,17 @@ static MenuValueBinding imuOrientBinding = {
     4
 };
 
-// Inflation indicator on/off (EEPROM 49; last free menu-binding byte below the
-// tire-profile region at 50). On by default; the magic-sentinel load makes 0 safe.
+// Inflation indicator on/off. On by default; the magic-sentinel load makes 0 safe.
+// EEPROM 31 -- one of the bytes freed by #15. It previously shared byte 49 with Show
+// Balance, so toggling either one silently clobbered the other on the next save/load;
+// #15 freed a whole run of bytes, so the two get one each.
 static MenuValueBinding inflationIndicatorBinding = {
     VALUE_BOOL,
     &inflationIndicator,
     nullptr,
     0,
     0,
-    49,
+    31,
     nullptr,
     0
 };
@@ -448,11 +360,17 @@ static MenuValueBinding inflationIndicatorBinding = {
 // is TRANSIENT (EEPROM_NO_PERSIST): the active slot is always resolved from the current
 // mode's default profile at boot and on every mode change, so persisting a "last profile"
 // would only fight that. A manual pick here still takes effect immediately and holds
-// until the next mode change or reboot. The window/K/tau/baseline fields edit a working
-// copy (g_editProfile) that "Save Profile" commits into the selected slot. EEPROM
-// addresses 113..121 sit above the profile struct region (<=111) and below the menu
-// magic (255); TireProfiles reloads the edit buffer from the slot on boot, so these
-// tree-walked bytes are a harmless duplicate.
+// until the next mode change or reboot.
+//
+// Since #15 every edit field below is TRANSIENT too. They edit a working copy
+// (g_editProfile) that "Save Prof" commits into the selected slot, and the slot is what
+// gets persisted -- byte-verbatim, in the profile region. They used to ALSO be tree-walked
+// to EEPROM 113..121 as a harmless duplicate, but #15 grew TireProfile to 25 bytes, so
+// three slots now run to byte 124 and would have overwritten exactly those bytes. Rather
+// than shuffle the duplicate elsewhere it is gone: the edit buffer is derived state (both
+// TireProfiles::begin() and applyModeDefaultProfile() reload it from the slot), so there
+// was never anything worth persisting. Dropping it also spares the new offset fields the
+// menu path's "a VALUE_BYTE stored as 0 is ambiguous" history (see MenuSystem.cpp).
 static MenuValueBinding profileSelectBinding = {
     VALUE_ENUM,
     &g_profileSel,
@@ -464,32 +382,59 @@ static MenuValueBinding profileSelectBinding = {
     PROFILE_COUNT
 };
 static MenuValueBinding profileWindowMinBinding = {
-    VALUE_BYTE, &g_editProfile.windowMin, nullptr, 0, 255, 113, nullptr, 0
+    VALUE_BYTE, &g_editProfile.windowMin, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileWindowIdealBinding = {
-    VALUE_BYTE, &g_editProfile.windowIdeal, nullptr, 0, 255, 114, nullptr, 0
+    VALUE_BYTE, &g_editProfile.windowIdeal, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileWindowMaxBinding = {
-    VALUE_BYTE, &g_editProfile.windowMax, nullptr, 0, 255, 115, nullptr, 0
+    VALUE_BYTE, &g_editProfile.windowMax, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileOffsetKBinding = {
-    VALUE_BYTE, &g_editProfile.offsetK, nullptr, 0, 80, 116, nullptr, 0
+    VALUE_BYTE, &g_editProfile.offsetK, nullptr, 0, 80, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileTauBinding = {
-    VALUE_BYTE, &g_editProfile.tauSeconds, nullptr, 1, 60, 117, nullptr, 0
+    VALUE_BYTE, &g_editProfile.tauSeconds, nullptr, 1, 60, EEPROM_NO_PERSIST, nullptr, 0
 };
 // Signed per-corner baselines. minByte/maxByte carry -40/+40 as int8_t bit patterns.
 static MenuValueBinding profileBaseFLBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[0], nullptr, (uint8_t)(int8_t)-40, 40, 118, nullptr, 0
+    VALUE_SBYTE, &g_editProfile.baseline[0], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileBaseFRBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[1], nullptr, (uint8_t)(int8_t)-40, 40, 119, nullptr, 0
+    VALUE_SBYTE, &g_editProfile.baseline[1], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileBaseRLBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[2], nullptr, (uint8_t)(int8_t)-40, 40, 120, nullptr, 0
+    VALUE_SBYTE, &g_editProfile.baseline[2], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileBaseRRBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[3], nullptr, (uint8_t)(int8_t)-40, 40, 121, nullptr, 0
+    VALUE_SBYTE, &g_editProfile.baseline[3], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
+};
+
+// Per-corner camera crop offsets (#15), corner order FL, FR, RL, RR. Same edit-buffer /
+// transient treatment as the fields above; the range mirrors the old global offsets.
+static MenuValueBinding profileLeftOffsetFLBinding = {
+    VALUE_BYTE, &g_editProfile.leftOffset[0], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileRightOffsetFLBinding = {
+    VALUE_BYTE, &g_editProfile.rightOffset[0], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileLeftOffsetFRBinding = {
+    VALUE_BYTE, &g_editProfile.leftOffset[1], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileRightOffsetFRBinding = {
+    VALUE_BYTE, &g_editProfile.rightOffset[1], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileLeftOffsetRLBinding = {
+    VALUE_BYTE, &g_editProfile.leftOffset[2], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileRightOffsetRLBinding = {
+    VALUE_BYTE, &g_editProfile.rightOffset[2], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileLeftOffsetRRBinding = {
+    VALUE_BYTE, &g_editProfile.leftOffset[3], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+};
+static MenuValueBinding profileRightOffsetRRBinding = {
+    VALUE_BYTE, &g_editProfile.rightOffset[3], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 
 // ----------------------------------------------------
@@ -533,31 +478,9 @@ static MenuItem hardwareSettingsMenu[] = {
     }
 };
 
-static MenuItem frontLeftPixelOffsetsMenu[] = {
-    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetFrontLeftBinding},
-    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetFrontLeftBinding }
-};
-
-static MenuItem frontRightPixelOffsetsMenu[] = {
-    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetFrontRightBinding},
-    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetFrontRightBinding }
-};
-
-static MenuItem rearLeftPixelOffsetsMenu[] = {
-    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetRearLeftBinding},
-    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetRearLeftBinding }
-};
-
-static MenuItem rearRightPixelOffsetsMenu[] = {
-    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &leftOffsetRearRightBinding},
-    { "Right", MENU_VALUE, nullptr, nullptr, 0, &rightOffsetRearRightBinding }
-};
-
+// "Camera Settings". The per-corner offset VALUES moved to Tire Profiles -> Offsets (#15);
+// what is left here is genuinely device-wide display behaviour, so it stays global.
 static MenuItem pixelOffsetsMenu[] = {
-    { "Front Left",  MENU_SUBMENU, nullptr, frontLeftPixelOffsetsMenu, sizeof(frontLeftPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
-    { "Front Right", MENU_SUBMENU, nullptr, frontRightPixelOffsetsMenu, sizeof(frontRightPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
-    { "Rear Left",   MENU_SUBMENU, nullptr, rearLeftPixelOffsetsMenu, sizeof(rearLeftPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
-    { "Rear Right",  MENU_SUBMENU, nullptr, rearRightPixelOffsetsMenu, sizeof(rearRightPixelOffsetsMenu)/sizeof(MenuItem), nullptr},
     {
         "Show Offsets",
         MENU_VALUE,
@@ -603,6 +526,36 @@ static MenuItem imuGateMenu[] = {
     { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
 };
 
+// Per-profile camera crop offsets (#15). Mirrors the corner / Left-Right shape the old
+// global "Camera Settings" offsets had, so the tuning gestures are unchanged -- only the
+// values now belong to the selected profile's edit buffer, saved by "Save Prof".
+static MenuItem profileOffsetsFrontLeftMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &profileLeftOffsetFLBinding  },
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &profileRightOffsetFLBinding }
+};
+
+static MenuItem profileOffsetsFrontRightMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &profileLeftOffsetFRBinding  },
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &profileRightOffsetFRBinding }
+};
+
+static MenuItem profileOffsetsRearLeftMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &profileLeftOffsetRLBinding  },
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &profileRightOffsetRLBinding }
+};
+
+static MenuItem profileOffsetsRearRightMenu[] = {
+    { "Left",  MENU_VALUE, nullptr, nullptr, 0, &profileLeftOffsetRRBinding  },
+    { "Right", MENU_VALUE, nullptr, nullptr, 0, &profileRightOffsetRRBinding }
+};
+
+static MenuItem profileOffsetsMenu[] = {
+    { "Front Left",  MENU_SUBMENU, nullptr, profileOffsetsFrontLeftMenu,  sizeof(profileOffsetsFrontLeftMenu)/sizeof(MenuItem),  nullptr },
+    { "Front Right", MENU_SUBMENU, nullptr, profileOffsetsFrontRightMenu, sizeof(profileOffsetsFrontRightMenu)/sizeof(MenuItem), nullptr },
+    { "Rear Left",   MENU_SUBMENU, nullptr, profileOffsetsRearLeftMenu,   sizeof(profileOffsetsRearLeftMenu)/sizeof(MenuItem),   nullptr },
+    { "Rear Right",  MENU_SUBMENU, nullptr, profileOffsetsRearRightMenu,  sizeof(profileOffsetsRearRightMenu)/sizeof(MenuItem),  nullptr }
+};
+
 // Tire-profile action callbacks (defined in section 6).
 static void doLoadProfile();
 static void doNameProfile();
@@ -622,6 +575,7 @@ static MenuItem tireProfilesMenu[] = {
     { "Base FR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFRBinding     },
     { "Base RL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRLBinding     },
     { "Base RR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRRBinding     },
+    { "Offsets",   MENU_SUBMENU, nullptr, profileOffsetsMenu, sizeof(profileOffsetsMenu)/sizeof(MenuItem), nullptr },
     { "Save Prof", MENU_ACTION, doSaveProfile,  nullptr, 0, nullptr                   },
     { "Reset",     MENU_ACTION, doResetProfile, nullptr, 0, nullptr                   },
 };
@@ -918,40 +872,18 @@ uint8_t getImuOrient() {
     return imuOrient;
 }
 
+// Camera crop offsets, per corner (0=FL, 1=FR, 2=RL, 3=RR). Since #15 these resolve
+// against the ACTIVE tire profile rather than eight globals, so switching profiles swaps
+// the crop along with the window / K / tau. Signatures are unchanged on purpose: the
+// consumers (tires_esp32.ino -> TempReader, ThermalDisplay, NBP boot metadata) still read
+// them exactly as before, and initializeSystem() re-pushes them whenever the menu closes,
+// which is also when a profile change takes effect.
 byte getLeftPixelOffset(int index){
-    switch(index){
-        case 0:
-            return leftOffsetFrontLeft;
-            break;
-        case 1:
-            return leftOffsetFrontRight;
-            break;
-        case 2:
-            return leftOffsetRearLeft;
-            break;
-        case 3:
-            return leftOffsetRearRight;
-            break;
-        default:
-            return 0;
-    }
+    if (index < 0 || index >= 4) return 0;
+    return TireProfiles::active().leftOffset[index];
 }
 
 byte getRightPixelOffset(int index){
-    switch(index){
-        case 0:
-            return rightOffsetFrontLeft;
-            break;
-        case 1:
-            return rightOffsetFrontRight;
-            break;
-        case 2:
-            return rightOffsetRearLeft;
-            break;
-        case 3:
-            return rightOffsetRearRight;
-            break;
-        default:
-            return 0;
-    }
+    if (index < 0 || index >= 4) return 0;
+    return TireProfiles::active().rightOffset[index];
 }
