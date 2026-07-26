@@ -782,7 +782,6 @@ static void initializeSystem()
 {
   cleanupObjects();
 
-  extern uint8_t getCurrentModeValue();
   extern uint8_t getTemperatureScaleValue();
   extern uint8_t getNightBrightness();
   extern uint8_t getUseThermalGradient();
@@ -803,7 +802,8 @@ static void initializeSystem()
   extern uint8_t getImuOrient();
 
 
-  uint8_t modeVal = getCurrentModeValue();         // 0=Street,1=Track
+  // No mode read here any more: the window comes from the active profile and Calculated is
+  // no longer Track-gated (#16), so initializeSystem() is mode-agnostic.
   uint8_t scaleVal = getTemperatureScaleValue();   // 0=F,1=C
 
   nightBrightness = (int)(((float)getNightBrightness()/100.0f)*255.0f);
@@ -851,10 +851,10 @@ static void initializeSystem()
   tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
 
-  // Story 03: calculated (surface->carcass) mode is a Track-mode feature. Enable only
-  // when the Display setting is Calculated AND we are in Track mode; Street stays raw.
-  tempReader->configureCalculated((getCalcDisplayMode() == 1) && (modeVal == 1),
-                                  calcTau, calcK);
+  // Calculated (surface->carcass) mode is available in BOTH modes (#16): the Display
+  // setting alone decides, and K/tau come from the active profile either way. It used to
+  // be gated on Track, which silently ignored a Calculated pick made in Street.
+  tempReader->configureCalculated(getCalcDisplayMode() == 1, calcTau, calcK);
 
   bool fl3 = tempReader->tireSensorIsCamera[0]; //false;
   bool fr3 = tempReader->tireSensorIsCamera[1]; //false;

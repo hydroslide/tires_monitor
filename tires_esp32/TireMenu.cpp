@@ -440,8 +440,11 @@ static MenuValueBinding profileRightOffsetRRBinding = {
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
+// "Display" (Raw/Calculated) is one shared global byte surfaced in both mode menus (#16),
+// not a per-mode setting -- changing it here changes it under Track Settings too.
 static MenuItem streetSettingsMenu[] = {
-    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding }
+    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding   },
+    { "Display",         MENU_VALUE, nullptr, nullptr, 0, &calcDisplayModeBinding }
 };
 
 // Balance summary action (defined in section 6). Opens the front/rear + left/right
