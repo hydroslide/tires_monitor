@@ -12,8 +12,9 @@
 // default profile (Street Settings / Track Settings -> "Default Profile") and the active
 // profile supplies the window. The active selection is transient -- it is resolved from
 // the current mode's default at boot and re-snapped on every mode change (see
-// applyModeDefaultProfile() in TireMenu), and is never persisted. Only the Track-only
-// calc features (calculated display, inflation) still gate on currentMode == 1.
+// applyModeDefaultProfile() in TireMenu), and is never persisted. Calculated display reads
+// this profile's K/tau in BOTH modes as of #16; the inflation indicator and the session /
+// balance features are what still gate on currentMode == 1.
 
 #define PROFILE_COUNT      3
 #define PROFILE_NAME_LEN   7   // visible characters (buffer is +1 for the null)
