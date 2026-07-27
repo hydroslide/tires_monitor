@@ -176,7 +176,7 @@ The window mismatch (surface reads ~10–40 °F below the carcass-frame spec) is
 - **Smoothing τ = carcass thermal-inertia model.** The carcass is not just hotter, it is *slower*. A low-pass with time constant τ makes the displayed value rise and fall gradually like the carcass, killing the transient "purple" spikes that falsely read as in-window. This is a **better** overheat guard, not a worse one: genuine overheating is *sustained* and survives the filter, while a brief surface spike that doesn't move the smoothed value isn't cooking the carcass.
 - **Raw vs Calculated modes (menu):** Raw = honest surface, unsmoothed (bench/debug/data). Calculated = offset + smoothed carcass estimate (driving). **Always log raw** (or raw + the active K/τ) even in calculated mode, so calibration can be re-derived offline — never discard the raw signal.
 - **Calibration:** per-profile defaults + an **immediate needle cross-check** to anchor K (probe a tire center the instant you come in, diff against what the camera showed) + an **offline τ fit** from the logs. K drifts with tire/wear/speed/ambient, so it is a profile value, never one magic number.
-- **Tire profiles** bundle the tire-specific values: window thresholds, offset K, smoothing τ, and the **per-corner inflation baseline**. Selecting a profile (ECF, EC02, …) swaps all of them at once. This is *why* ECF and EC02 read differently — they are different tires with different baselines and windows.
+- **Tire profiles** bundle the tire-specific values: window thresholds, offset K, smoothing τ, and (since #15) the **per-corner camera crop offsets**. Selecting a profile (ECF, EC02, …) swaps all of them at once. This is *why* ECF and EC02 read differently — they are different tires with different windows. *(The per-corner inflation baseline was also bundled here originally; it was removed in #18 — see "Amendments" at the end of this document.)*
 
 ---
 
@@ -256,3 +256,69 @@ Story bodies are written during the interactive Next-Steps pass (§7); this is t
 - Northstar Motorsports (temp interpretation) — https://northstarmotorsports.com/pages/tech-tips-understanding-tire-temperatures
 - Autosport Labs (using tire temps) — https://www.autosportlabs.com/using_tire_temperatures_for_better_grip_and_faster_lap_times/
 - Izze Racing / AiM live systems & display practice; GRM & Miata forums for hot-pressure targets (see conversation research log).
+
+---
+
+## Amendments (post-implementation)
+
+This document records the original design and the data analysis behind it. The findings
+above still stand; the items below are where **shipped behavior deliberately diverges**
+from what the design proposed. Read these before treating any statement above as current.
+
+### #14 — the tire profile is the single source of truth for the window, in both modes
+
+The design assumed Street and Track each carried their own Min/Ideal/Max. They no longer
+do. Each *mode* now names a **default profile** (Street → EC02, Track → ECF) and the active
+profile supplies the window, K and τ. The active selection is transient: it is resolved
+from the current mode's default at boot and re-snapped on every mode change, and is never
+persisted. Seed windows were retuned at the same time: **ECF 120/160/200, EC02 110/140/170**.
+
+### #16 — Calculated display is available in both modes
+
+The design (and the stories' global constraint) treated calculated mode as Track-only.
+Since both modes now resolve K and τ from the active profile, the calc path has everything
+it needs in Street too, and the mode gate was an artificial restriction. The **Display**
+(Raw/Calculated) setting appears under both Street Settings and Track Settings and is one
+shared global value, not a per-mode setting.
+
+Still genuinely Track-only: the inflation indicator, the session/balance swipe features,
+and boot-metadata mode labelling.
+
+### #18 — the per-corner inflation baseline was removed
+
+§3.1's measured straight-line residuals (FL ≈ −3, RL ≈ −6, FR ≈ +4, RR ~0 at 31 psi) are
+**retained as data** — the measurement was sound. What was wrong was promoting them to a
+per-profile calibration constant:
+
+- **They are a track fingerprint, not a property of the car.** FL heaviest, RL next, FR
+  opposite sign is Lime Rock's load pattern (clockwise; left tyres loaded, FR barely
+  worked). Static camber would push FL and FR the *same* direction — these push opposite
+  ways. And while §5.4's geometry artifact decays ~1.5 s after the body levels, *heat* does
+  not: surface thermal constants run seconds to tens of seconds and Lime Rock's straights
+  are short, so "warm, straight, steady" frames there still carry heat from the corner just
+  exited. The values do not transfer to another track.
+- **The artifact they appeared to correct is already gone on a straight.** Removing it is
+  the capture gate's entire job (§5.4); the baseline added nothing on top.
+- **There was no way to compute them** — no capture routine, 12 hand-entered numbers
+  (4 corners × 3 profiles) derived from one session at one track.
+- **The one genuinely static component has a better home.** A camera aimed slightly off, so
+  its "center" band is not really tyre center, is real and track-independent — but that is
+  an error measured in **pixels**, and #15 gave every profile per-corner crop offsets.
+  Correcting it with a degrees-F offset fixes the wrong variable: wrong unit, and it shifts
+  only the edge−center *delta* while leaving every displayed band temperature still wrong.
+
+The inflation verdict now uses a plain `edge − center` spread against the Inflation Delta %
+threshold, still gated to straight-line frames. **If residual cornering heat later proves to
+bias the verdict, the fix is a straight-line dwell** — require N seconds continuously
+straight before a frame counts — which is track-independent and needs one global number
+rather than twelve per-profile ones, and extends the existing latch dwell.
+
+### #18 — Tire Profiles menu: no `Load` / `Save Prof`
+
+The edit buffer now follows the `Profile` selector automatically, so the manual `Load` step
+is gone. It had been papering over a real bug: `MenuValueBinding` has no change-callback, so
+changing the selector left the buffer showing the *previous* slot's values, and saving then
+wrote them into the newly selected slot. Root **Save Settings** already commits the edit
+buffer and writes all three slots, so the profile-only save was a strict subset of it.
+`Reset` remains. Note that switching profiles now discards uncommitted edits — normal
+select-record→edit→save semantics, and strictly better than silently corrupting a slot.

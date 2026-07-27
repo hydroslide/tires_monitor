@@ -1,5 +1,13 @@
 # Tire profiles (window + K + τ + per-corner baseline)
 
+> **Status note (#18):** the **per-corner baseline was removed** after implementation, and
+> the profile gained **per-corner camera crop offsets** (#15) in its place. #14 also made
+> the profile the single source of truth for the window in *both* modes (not Track-only),
+> and stopped persisting the active selection. The baseline rationale below is retained as
+> the historical record — see "Amendments" in
+> [`../tire-temp-functional-design.md`](../tire-temp-functional-design.md) for why it was
+> dropped. Treat the acceptance criteria here as superseded where they mention baselines.
+
 - **Area:** design §5.5 · feature
 - **Depends on:** 07 (the "byte can't store 0" EEPROM bug blocks signed baseline storage)
 - **Status:** reconciled from review notes

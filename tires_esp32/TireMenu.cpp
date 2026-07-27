@@ -20,7 +20,7 @@ static uint8_t nightBrightness   = 25;
 
 // -- Per-mode default tire profile (#14) --
 // A mode no longer carries its own temp window; it names the tire profile it starts from,
-// and the profile is the single source of truth for Min/Ideal/Max (plus K/tau/baselines).
+// and the profile is the single source of truth for Min/Ideal/Max (plus K / tau / crop).
 // Both are enum indices into the profile slots: Street -> EC02 (1), Track -> ECF (0).
 static uint8_t streetProfile = 1;
 static uint8_t trackProfile  = 0;
@@ -43,7 +43,8 @@ static bool autoSealStationary = false;
 
 // -- Inflation indicator (story 06; Track-mode only) --
 // Gates & latches the over/under inflation verdict: computed only on straight-line
-// (captured) frames, from calculated temps, baseline-corrected, presented latched.
+// (captured) frames, from calculated temps, presented latched (#18 dropped the
+// per-corner baseline correction).
 // On by default; inert / hidden in Street mode.
 static bool inflationIndicator = true;
 
@@ -396,20 +397,6 @@ static MenuValueBinding profileOffsetKBinding = {
 static MenuValueBinding profileTauBinding = {
     VALUE_BYTE, &g_editProfile.tauSeconds, nullptr, 1, 60, EEPROM_NO_PERSIST, nullptr, 0
 };
-// Signed per-corner baselines. minByte/maxByte carry -40/+40 as int8_t bit patterns.
-static MenuValueBinding profileBaseFLBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[0], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
-};
-static MenuValueBinding profileBaseFRBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[1], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
-};
-static MenuValueBinding profileBaseRLBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[2], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
-};
-static MenuValueBinding profileBaseRRBinding = {
-    VALUE_SBYTE, &g_editProfile.baseline[3], nullptr, (uint8_t)(int8_t)-40, 40, EEPROM_NO_PERSIST, nullptr, 0
-};
-
 // Per-corner camera crop offsets (#15), corner order FL, FR, RL, RR. Same edit-buffer /
 // transient treatment as the fields above; the range mirrors the old global offsets.
 static MenuValueBinding profileLeftOffsetFLBinding = {
@@ -560,14 +547,16 @@ static MenuItem profileOffsetsMenu[] = {
 };
 
 // Tire-profile action callbacks (defined in section 6).
-static void doLoadProfile();
 static void doNameProfile();
-static void doSaveProfile();
 static void doResetProfile();
 
+// No "Load" / "Save Prof" items (#18). The edit buffer now follows the Profile selector
+// automatically via serviceProfileEditSync(), so there is nothing to load by hand; and the
+// root menu's "Save Settings" already commits the edit buffer and writes all three slots
+// (doSave -> commitEditToSelected + TireProfiles::save), so a profile-only save was a
+// strict subset of it. "Reset" stays -- reverting one slot to its seed is distinct.
 static MenuItem tireProfilesMenu[] = {
     { "Profile",   MENU_VALUE,  nullptr,        nullptr, 0, &profileSelectBinding     },
-    { "Load",      MENU_ACTION, doLoadProfile,  nullptr, 0, nullptr                   },
     { "Name",      MENU_ACTION, doNameProfile,  nullptr, 0, nullptr                   },
     { "Min",       MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowMinBinding  },
     { "Ideal",     MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowIdealBinding},
@@ -576,12 +565,7 @@ static MenuItem tireProfilesMenu[] = {
     // the CP437 degree ring; tft.cp437(true) in setup() makes it render literally.
     { "Carcass Offset \xF8", MENU_VALUE, nullptr, nullptr, 0, &profileOffsetKBinding   },
     { "Carcass Lag s", MENU_VALUE,  nullptr,        nullptr, 0, &profileTauBinding     },
-    { "Base FL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFLBinding     },
-    { "Base FR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseFRBinding     },
-    { "Base RL",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRLBinding     },
-    { "Base RR",   MENU_VALUE,  nullptr,        nullptr, 0, &profileBaseRRBinding     },
     { "Offsets",   MENU_SUBMENU, nullptr, profileOffsetsMenu, sizeof(profileOffsetsMenu)/sizeof(MenuItem), nullptr },
-    { "Save Prof", MENU_ACTION, doSaveProfile,  nullptr, 0, nullptr                   },
     { "Reset",     MENU_ACTION, doResetProfile, nullptr, 0, nullptr                   },
 };
 
@@ -729,25 +713,27 @@ void applyModeDefaultProfile()
     TireProfiles::loadEditFromSelected();
 }
 
-// -- Tire-profile actions (story 04) --
-static void doLoadProfile()
+// -- Profile selector -> edit buffer (#18) --
+// MenuValueBinding carries no change-callback, so moving the "Profile" item only updates
+// g_profileSel: the edit buffer would keep showing the PREVIOUS slot's values, and saving
+// would then write them into the newly selected slot. That is what the manual "Load" item
+// existed to work around. Watching the selection here closes the hole and lets both "Load"
+// and "Save Prof" go away. Called from loop() alongside serviceModeProfileSnap(), so it
+// also fires while the menu is open. Idempotent -- applyModeDefaultProfile() already
+// resyncs on a mode change, and a second resync is a no-op.
+void serviceProfileEditSync()
 {
-    // Pull the currently selected slot into the edit buffer for viewing/editing.
+    static uint8_t lastSel = 0xFF;      // 0xFF forces a sync on the first call
+    if (g_profileSel == lastSel) return;
+    lastSel = g_profileSel;
     TireProfiles::loadEditFromSelected();
-    menuRenderer.setStatusMessage("Profile loaded");
 }
 
+// -- Tire-profile actions (story 04) --
 static void doNameProfile()
 {
     // Hand off to the small-screen name editor (swipe up/down = letter, left = lock).
     menuRenderer.beginNameEdit(g_editProfile.name, PROFILE_NAME_LEN);
-}
-
-static void doSaveProfile()
-{
-    TireProfiles::commitEditToSelected();
-    TireProfiles::save();
-    menuRenderer.setStatusMessage("Profile saved");
 }
 
 static void doResetProfile()

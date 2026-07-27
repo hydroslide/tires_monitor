@@ -265,10 +265,11 @@ void setThermalMode(uint8_t _thermalMode){
 // Over/under source for the latch (story 02, refined by story 06). Computes the
 // overall center-hot vote across the camera tires from the working section temps --
 // which are the CALCULATED (offset + smoothed) values when calculated mode is on
-// (calculated-everywhere) -- with each corner's per-corner inflation baseline (the
-// honest straight-line residual, story 04) subtracted so a tire reading its normal
-// baseline no longer votes. The IMU gate only applies this vote on captured
-// (straight-line) frames, giving the gated, baseline-corrected verdict story 06 wants.
+// (calculated-everywhere). The IMU gate applies this vote only on captured
+// (straight-line) frames, which is what strips the mid-corner body-roll artifact.
+// The per-corner baseline subtraction was removed in #18 -- see TireProfiles.h for why
+// (the shipped values encoded one track's load pattern, and the static part of the error
+// is a camera aim problem belonging in the pixel crop offsets).
 extern byte getminInflationDeltaPct();
 static int computeInterimInflationCondition()
 {
@@ -281,7 +282,6 @@ static int computeInterimInflationCondition()
     float center = tempReader->tireSectionTemps[t][1];
     if (edge <= 0.0f) continue;                  // skip unread/invalid frames
     float delta = edge - center;                 // negative => center hotter
-    delta -= (float)TireProfiles::baselineF(t);  // subtract per-corner baseline (story 06)
     float minDelta = edge * pct;
     if (delta <= -minDelta) overVotes++;         // center-hot => over-inflation
     else if (delta >= minDelta) underVotes++;    // edges-hot => under-inflation
@@ -423,9 +423,9 @@ void doRunningMode(int time_delta)
       // downstream renderer applies them directly with no re-derivation. Track-mode
       // only -- the raw/active temp channel sets above stay on in all modes. Runs after
       // draw() so the per-band colors are exactly the ones just painted. Delta is the
-      // baseline-corrected edge-vs-center spread (story 06 frame); a center-hot spread
-      // beyond Threshold votes OVER (+1), edge-hot votes UNDER (-1); Overall is the
-      // latched IMU state.
+      // plain edge-vs-center spread (#18 dropped the baseline correction); a center-hot
+      // spread beyond Threshold votes OVER (+1), edge-hot votes UNDER (-1); Overall is
+      // the latched IMU state.
       if (!testMode && trackMode) {
         float   insDelta[TIRE_COUNT]  = {0};
         float   insThresh[TIRE_COUNT] = {0};
@@ -440,7 +440,7 @@ void doRunningMode(int time_delta)
           float edge = (tempReader->tireSectionTemps[c][0] +
                         tempReader->tireSectionTemps[c][2]) / 2.0f;
           float center = tempReader->tireSectionTemps[c][1];
-          float d   = edge - center - (float)TireProfiles::baselineF(c);
+          float d   = edge - center;
           float thr = edge * pct;
           insDelta[c]  = d;
           insThresh[c] = thr;
@@ -743,6 +743,7 @@ void loop() {
   int time_delta = timeDelta();
   menuHandler.loop(time_delta);
   serviceModeProfileSnap();
+  serviceProfileEditSync();   // #18: Tire Profiles edit buffer follows the selector
   if (!menuHandler.isMenuActive()) {
     if(menuWasActive){
       menuWasActive = false;
@@ -829,7 +830,7 @@ static void initializeSystem()
                       (IMUGate::Orient)getImuOrient());
 
   // Single source of truth for the tire window (#14): BOTH modes read the active tire
-  // profile, which bundles window + K + tau + baselines, so switching profile swaps all
+  // profile, which bundles window + K + tau + camera crop, so switching profile swaps all
   // of them at once. The mode only chooses which profile is the default -- see
   // applyModeDefaultProfile(), which snaps the active slot at boot and on mode changes.
   const TireProfile& p = TireProfiles::active();

@@ -8,24 +8,26 @@ extern HWCDC USBSerial;
 // Menu bindings live at 0..49 and the menu "settings written" magic at EEPROM_SIZE-1
 // (255). Profiles get their own region above the menu bindings so the two persistence
 // paths never collide. Using EEPROM.put on the raw struct writes each byte verbatim,
-// so signed baselines and camera offsets (including 0) round-trip correctly without the
+// so camera offsets (including 0) round-trip correctly without the
 // menu binding path's "byte can't store 0" caveat.
 //
-// Region map since #15 (sizeof(TireProfile) grew 17 -> 25 with the per-corner camera
-// offsets, so three slots now run to 124 instead of 100):
-//   50..74   slot 0      100..124  slot 2      126,127  free
-//   75..99   slot 1      125       PROFILE_MAGIC        128..    session summary
-// The magic moved 110 -> 125 because 110 now falls INSIDE slot 2. Byte 111 -- reserved
-// when #14 stopped persisting the active slot -- is likewise absorbed by slot 2. The
-// static_assert below is the guard: it fails the build rather than letting a future field
-// silently run the last slot over the magic (or into the session blob at 128).
+// Region map since #18 (sizeof(TireProfile) 25 -> 21: the per-corner baseline[4] was
+// removed, so three slots run to 112):
+//   50..70   slot 0      92..112   slot 2      113..124 free
+//   71..91   slot 1      125       PROFILE_MAGIC        128..    session summary
+// The magic stays at 125 (where #15 moved it, because the old 110 fell inside slot 2)
+// rather than sliding back down -- there is no reason to churn addresses, and the gap at
+// 113..124 gives the struct room to grow again. The static_assert below is the guard: it
+// fails the build rather than letting a future field silently run the last slot over the
+// magic (or into the session blob at 128).
 static const uint16_t PROFILE_BASE        = 50;
 static const uint16_t PROFILE_MAGIC_ADDR  = 125;
-// Bumped for #14 (retuned ECF / EC02 seed windows) and again for #15 (the struct grew the
-// leftOffset/rightOffset arrays, so the old layout would be misread field-for-field --
-// garbage windows AND garbage crop offsets). A new magic forces a clean re-seed on the
-// first boot after the flash; it intentionally wipes on-device profile customizations.
-static const uint8_t  PROFILE_MAGIC       = 0x5C;
+// Bumped for #14 (retuned ECF / EC02 seed windows), #15 (struct grew the leftOffset /
+// rightOffset arrays) and now #18 (struct shrank by baseline[4]). Any layout change needs
+// a new magic or the old bytes are misread field-for-field into the new shape. Forces a
+// clean re-seed on first boot after the flash; intentionally wipes on-device profile
+// customizations.
+static const uint8_t  PROFILE_MAGIC       = 0x5D;
 
 static_assert(PROFILE_BASE + PROFILE_COUNT * sizeof(TireProfile) <= PROFILE_MAGIC_ADDR,
               "TireProfile slots overrun PROFILE_MAGIC_ADDR -- move the magic and check "
@@ -47,34 +49,27 @@ static const uint8_t SEED_LEFT_OFFSET[4]  = { 0, 0, 0, 0 };
 static const uint8_t SEED_RIGHT_OFFSET[4] = { 0, 0, 0, 0 };
 
 // Compiled-in seed defaults. Windows are carcass-frame degrees F; K/tau are the
-// literature defaults (design section 6). Baselines are the straight-line spread at
-// the known-good pressure (design 3.1), corner order FL, FR, RL, RR.
+// literature defaults (design section 6).
 static void seedDefaults() {
     // Slot 0 -- ECF (the subject tire, the Track-mode default profile): window
-    // 120/160/200 carcass, K +20, tau 15, baselines FL -3 / FR +4 / RL -6 / RR 0.
+    // 120/160/200 carcass, K +20, tau 15.
     strncpy(s_profiles[0].name, "ECF", PROFILE_NAME_LEN);
     s_profiles[0].name[PROFILE_NAME_LEN] = '\0';
     s_profiles[0].windowMin = 120; s_profiles[0].windowIdeal = 160; s_profiles[0].windowMax = 200;
     s_profiles[0].offsetK = 20; s_profiles[0].tauSeconds = 15;
-    s_profiles[0].baseline[0] = -3; s_profiles[0].baseline[1] = 4;
-    s_profiles[0].baseline[2] = -6; s_profiles[0].baseline[3] = 0;
 
     // Slot 1 -- EC02 (the control tire, the Street-mode default profile): a lower window
-    // suited to street temps, and milder baselines.
+    // suited to street temps.
     strncpy(s_profiles[1].name, "EC02", PROFILE_NAME_LEN);
     s_profiles[1].name[PROFILE_NAME_LEN] = '\0';
     s_profiles[1].windowMin = 110; s_profiles[1].windowIdeal = 140; s_profiles[1].windowMax = 170;
     s_profiles[1].offsetK = 20; s_profiles[1].tauSeconds = 15;
-    s_profiles[1].baseline[0] = -2; s_profiles[1].baseline[1] = 2;
-    s_profiles[1].baseline[2] = -3; s_profiles[1].baseline[3] = 0;
 
     // Slot 2 -- Custom: a neutral starting point (the previous Track window defaults).
     strncpy(s_profiles[2].name, "Custom", PROFILE_NAME_LEN);
     s_profiles[2].name[PROFILE_NAME_LEN] = '\0';
     s_profiles[2].windowMin = 100; s_profiles[2].windowIdeal = 160; s_profiles[2].windowMax = 180;
     s_profiles[2].offsetK = 20; s_profiles[2].tauSeconds = 15;
-    s_profiles[2].baseline[0] = 0; s_profiles[2].baseline[1] = 0;
-    s_profiles[2].baseline[2] = 0; s_profiles[2].baseline[3] = 0;
 
     // Camera crop offsets: identical in all three slots (#15). Seeding here also gives
     // resetSelectedToDefault() the right behaviour for free.
@@ -134,11 +129,6 @@ const TireProfile& TireProfiles::active() {
 
 const TireProfile& TireProfiles::at(uint8_t i) {
     return s_profiles[(i < PROFILE_COUNT) ? i : 0];
-}
-
-int8_t TireProfiles::baselineF(uint8_t corner) {
-    if (corner >= 4) return 0;
-    return s_profiles[activeIndex()].baseline[corner];
 }
 
 void TireProfiles::loadEditFromSelected() {

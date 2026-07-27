@@ -62,7 +62,8 @@ enum class ChannelType {
     SumFLOver, SumFROver, SumRLOver, SumRROver,
     SumFrontRear, SumLeftRight, SumWarmup, SumLength,
     // Instrumentation channels (story 08 / issue #9): per-corner inflation Delta
-    // (baseline-corrected edge-vs-center, in the active temp unit), the Threshold it is
+    // (edge-vs-center, in the active temp unit; #18 dropped the baseline term), the
+    // Threshold it is
     // judged against, and the signed Verdict (+1 over / 0 / -1 under). OverallVerdict is
     // the device's latched over/under state so the renderer consumes the decision
     // directly instead of re-deriving it.

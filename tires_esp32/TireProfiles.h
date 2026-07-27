@@ -4,8 +4,20 @@
 #include <Arduino.h>
 
 // Tire profiles (story 04). A profile bundles all the tire-specific calibration so
-// switching tires swaps window + offset K + smoothing tau + per-corner baselines +
-// per-corner camera crop offsets at once, instead of re-tuning each by hand.
+// switching tires swaps window + offset K + smoothing tau + per-corner camera crop
+// offsets at once, instead of re-tuning each by hand.
+//
+// The per-corner inflation baselines were removed in #18. They were meant to be the
+// "honest straight-line residual" left after the IMU gate strips the mid-corner artifact,
+// but the shipped numbers encoded one track's load pattern (Lime Rock: FL/RL loaded, FR
+// barely worked), not a property of the car -- static camber would push FL and FR the same
+// way, and these pushed opposite ways. The geometry artifact they appeared to correct is
+// already gone on a straight, which is the gate's whole job. Any genuinely static
+// component is a camera AIM error, measured in pixels, and belongs in the per-corner crop
+// offsets (#15) where it also fixes the displayed band temps -- not in a degrees-F fudge
+// that only shifts the edge-vs-center delta. If residual cornering heat ever proves to
+// bias the verdict, the fix is a straight-line dwell (one global number), not twelve
+// hand-entered per-profile ones.
 //
 // Since #14 a profile is the single source of truth for the tire temp window in BOTH
 // modes: Street and Track no longer carry their own Min/Ideal/Max, they each name a
@@ -33,8 +45,9 @@ struct TireProfile {
     uint8_t windowIdeal;
     uint8_t windowMax;
     uint8_t offsetK;      // surface->carcass offset K, +degrees F (default 20)
+                          // menu label: "Carcass Offset" (#17)
     uint8_t tauSeconds;   // EMA smoothing time constant, seconds (default 15)
-    int8_t  baseline[4];  // per-corner inflation baseline, signed degrees F
+                          // menu label: "Carcass Lag" (#17)
     // Camera crop offsets (#15), in thermal-frame pixel columns, 0..PROFILE_OFFSET_MAX.
     // These were eight loose globals under "Camera Settings"; different tires and
     // mountings want different crops, so they belong to the profile. Read back through
@@ -56,9 +69,6 @@ namespace TireProfiles {
     uint8_t            activeIndex();
     const TireProfile& active();
     const TireProfile& at(uint8_t i);
-    // Active profile's per-corner baseline (signed degrees F). Consumed by the
-    // inflation indicator in story 06; exposed here so the value is available.
-    int8_t             baselineF(uint8_t corner);
 
     // Menu-editing helpers. Editing operates on a working copy (g_editProfile); the
     // slot is only changed on an explicit commit.

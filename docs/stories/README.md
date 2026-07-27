@@ -8,7 +8,9 @@ Filed as GitHub issues in `hydroslide/tires_monitor` (labels `todo` + `bug`/`enh
 
 ## Global constraints (apply to every story)
 
-- **Track-mode only.** Every feature here is enabled only in the menu's **Track** mode (`currentMode == 1`, via `getCurrentModeValue()`); in **Street** mode it stays inert / hidden. Track mode is the master switch for the whole redesign. (This is the Street/Track `currentMode`, *not* the thermal `thermalMode`.) Excludes **07** (bug fixes apply in all modes) and the raw-logging half of **08**.
+- **Track-mode only — _partially superseded, see below._** As originally written, every feature here was enabled only in the menu's **Track** mode (`currentMode == 1`, via `getCurrentModeValue()`), inert / hidden in **Street**. (This is the Street/Track `currentMode`, *not* the thermal `thermalMode`.) Excluded **07** (bug fixes apply in all modes) and the raw-logging half of **08**.
+
+  **What actually shipped:** the master-switch framing no longer holds. Since **#14** the tire *profile* — not the mode — is the single source of truth for the temp window, K and τ in **both** modes; a mode only names its default profile. Since **#16** the **Raw/Calculated** display works in both modes too. Still genuinely Track-gated: the **inflation indicator**, the **session / balance** swipe features, and boot-metadata mode labelling. Check the code before assuming a feature is Street-inert.
 - **UI/UX latitude.** Redesign menu UI/UX as needed, and fix wonky / broken / buggy behavior found along the way — note each such fix in the relevant issue (or file a new one).
 - **Calculated everywhere.** When calculated mode (story 03) is enabled, the calculated (offset + smoothed) value is used for **all** temperatures, displays, and decisions system-wide — window/overheat, balance, verdict, summary. Raw is logged as a *separate* diagnostic channel set and never shown. When calculated mode is off, raw is used.
 - **Persist & reload all settings.** Every menu setting — including the active tire-profile selection — is saved to EEPROM and reloaded on boot (the standard settings pattern). Any new setting these stories add follows it.
