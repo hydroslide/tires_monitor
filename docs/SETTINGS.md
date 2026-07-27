@@ -137,6 +137,19 @@ must be stationary and roughly level for that to be right. With the car stopped,
 should sit dead centre. If it doesn't, the unit booted while rolling or on a slope — reboot
 at a standstill. There is no in-menu recalibrate; a reboot is the recovery.
 
+**Bench test: tilt it 90°.** Rolling the whole device onto its side swings gravity fully
+onto the lateral axis, which is *exactly* 1.0 g of apparent lateral acceleration — a known,
+repeatable input, which makes it the best bench check available.
+
+> At ±1.75 g full scale, 1.0 g is `1.0 / 1.75` = **57 % of the way out**, or roughly
+> **46 % into the red**. It does **not** peg, and it shouldn't: pegging would prove nothing,
+> since every value at or above full scale looks identical. A dot that lands near 57 %
+> confirms the scale factor, the bias subtraction and the lateral-axis pick are all correct.
+> Tilting the other way must move it the same distance the other side.
+
+A dot that barely moves on a 90° tilt means the IMU isn't being read or `Orientation` picked
+the wrong axis. A dot that pegs means the scale is wrong.
+
 **Noise check.** On a steady straight, watch how much the dot wanders. That wander is your
 mount noise, and it sets a sensible floor for *Lateral cg* — a threshold below the noise
 band will chatter the gate on and off while going straight.
