@@ -502,6 +502,11 @@ void setup()
   // Slow down SPI to 40MHz (more stable than 80MHz)
   tft.setSPISpeed(40000000);
   tft.init(240, 280, SPI_MODE0);
+  // Use the real CP437 charset (#17). Adafruit_GFX otherwise applies a legacy shift --
+  // `if (!_cp437 && (c >= 176)) c++` -- which would silently render the degree ring
+  // (0xF8) as the stray dot at 0xF9. Only affects chars >= 176; all our strings are
+  // ASCII, so nothing else changes. MenuRenderer references this same tft.
+  tft.cp437(true);
   tft.setRotation(3);
   tft.fillScreen(ST77XX_BLACK);
 
