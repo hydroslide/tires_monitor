@@ -29,9 +29,9 @@ static const float LAT_EMA_ALPHA = 0.35f;
 
 IMUGate::IMUGate()
 : bus(nullptr), present(false), enabled(true), trackActive(false),
-  orient(ORIENT_AUTO), thresholdG(0.35f), dwellMs(2500),
+  orient(ORIENT_AUTO), thresholdG(0.35f), gateDwellMs(500), dwellMs(2500),
   dieTempC(0.0f), verticalAxis(2), lateralAxis(1),
-  latG(0.0f), latInit(false), capturing(true),
+  latG(0.0f), latInit(false), zoneMs(0), capturing(true),
   overAccumMs(0), underAccumMs(0), alert(ALERT_NONE), pendingCond(0)
 {
   for (int i = 0; i < 3; i++) { accG[i] = 0.0f; gyrDps[i] = 0.0f; restBias[i] = 0.0f; }
@@ -85,9 +85,13 @@ bool IMUGate::begin(TwoWire &wire) {
   return true;
 }
 
-void IMUGate::applyConfig(bool en, float thr, unsigned long dwell, Orient o) {
+void IMUGate::applyConfig(bool en, float thr, unsigned long gateDwell,
+                          unsigned long dwell, Orient o) {
   enabled = en;
   thresholdG = (thr > 0.01f) ? thr : 0.35f;
+  // No floor on the capture dwell: 0 is a legitimate setting that reproduces the pre-#20
+  // instant gate, which is what makes it A/B-able against a dwelled gate on the car.
+  gateDwellMs = gateDwell;
   dwellMs = dwell;
   if (o != orient) {
     orient = o;
@@ -162,27 +166,42 @@ void IMUGate::update(long dtMillis, bool trackMode) {
   trackActive = trackMode;
 
   if (present) readSample();
+  if (dtMillis < 0) dtMillis = 0;
+
+  // Lateral g = horizontal-axis accel with the at-rest tilt/offset removed, then
+  // lightly EMA-smoothed (stable mount => minimal smoothing).
+  //
+  // #20 moved this ABOVE the inert early-return. It used to run only in Track mode, so
+  // latG was dead in Street and the g-bar had nothing to show -- but Street is exactly
+  // where you want to eyeball calibration and mount noise before a session. Computing it
+  // unconditionally changes no gate behavior: the inert branch still forces capturing.
+  if (present) {
+    float rawLat = accG[lateralAxis] - restBias[lateralAxis];
+    if (!latInit) { latG = rawLat; latInit = true; }
+    else          { latG = latG + LAT_EMA_ALPHA * (rawLat - latG); }
+  }
 
   // Feature inert outside Track mode or when disabled: never suppress, hold clear.
+  // latInit is deliberately NOT cleared here any more -- re-seeding the EMA on every
+  // Street-mode tick would peg the bar to the raw signal and defeat the smoothing.
   if (!present || !enabled || !trackMode) {
     capturing = true;
+    zoneMs = 0;
     overAccumMs = 0;
     underAccumMs = 0;
     alert = ALERT_NONE;
     pendingCond = 0;
-    latInit = false;
     return;
   }
 
-  // Lateral g = horizontal-axis accel with the at-rest tilt/offset removed, then
-  // lightly EMA-smoothed (stable mount => minimal smoothing).
-  float rawLat = accG[lateralAxis] - restBias[lateralAxis];
-  if (!latInit) { latG = rawLat; latInit = true; }
-  else          { latG = latG + LAT_EMA_ALPHA * (rawLat - latG); }
-
-  capturing = (fabsf(latG) < thresholdG);
-
-  if (dtMillis < 0) dtMillis = 0;
+  // Capture requires the car to be in the zone AND to have HELD it for the capture dwell
+  // (#20). Before this, capture flipped on the instant lateral g dropped below the
+  // threshold, which let the tail of a corner -- still unwinding, load still shifting --
+  // count as straight-line data. Leaving the zone resets the timer outright; there is no
+  // partial credit for a brief dip below threshold mid-corner.
+  bool zoneNow = (fabsf(latG) < thresholdG);
+  zoneMs = zoneNow ? (zoneMs + (unsigned long)dtMillis) : 0;
+  capturing = zoneNow && (zoneMs >= gateDwellMs);
 
   // Overall (not per-corner) time-in-over/under, accumulated only while capturing.
   // Cornering frames freeze the accumulators and hold the latch untouched.

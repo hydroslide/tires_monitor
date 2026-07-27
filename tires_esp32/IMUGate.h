@@ -30,8 +30,12 @@ public:
   // Returns true if the chip answered on I2C.
   bool begin(TwoWire &wire = Wire);
 
-  // Push menu-configured settings. thresholdG in g, dwell in milliseconds.
-  void applyConfig(bool enabled, float thresholdG, unsigned long dwellMs, Orient orient);
+  // Push menu-configured settings. thresholdG in g, both dwells in milliseconds.
+  // gateDwellMs = how long lateral g must stay inside the zone before we capture (0 =
+  // instant). dwellMs = how long an over/under condition must persist on captured frames
+  // before the alert latches. They are independent knobs; see IMUGate.cpp update().
+  void applyConfig(bool enabled, float thresholdG, unsigned long gateDwellMs,
+                   unsigned long dwellMs, Orient orient);
 
   // Re-run the at-rest orientation calibration (car must be stationary/level).
   void recalibrate();
@@ -52,6 +56,16 @@ public:
   float lateralG()    const { return latG; }        // smoothed, gravity-removed
   Alert alertState()  const { return alert; }
 
+  // Gate internals, exposed for the on-screen test bar (#20). inZone() is the raw
+  // threshold test; isCapturing() is inZone() AND the capture dwell already served, so
+  // the two disagree exactly during the dwell window -- which is the state the bar paints
+  // yellow. Note isCapturing() is forced true when the feature is inert (Street mode,
+  // gate disabled, no IMU), where inZone() still reports the honest lateral-g answer.
+  bool  inZone()      const { return present && (fabsf(latG) < thresholdG); }
+  float thresholdGate() const { return thresholdG; }    // g
+  unsigned long zoneDwellMs() const { return zoneMs; }  // time held in zone, ms
+  unsigned long gateDwell()   const { return gateDwellMs; }
+
   // Orientation-calibrated latest sample (accel in g, gyro in deg/s).
   float accelG(int axis) const { return (axis >= 0 && axis < 3) ? accG[axis] : 0.0f; }
   float gyroDps(int axis) const { return (axis >= 0 && axis < 3) ? gyrDps[axis] : 0.0f; }
@@ -64,8 +78,9 @@ private:
   bool trackActive;
 
   Orient orient;
-  float  thresholdG;      // |lateral g| below this => capturing
-  unsigned long dwellMs;  // sustained condition before the alert latches
+  float  thresholdG;          // |lateral g| below this => in the capture zone
+  unsigned long gateDwellMs;  // time held in the zone before capture starts (0 = instant)
+  unsigned long dwellMs;      // sustained condition before the alert latches
 
   // Latest calibrated sample.
   float accG[3];          // accel, g, at-rest bias removed
@@ -80,6 +95,7 @@ private:
   // Gate + latch running state.
   float latG;             // EMA-smoothed lateral g (minimal smoothing)
   bool  latInit;
+  unsigned long zoneMs;   // continuous time held inside the zone, ms (0 on any exit)
   bool  capturing;
   unsigned long overAccumMs;   // overall time-in-over while capturing
   unsigned long underAccumMs;  // overall time-in-under while capturing

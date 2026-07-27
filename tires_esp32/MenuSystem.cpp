@@ -16,9 +16,11 @@ extern HWCDC USBSerial;
 // wildly out-of-range profile index). A new magic makes the first boot after the flash
 // fall back to the compiled-in defaults and re-seed cleanly. (#15 then freed the eight
 // camera-offset bytes at 31..38 and re-purposed 31 for the inflation indicator, so an old
-// stored offset would have loaded as that toggle.)
+// stored offset would have loaded as that toggle. #20 then claimed 32 and 33 for the
+// capture dwell and the g-bar toggle -- addresses no earlier firmware ever WROTE, so a
+// pre-#20 block holds junk there and an uncleared 0xFF would have read as a 25.5 s dwell.)
 static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 255; above all binding addrs
-static const uint8_t  SETTINGS_MAGIC      = 0xA7;
+static const uint8_t  SETTINGS_MAGIC      = 0xA8;
 
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
