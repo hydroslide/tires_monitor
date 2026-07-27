@@ -70,16 +70,24 @@ namespace TireProfiles {
     const TireProfile& active();
     const TireProfile& at(uint8_t i);
 
-    // Menu-editing helpers. Editing operates on a working copy (g_editProfile); the
-    // slot is only changed on an explicit commit.
-    void loadEditFromSelected();   // copy the selected slot into the edit buffer
-    void commitEditToSelected();   // copy the edit buffer into the selected slot
     void resetSelectedToDefault(); // restore the selected slot to its seed default
 }
 
 // Menu-facing globals (bound by TireMenu.cpp / edited by MenuRenderer's name editor).
 extern uint8_t     g_profileSel;                     // active/selected slot (0..2), transient
 extern const char* g_profileNameLabels[PROFILE_COUNT]; // enum labels -> slot names
-extern TireProfile g_editProfile;                    // working copy for the menu
+
+// The live slots. #19 removed the old single g_editProfile working copy: with one shared
+// buffer the selector could only hold one slot at a time, so switching profiles had to
+// either discard or commit the pending edits -- editing A, switching to B, editing B and
+// saving lost A. All PROFILE_COUNT profiles (63 bytes total) simply stay resident instead,
+// and TireMenu re-points its bindings at the selected slot (retargetProfileBindings), so
+// switching only changes WHICH slot the UI edits. Edits therefore land in the slot
+// immediately and root "Save Settings" persists every slot at once -- the same live-global
+// + explicit-save model every other menu setting already uses.
+//
+// Exposed (rather than file-static) so TireMenu can take &g_profiles[i].field. That is a
+// link-time address constant, so there is no static-init-order hazard.
+extern TireProfile g_profiles[PROFILE_COUNT];
 
 #endif // TIRE_PROFILES_H
