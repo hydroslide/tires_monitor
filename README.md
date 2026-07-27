@@ -75,6 +75,8 @@ Development happens in **VS Code** using `arduino-cli`. The Arduino IDE is not r
 | **[docs/DEV-SETUP-MACOS.md](docs/DEV-SETUP-MACOS.md)** | First-time setup on a Mac |
 | **[docs/DEV-SETUP-WINDOWS.md](docs/DEV-SETUP-WINDOWS.md)** | First-time setup on Windows |
 | **[docs/BUILD-AND-FLASH.md](docs/BUILD-AND-FLASH.md)** | The daily build/flash/monitor loop |
+| **[docs/SETTINGS.md](docs/SETTINGS.md)** | Every menu setting — what it does, default, range, how to tune it |
+| **[docs/tire-temp-functional-design.md](docs/tire-temp-functional-design.md)** | Why the tire-temp maths works the way it does (findings + amendments) |
 
 Short version, once set up:
 
