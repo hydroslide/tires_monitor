@@ -15,6 +15,8 @@ This project provides a complete solution for monitoring tire temperatures in pe
   - Purple: Ideal temperature range
   - Red: Overheated tires
 - Two modes: Street and Track, with different temperature thresholds
+- Straight-line capture gating from the onboard IMU, with a live lateral-g bar between the
+  tire rows showing the gate zone, current lateral g, and whether it's capturing
 - Support for both Fahrenheit and Celsius temperature scales
 - Night mode with configurable brightness (activated by right swipe gesture)
 - Touch interface for menu navigation
@@ -121,11 +123,17 @@ The system can be configured through the touch interface menu. Swipe left to acc
 
 1. **Current Mode**: Choose between Street and Track modes
 2. **Temperature Scale**: Select Fahrenheit or Celsius
-3. **Street Settings**: Configure temperature thresholds for street driving
-4. **Track Settings**: Configure temperature thresholds for track driving
-5. **Night Brightness**: Adjust the display brightness for night mode
-6. **Hardware Settings**: Configure sensor mapping for each tire position
-7. **Save Config**: Save current settings to EEPROM
+3. **Street Settings** / **Track Settings**: Per-mode default tire profile, Raw vs Calculated display, and the Track-only balance / session / inflation items
+4. **Tire Profiles**: The temperature window (Min/Ideal/Max), carcass offset and lag, and per-corner camera crop offsets — the profile is what actually supplies the window to both modes
+5. **Camera Settings**: Thermal image display toggles and the inflation / alignment delta thresholds
+6. **IMU Gate**: Straight-line capture gating — threshold, capture dwell, alert dwell, axis orientation, and the on-screen G Bar
+7. **Night Brightness**: Adjust the display brightness for night mode
+8. **Test**: Enable the raw thermal-camera image views
+9. **Hardware Settings**: Sensor index mapping (currently inert)
+10. **Save Config**: Save current settings to EEPROM
+
+Every setting is documented — what it does, its range, and how to tune it — in
+[docs/SETTINGS.md](docs/SETTINGS.md).
 
 To activate night mode, swipe right on the main display.
 
