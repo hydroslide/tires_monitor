@@ -21,5 +21,8 @@ MenuSystem &getTireMenuSystem();
  * next mode change or reboot, which is why the active slot is never persisted.
  */
 void applyModeDefaultProfile();
+// Keep the Tire Profiles edit buffer in step with the "Profile" selector (#18). Call from
+// loop(); replaces the old manual "Load" menu item.
+void serviceProfileEditSync();
 
 #endif // TIRE_MENU_H
