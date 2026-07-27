@@ -320,5 +320,23 @@ is gone. It had been papering over a real bug: `MenuValueBinding` has no change-
 changing the selector left the buffer showing the *previous* slot's values, and saving then
 wrote them into the newly selected slot. Root **Save Settings** already commits the edit
 buffer and writes all three slots, so the profile-only save was a strict subset of it.
-`Reset` remains. Note that switching profiles now discards uncommitted edits — normal
-select-record→edit→save semantics, and strictly better than silently corrupting a slot.
+`Reset` remains.
+
+### #19 — every profile is live in RAM; one Save persists them all
+
+#18 left switching profiles discarding uncommitted edits, because all the profile menu
+fields pointed into a single shared working copy (`g_editProfile`) that had to be reloaded
+on each switch. That was wrong: edit A → switch to B → edit B → **Save Settings** silently
+lost A.
+
+The working copy is gone. All `PROFILE_COUNT` profiles (63 bytes total) stay resident, and
+the menu **re-points its bindings** at the selected slot rather than copying data into a
+buffer (`retargetProfileBindings()`, driven by the same selector watcher). Switching a
+profile is now purely a change of *view*: it neither discards nor commits anything, each
+slot holds its own pending edits, and root **Save Settings** writes every slot at once.
+
+Consequence: profile edits are **live immediately**, and Save Settings controls
+*persistence only*. That is the same model every other menu setting already uses (live
+globals, written to EEPROM on save), so the profile fields are now consistent with the rest
+of the menu rather than special. `TireProfile`'s layout is unchanged, so this needed no
+`PROFILE_MAGIC` bump and preserved saved profiles.

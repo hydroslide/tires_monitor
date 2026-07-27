@@ -363,15 +363,19 @@ static MenuValueBinding inflationIndicatorBinding = {
 // would only fight that. A manual pick here still takes effect immediately and holds
 // until the next mode change or reboot.
 //
-// Since #15 every edit field below is TRANSIENT too. They edit a working copy
-// (g_editProfile) that "Save Prof" commits into the selected slot, and the slot is what
-// gets persisted -- byte-verbatim, in the profile region. They used to ALSO be tree-walked
-// to EEPROM 113..121 as a harmless duplicate, but #15 grew TireProfile to 25 bytes, so
-// three slots now run to byte 124 and would have overwritten exactly those bytes. Rather
-// than shuffle the duplicate elsewhere it is gone: the edit buffer is derived state (both
-// TireProfiles::begin() and applyModeDefaultProfile() reload it from the slot), so there
-// was never anything worth persisting. Dropping it also spares the new offset fields the
-// menu path's "a VALUE_BYTE stored as 0 is ambiguous" history (see MenuSystem.cpp).
+// Since #15 every edit field below is TRANSIENT too -- they are never tree-walked to
+// EEPROM. They used to be duplicated at bytes 113..121, but #15 grew TireProfile so three
+// slots run past there. The duplicate is gone rather than relocated: the profile region
+// already stores these byte-verbatim, so there was never anything worth persisting twice.
+// Dropping it also spares the offset fields the menu path's "a VALUE_BYTE stored as 0 is
+// ambiguous" history (see MenuSystem.cpp).
+//
+// #19: these bind DIRECTLY into the selected slot (g_profiles[g_profileSel]) -- there is no
+// working copy any more. retargetProfileBindings() re-points them when the selection
+// changes, so switching profiles only changes which slot the UI edits; every slot keeps its
+// own pending edits, and root "Save Settings" writes them all. The initialisers below name
+// slot 0 purely to start from a valid address (a link-time constant -- no static-init-order
+// hazard); the first retarget happens before the menu can be drawn.
 static MenuValueBinding profileSelectBinding = {
     VALUE_ENUM,
     &g_profileSel,
@@ -383,45 +387,45 @@ static MenuValueBinding profileSelectBinding = {
     PROFILE_COUNT
 };
 static MenuValueBinding profileWindowMinBinding = {
-    VALUE_BYTE, &g_editProfile.windowMin, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].windowMin, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileWindowIdealBinding = {
-    VALUE_BYTE, &g_editProfile.windowIdeal, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].windowIdeal, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileWindowMaxBinding = {
-    VALUE_BYTE, &g_editProfile.windowMax, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].windowMax, nullptr, 0, 255, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileOffsetKBinding = {
-    VALUE_BYTE, &g_editProfile.offsetK, nullptr, 0, 80, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].offsetK, nullptr, 0, 80, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileTauBinding = {
-    VALUE_BYTE, &g_editProfile.tauSeconds, nullptr, 1, 60, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].tauSeconds, nullptr, 1, 60, EEPROM_NO_PERSIST, nullptr, 0
 };
 // Per-corner camera crop offsets (#15), corner order FL, FR, RL, RR. Same edit-buffer /
 // transient treatment as the fields above; the range mirrors the old global offsets.
 static MenuValueBinding profileLeftOffsetFLBinding = {
-    VALUE_BYTE, &g_editProfile.leftOffset[0], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].leftOffset[0], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileRightOffsetFLBinding = {
-    VALUE_BYTE, &g_editProfile.rightOffset[0], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].rightOffset[0], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileLeftOffsetFRBinding = {
-    VALUE_BYTE, &g_editProfile.leftOffset[1], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].leftOffset[1], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileRightOffsetFRBinding = {
-    VALUE_BYTE, &g_editProfile.rightOffset[1], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].rightOffset[1], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileLeftOffsetRLBinding = {
-    VALUE_BYTE, &g_editProfile.leftOffset[2], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].leftOffset[2], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileRightOffsetRLBinding = {
-    VALUE_BYTE, &g_editProfile.rightOffset[2], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].rightOffset[2], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileLeftOffsetRRBinding = {
-    VALUE_BYTE, &g_editProfile.leftOffset[3], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].leftOffset[3], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 static MenuValueBinding profileRightOffsetRRBinding = {
-    VALUE_BYTE, &g_editProfile.rightOffset[3], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
+    VALUE_BYTE, &g_profiles[0].rightOffset[3], nullptr, 0, PROFILE_OFFSET_MAX, EEPROM_NO_PERSIST, nullptr, 0
 };
 
 // ----------------------------------------------------
@@ -550,11 +554,11 @@ static MenuItem profileOffsetsMenu[] = {
 static void doNameProfile();
 static void doResetProfile();
 
-// No "Load" / "Save Prof" items (#18). The edit buffer now follows the Profile selector
-// automatically via serviceProfileEditSync(), so there is nothing to load by hand; and the
-// root menu's "Save Settings" already commits the edit buffer and writes all three slots
-// (doSave -> commitEditToSelected + TireProfiles::save), so a profile-only save was a
-// strict subset of it. "Reset" stays -- reverting one slot to its seed is distinct.
+// No "Load" / "Save Prof" items (#18). The fields below edit the selected slot directly
+// (#19), so there is nothing to load by hand; and the root menu's "Save Settings" writes
+// all three slots, so a profile-only save was a strict subset of it -- and a misleading one
+// once several profiles can hold pending edits at the same time. "Reset" stays -- reverting
+// one slot to its seed is distinct.
 static MenuItem tireProfilesMenu[] = {
     { "Profile",   MENU_VALUE,  nullptr,        nullptr, 0, &profileSelectBinding     },
     { "Name",      MENU_ACTION, doNameProfile,  nullptr, 0, nullptr                   },
@@ -681,9 +685,10 @@ static MenuSystem tireMenuSystem(
 static void doSave()
 {
     tireMenuSystem.saveToEEPROM();
-    // Persist tire profiles alongside the menu settings so one "Save Config" covers
-    // everything. Commit the on-screen edits into the selected slot first.
-    TireProfiles::commitEditToSelected();
+    // Persist tire profiles alongside the menu settings so one "Save Settings" covers
+    // everything. Since #19 the edit fields write straight into their slot, so there is
+    // nothing to commit first -- this writes EVERY slot, which is what makes edits to
+    // several profiles in one visit all survive a single save.
     TireProfiles::save();
     // Provide visual feedback
     menuRenderer.setStatusMessage("Settings Saved!");
@@ -699,6 +704,8 @@ static void doLoad()
     applyModeDefaultProfile();
 }
 
+static void retargetProfileBindings(uint8_t slot);
+
 // -- Mode -> default tire profile (#14) --
 // The mode picks which profile is active; the profile is the single source of truth for
 // the temp window. Runs at boot and on every mode change, so the window always matches
@@ -708,32 +715,54 @@ void applyModeDefaultProfile()
     uint8_t sel = (currentMode == 1) ? trackProfile : streetProfile;
     if (sel >= PROFILE_COUNT) sel = 0;   // guard against a stale/garbage stored index
     g_profileSel = sel;
-    // Keep the Tire Profiles edit buffer pointed at the slot we just adopted, so the
-    // Min/Ideal/Max/K/tau items show the profile that is actually driving the display.
-    TireProfiles::loadEditFromSelected();
+    // Point the Tire Profiles edit fields at the slot we just adopted, so they show the
+    // profile that is actually driving the display (#19).
+    retargetProfileBindings(sel);
 }
 
-// -- Profile selector -> edit buffer (#18) --
+// -- Profile selector -> which slot the edit fields point at (#19) --
+// No data is copied: the bindings are re-pointed at the selected slot's storage, so each
+// profile keeps its own pending edits and one "Save Settings" persists them all. Switching
+// profiles is purely a change of view.
+static void retargetProfileBindings(uint8_t slot)
+{
+    if (slot >= PROFILE_COUNT) slot = 0;
+    TireProfile& p = g_profiles[slot];
+
+    profileWindowMinBinding.valuePtr   = &p.windowMin;
+    profileWindowIdealBinding.valuePtr = &p.windowIdeal;
+    profileWindowMaxBinding.valuePtr   = &p.windowMax;
+    profileOffsetKBinding.valuePtr     = &p.offsetK;
+    profileTauBinding.valuePtr         = &p.tauSeconds;
+
+    profileLeftOffsetFLBinding.valuePtr  = &p.leftOffset[0];
+    profileRightOffsetFLBinding.valuePtr = &p.rightOffset[0];
+    profileLeftOffsetFRBinding.valuePtr  = &p.leftOffset[1];
+    profileRightOffsetFRBinding.valuePtr = &p.rightOffset[1];
+    profileLeftOffsetRLBinding.valuePtr  = &p.leftOffset[2];
+    profileRightOffsetRLBinding.valuePtr = &p.rightOffset[2];
+    profileLeftOffsetRRBinding.valuePtr  = &p.leftOffset[3];
+    profileRightOffsetRRBinding.valuePtr = &p.rightOffset[3];
+}
+
 // MenuValueBinding carries no change-callback, so moving the "Profile" item only updates
-// g_profileSel: the edit buffer would keep showing the PREVIOUS slot's values, and saving
-// would then write them into the newly selected slot. That is what the manual "Load" item
-// existed to work around. Watching the selection here closes the hole and lets both "Load"
-// and "Save Prof" go away. Called from loop() alongside serviceModeProfileSnap(), so it
-// also fires while the menu is open. Idempotent -- applyModeDefaultProfile() already
-// resyncs on a mode change, and a second resync is a no-op.
+// g_profileSel -- nothing would otherwise notice. Watching it here is what makes the
+// selector work at all (and is why the old manual "Load" item could go away in #18).
+// Called from loop() alongside serviceModeProfileSnap(), so it also fires while the menu is
+// open. Idempotent; applyModeDefaultProfile() retargets too, and a repeat is a no-op.
 void serviceProfileEditSync()
 {
-    static uint8_t lastSel = 0xFF;      // 0xFF forces a sync on the first call
+    static uint8_t lastSel = 0xFF;      // 0xFF forces a retarget on the first call
     if (g_profileSel == lastSel) return;
     lastSel = g_profileSel;
-    TireProfiles::loadEditFromSelected();
+    retargetProfileBindings(g_profileSel);
 }
 
 // -- Tire-profile actions (story 04) --
 static void doNameProfile()
 {
     // Hand off to the small-screen name editor (swipe up/down = letter, left = lock).
-    menuRenderer.beginNameEdit(g_editProfile.name, PROFILE_NAME_LEN);
+    menuRenderer.beginNameEdit(g_profiles[TireProfiles::activeIndex()].name, PROFILE_NAME_LEN);
 }
 
 static void doResetProfile()

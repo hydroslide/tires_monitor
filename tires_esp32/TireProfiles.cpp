@@ -35,11 +35,11 @@ static_assert(PROFILE_BASE + PROFILE_COUNT * sizeof(TireProfile) <= PROFILE_MAGI
 
 // Menu-facing globals.
 uint8_t     g_profileSel = 0;
-TireProfile g_editProfile;
 const char* g_profileNameLabels[PROFILE_COUNT] = { "", "", "" };
 
-// The three slots.
-static TireProfile s_profiles[PROFILE_COUNT];
+// The three slots, all resident all the time (#19). TireMenu binds its edit fields
+// straight at the selected one, so there is no separate working copy to keep in step.
+TireProfile g_profiles[PROFILE_COUNT];
 
 // Camera crop offsets seeded into EVERY slot (#15). The cameras are mounted the same way
 // regardless of which tire is fitted, so all three profiles start from one shared set and
@@ -53,51 +53,51 @@ static const uint8_t SEED_RIGHT_OFFSET[4] = { 0, 0, 0, 0 };
 static void seedDefaults() {
     // Slot 0 -- ECF (the subject tire, the Track-mode default profile): window
     // 120/160/200 carcass, K +20, tau 15.
-    strncpy(s_profiles[0].name, "ECF", PROFILE_NAME_LEN);
-    s_profiles[0].name[PROFILE_NAME_LEN] = '\0';
-    s_profiles[0].windowMin = 120; s_profiles[0].windowIdeal = 160; s_profiles[0].windowMax = 200;
-    s_profiles[0].offsetK = 20; s_profiles[0].tauSeconds = 15;
+    strncpy(g_profiles[0].name, "ECF", PROFILE_NAME_LEN);
+    g_profiles[0].name[PROFILE_NAME_LEN] = '\0';
+    g_profiles[0].windowMin = 120; g_profiles[0].windowIdeal = 160; g_profiles[0].windowMax = 200;
+    g_profiles[0].offsetK = 20; g_profiles[0].tauSeconds = 15;
 
     // Slot 1 -- EC02 (the control tire, the Street-mode default profile): a lower window
     // suited to street temps.
-    strncpy(s_profiles[1].name, "EC02", PROFILE_NAME_LEN);
-    s_profiles[1].name[PROFILE_NAME_LEN] = '\0';
-    s_profiles[1].windowMin = 110; s_profiles[1].windowIdeal = 140; s_profiles[1].windowMax = 170;
-    s_profiles[1].offsetK = 20; s_profiles[1].tauSeconds = 15;
+    strncpy(g_profiles[1].name, "EC02", PROFILE_NAME_LEN);
+    g_profiles[1].name[PROFILE_NAME_LEN] = '\0';
+    g_profiles[1].windowMin = 110; g_profiles[1].windowIdeal = 140; g_profiles[1].windowMax = 170;
+    g_profiles[1].offsetK = 20; g_profiles[1].tauSeconds = 15;
 
     // Slot 2 -- Custom: a neutral starting point (the previous Track window defaults).
-    strncpy(s_profiles[2].name, "Custom", PROFILE_NAME_LEN);
-    s_profiles[2].name[PROFILE_NAME_LEN] = '\0';
-    s_profiles[2].windowMin = 100; s_profiles[2].windowIdeal = 160; s_profiles[2].windowMax = 180;
-    s_profiles[2].offsetK = 20; s_profiles[2].tauSeconds = 15;
+    strncpy(g_profiles[2].name, "Custom", PROFILE_NAME_LEN);
+    g_profiles[2].name[PROFILE_NAME_LEN] = '\0';
+    g_profiles[2].windowMin = 100; g_profiles[2].windowIdeal = 160; g_profiles[2].windowMax = 180;
+    g_profiles[2].offsetK = 20; g_profiles[2].tauSeconds = 15;
 
     // Camera crop offsets: identical in all three slots (#15). Seeding here also gives
     // resetSelectedToDefault() the right behaviour for free.
     for (int i = 0; i < PROFILE_COUNT; i++) {
-        memcpy(s_profiles[i].leftOffset,  SEED_LEFT_OFFSET,  sizeof(SEED_LEFT_OFFSET));
-        memcpy(s_profiles[i].rightOffset, SEED_RIGHT_OFFSET, sizeof(SEED_RIGHT_OFFSET));
+        memcpy(g_profiles[i].leftOffset,  SEED_LEFT_OFFSET,  sizeof(SEED_LEFT_OFFSET));
+        memcpy(g_profiles[i].rightOffset, SEED_RIGHT_OFFSET, sizeof(SEED_RIGHT_OFFSET));
     }
 }
 
 // Ensure a loaded slot's name is always null-terminated regardless of EEPROM contents.
 static void sanitizeNames() {
     for (int i = 0; i < PROFILE_COUNT; i++)
-        s_profiles[i].name[PROFILE_NAME_LEN] = '\0';
+        g_profiles[i].name[PROFILE_NAME_LEN] = '\0';
 }
 
 static void refreshLabels() {
     for (int i = 0; i < PROFILE_COUNT; i++)
-        g_profileNameLabels[i] = s_profiles[i].name;
+        g_profileNameLabels[i] = g_profiles[i].name;
 }
 
 void TireProfiles::begin() {
     // The active slot is not restored (#14): it is transient and the caller resolves it
     // from the current mode's default profile right after this. Slot 0 is only a safe
-    // placeholder so the edit buffer below has something coherent to copy.
+    // placeholder until that resolve runs.
     g_profileSel = 0;
     if (EEPROM.read(PROFILE_MAGIC_ADDR) == PROFILE_MAGIC) {
         for (int i = 0; i < PROFILE_COUNT; i++)
-            EEPROM.get(PROFILE_BASE + i * (int)sizeof(TireProfile), s_profiles[i]);
+            EEPROM.get(PROFILE_BASE + i * (int)sizeof(TireProfile), g_profiles[i]);
         sanitizeNames();
         USBSerial.println("Tire profiles loaded from EEPROM");
     } else {
@@ -105,12 +105,11 @@ void TireProfiles::begin() {
         USBSerial.println("No saved tire profiles; using seeded defaults");
     }
     refreshLabels();
-    loadEditFromSelected();
 }
 
 void TireProfiles::save() {
     for (int i = 0; i < PROFILE_COUNT; i++)
-        EEPROM.put(PROFILE_BASE + i * (int)sizeof(TireProfile), s_profiles[i]);
+        EEPROM.put(PROFILE_BASE + i * (int)sizeof(TireProfile), g_profiles[i]);
     // The active slot is deliberately not persisted (#14) -- it is derived from the
     // current mode's default profile on every boot / mode change.
     EEPROM.write(PROFILE_MAGIC_ADDR, PROFILE_MAGIC);
@@ -124,32 +123,22 @@ uint8_t TireProfiles::activeIndex() {
 }
 
 const TireProfile& TireProfiles::active() {
-    return s_profiles[activeIndex()];
+    return g_profiles[activeIndex()];
 }
 
 const TireProfile& TireProfiles::at(uint8_t i) {
-    return s_profiles[(i < PROFILE_COUNT) ? i : 0];
-}
-
-void TireProfiles::loadEditFromSelected() {
-    g_editProfile = s_profiles[activeIndex()];
-    g_editProfile.name[PROFILE_NAME_LEN] = '\0';
-}
-
-void TireProfiles::commitEditToSelected() {
-    g_editProfile.name[PROFILE_NAME_LEN] = '\0';
-    s_profiles[activeIndex()] = g_editProfile;
-    refreshLabels();
+    return g_profiles[(i < PROFILE_COUNT) ? i : 0];
 }
 
 void TireProfiles::resetSelectedToDefault() {
     uint8_t keep = g_profileSel;
     TireProfile saved[PROFILE_COUNT];
-    for (int i = 0; i < PROFILE_COUNT; i++) saved[i] = s_profiles[i];
+    for (int i = 0; i < PROFILE_COUNT; i++) saved[i] = g_profiles[i];
     seedDefaults();
     // Restore the other slots; only the selected one reverts to its seed default.
     for (int i = 0; i < PROFILE_COUNT; i++)
-        if (i != keep) s_profiles[i] = saved[i];
+        if (i != keep) g_profiles[i] = saved[i];
     refreshLabels();
-    loadEditFromSelected();
+    // No binding retarget needed: the menu already points at this slot's storage, and
+    // seedDefaults() rewrote it in place.
 }
