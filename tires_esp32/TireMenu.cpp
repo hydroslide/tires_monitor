@@ -68,8 +68,15 @@ static uint8_t minInflationDeltaPct = 10;
 static uint8_t minAlignmentDeltaPct = 15;
 
 // -- IMU capture gate (global; story 02) --
+// Two dwells live here and they are NOT the same thing (#20):
+//   gateDwellTenths  -- how long the car must hold sub-threshold lateral g before we
+//                       start CAPTURING. 0 reproduces the pre-#20 instant behavior.
+//   alertDwellTenths -- how long an over/under condition must persist on already-captured
+//                       frames before the inflation verdict LATCHES.
 static bool    imuGateEnabled       = true; // suppress reads while cornering
+static bool    showGateBar          = true; // on-screen lateral-g test bar (#20)
 static uint8_t lateralGateCentiG    = 35;   // |lateral g| threshold, centi-g (0.35 g)
+static uint8_t gateDwellTenths      = 5;    // capture dwell, tenths of a second (0.5 s)
 static uint8_t alertDwellTenths     = 25;   // latch dwell, tenths of a second (2.5 s)
 static uint8_t imuOrient            = 0;    // lateral-axis map: 0=Auto,1=X,2=Y,3=Z
 static const char* imuOrientLabels[] = {"Auto", "X", "Y", "Z"};
@@ -299,6 +306,33 @@ static MenuValueBinding minAlignmentDeltaPctBinding = {
     0
 };
 
+// IMU capture gate test bar + capture dwell (#20). These take EEPROM 32 and 33 out of the
+// run of bytes #15 freed. Because no earlier firmware ever WROTE 32/33, a stored settings
+// block from before #20 holds junk there, and loadMenuFromEEPROMHelper() copies bytes in
+// verbatim with no min/max clamping -- a stale 0xFF would land as a 25.5 s capture dwell.
+// SETTINGS_MAGIC is bumped alongside this so the first boot after the flash re-seeds from
+// the compiled-in defaults instead.
+static MenuValueBinding gateDwellTenthsBinding = {
+    VALUE_BYTE,
+    &gateDwellTenths,
+    nullptr,
+    0,    // 0.0 s -- instant capture, the pre-#20 behavior
+    50,   // 5.0 s
+    32,
+    nullptr,
+    0
+};
+static MenuValueBinding showGateBarBinding = {
+    VALUE_BOOL,
+    &showGateBar,
+    nullptr,
+    0,
+    0,
+    33,
+    nullptr,
+    0
+};
+
 // IMU capture gate settings (EEPROM 45..48; magic-sentinel load makes 0 safe)
 static MenuValueBinding imuGateEnabledBinding = {
     VALUE_BOOL,
@@ -513,9 +547,14 @@ static MenuItem pixelOffsetsMenu[] = {
 
 
 
+// Ordered so the two dwells sit next to the value each one gates: Lateral cg defines the
+// zone, Gate Dwl is how long you must stay in it to capture, Dwell is how long a verdict
+// must hold once capturing. See the block comment on the backing variables.
 static MenuItem imuGateMenu[] = {
     { "Gate Enable",     MENU_VALUE, nullptr, nullptr, 0, &imuGateEnabledBinding   },
+    { "Show G Bar",      MENU_VALUE, nullptr, nullptr, 0, &showGateBarBinding       },
     { "Lateral cg",      MENU_VALUE, nullptr, nullptr, 0, &lateralGateCentiGBinding },
+    { "Gate Dwl 0.1s",   MENU_VALUE, nullptr, nullptr, 0, &gateDwellTenthsBinding   },
     { "Dwell 0.1s",      MENU_VALUE, nullptr, nullptr, 0, &alertDwellTenthsBinding  },
     { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
 };
@@ -880,8 +919,16 @@ bool getImuGateEnabled() {
     return imuGateEnabled;
 }
 
+bool getShowGateBar() {
+    return showGateBar;
+}
+
 uint8_t getLateralGateCentiG() {
     return lateralGateCentiG;
+}
+
+uint8_t getGateDwellTenths() {
+    return gateDwellTenths;
 }
 
 uint8_t getAlertDwellTenths() {

@@ -26,8 +26,14 @@ deliberate, and it's why a flash sometimes wipes your settings:
 
 | Group | Magic | Bumped when |
 |---|---|---|
-| Menu settings | `SETTINGS_MAGIC`, currently `0xA7` | a setting moves address or changes meaning |
+| Menu settings | `SETTINGS_MAGIC`, currently `0xA8` | a setting moves address or changes meaning, **or a new setting claims an address no earlier firmware wrote** |
 | Tire profiles | `PROFILE_MAGIC`, currently `0x5D` | the `TireProfile` struct layout changes |
+
+> `SETTINGS_MAGIC` went `0xA7` → `0xA8` in #20, which added *Gate Dwl 0.1s* and *Show G Bar*
+> at EEPROM 32 and 33. Those addresses were never written by earlier firmware, and the
+> loader copies stored bytes in **without range-clamping** — so a stale `0xFF` at 32 would
+> have loaded as a 25.5 s capture dwell. The bump forces a clean re-seed instead. **Expect
+> every menu setting to reset once on the first boot after that flash.**
 
 **The active tire profile is deliberately not saved.** On boot it's set to the current
 mode's *Default Profile*. See [Tire Profiles](#tire-profiles).
@@ -91,12 +97,49 @@ sidewall at roll angle, manufacturing a fake centre-hot that scales with lateral
 *opposite* to real load physics. Gating to straight-line frames removes roughly 24 of the
 27 °F of that artifact. Full analysis in the design doc §5.4.
 
+**The two dwells are not the same thing.** *Gate Dwl* decides when capture **starts** — how
+long the car must hold lateral g inside the zone before its readings count at all. *Dwell*
+decides when an over/under verdict **latches**, measured only over frames already being
+captured. One gates the input, the other debounces the output.
+
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
 | **Gate Enable** | `On` | On / Off | Master switch for straight-line gating. Off means inflation reads accumulate everywhere, including mid-corner — which is what produced the original backwards verdict. Leave on. |
-| **Lateral cg** | `35` (0.35 g) | 10–100 (0.10–1.00 g) | Lateral-g threshold below which the car counts as "straight and steady" and readings are accepted. **Lower = stricter**, fewer but cleaner frames; higher lets more cornering contamination back in. Raise it only if you're getting too few captured frames to be useful. |
-| **Dwell 0.1s** | `25` (2.5 s) | 5–100 (0.5–10 s) | How long the over/under condition must persist before the alert latches. Stops the badge flickering on brief noise. **Higher = steadier but slower to react.** |
-| **Orientation** | `Auto` | Auto / X / Y / Z | Which accelerometer axis is the car's lateral axis. `Auto` picks a horizontal axis from the sensed gravity direction, preferring Y (correct for a level dash mount). Force X/Y/Z only if Auto guesses wrong on an unusual mounting angle. |
+| **Show G Bar** | `On` | On / Off | Paints the live lateral-g test bar in the gap between the front and rear tires (see below). It's how you tune everything else in this menu, and how you confirm the boot calibration was good. Costs a sliver of screen and nothing else — leave it on unless you want the cleanest possible display. |
+| **Lateral cg** | `35` (0.35 g) | 10–100 (0.10–1.00 g) | Lateral-g threshold below which the car counts as "straight and steady" and readings are accepted. **Lower = stricter**, fewer but cleaner frames; higher lets more cornering contamination back in. Raise it only if you're getting too few captured frames to be useful. With the G Bar on, this is the width of the centre segment — turn it and watch the segment resize. |
+| **Gate Dwl 0.1s** | `5` (0.5 s) | 0–50 (0–5 s) | How long lateral g must stay **inside** the zone before capture begins. Before #20 capture flipped on the instant g dropped below threshold, which let the tail of a corner — still unwinding, load still shifting — count as straight-line data. **`0` reproduces that old instant behaviour**, which makes it easy to A/B on the car. **Higher = cleaner frames, fewer of them.** |
+| **Dwell 0.1s** | `25` (2.5 s) | 5–100 (0.5–10 s) | How long the over/under condition must persist **on already-captured frames** before the verdict latches. Stops the verdict flickering on brief noise. **Higher = steadier but slower to react.** Unrelated to *Gate Dwl* above. |
+| **Orientation** | `Auto` | Auto / X / Y / Z | Which accelerometer axis is the car's lateral axis. `Auto` picks a horizontal axis from the sensed gravity direction, preferring Y (correct for a level dash mount). Force X/Y/Z only if Auto guesses wrong on an unusual mounting angle. **Test it with the G Bar: a hard left and a hard right must push the dot in opposite directions.** |
+
+### The G Bar
+
+A 4 px bar in the gutter between the tire rows, with a white dot riding on it:
+
+```
+x 10 ......... 113 | 114 ..... 165 | 166 ......... 269
+  RED (40%)        |  centre (20%) |   RED (40%)
+                        ( o )  <- current lateral g
+```
+
+- **Red flanks** are outside the capture zone; the **centre segment** is inside it. The
+  segment is drawn from *Lateral cg*, so it grows and shrinks live as you turn that setting.
+  At the default 35 it spans 20 % of the bar. Full-scale deflection is ±1.75 g — derived
+  from that 20 % rule, not chosen independently.
+- **Centre green** = capturing right now. **Centre yellow** = not capturing, either because
+  you're outside the zone or because you're inside it but still serving *Gate Dwl*.
+- The dot tracks the same smoothed lateral-g value the gate itself compares against the
+  threshold, so **the dot crossing the segment edge is the gate decision**, not a
+  visualisation of it. Under heavy cornering the dot pegs at the end of the bar; that's
+  intended.
+
+**Calibration check.** The IMU learns its at-rest gravity vector once, at boot, and the car
+must be stationary and roughly level for that to be right. With the car stopped, the dot
+should sit dead centre. If it doesn't, the unit booted while rolling or on a slope — reboot
+at a standstill. There is no in-menu recalibrate; a reboot is the recovery.
+
+**Noise check.** On a steady straight, watch how much the dot wanders. That wander is your
+mount noise, and it sets a sensible floor for *Lateral cg* — a threshold below the noise
+band will chatter the gate on and off while going straight.
 
 ---
 

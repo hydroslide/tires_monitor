@@ -25,6 +25,12 @@ produced the analysis logs, so the g signal needs only **minimal** smoothing.
   straight and steady). Accumulate the inflation / segment read **only while
   capturing**; suppress it while cornering. **Lateral accel only** (a
   hard-braking / longitudinal gate can be added later if it proves necessary).
+  > **Amended by #20.** Being under the threshold is no longer sufficient on its
+  > own: lateral g must stay under it for a **capture dwell** (`Gate Dwl 0.1s`,
+  > default 0.5 s) before capture starts. As originally built, capture flipped on
+  > the instant g crossed back under the threshold, so the tail of a corner —
+  > still unwinding, load still shifting — counted as straight-line data. Setting
+  > the dwell to `0` restores the original instant behaviour.
 - **Debounced, latched alert:** while capturing, accumulate **overall**
   time-in-over / time-in-under (a single aggregate, **not per corner**). Once the
   overall condition exceeds the **dwell-time** threshold, raise the alert and
@@ -44,6 +50,11 @@ produced the analysis logs, so the g signal needs only **minimal** smoothing.
 - Alert dwell time — **global** setting (default ~2–3 s).
 - Capture-gate enable/disable.
 - Manual orientation override (fallback; calibration is automatic on boot).
+- *(#20)* Capture dwell — **global**, default 0.5 s, `0` = the original instant gate.
+- *(#20)* `Show G Bar` — the on-screen lateral-g test bar. The gate had no visible
+  output at all, so none of the settings above could be tuned by observation; the
+  bar makes the threshold, the capture dwell and the boot calibration all legible
+  while driving. See `docs/SETTINGS.md` → IMU Gate → The G Bar.
 
 ## Acceptance criteria
 

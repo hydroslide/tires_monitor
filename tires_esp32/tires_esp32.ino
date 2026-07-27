@@ -13,6 +13,7 @@
 #include "NBPProtocol.h"
 #include "WifiSerial.h"
 #include "IMUGate.h"
+#include "ImuGateBar.h"
 #include "TireProfiles.h"
 #include "SessionManager.h"
 #include "Version.h"
@@ -257,6 +258,7 @@ void setThermalMode(uint8_t _thermalMode){
     }
   }
   tft.fillScreen(ST77XX_BLACK);
+  imuGateBarInvalidate();
   activateTires();
   if (!(enableThermalTemps && thermalMode ==2))
     wheels->draw(true);
@@ -418,6 +420,12 @@ void doRunningMode(int time_delta)
         wheels->draw(true, true);
       else
         wheels->draw();
+
+      // The tire map just repainted. ThreeSectionTire clears an area inflated by
+      // bufferPix on every side (ThreeSectionTire.cpp:121), which covers the whole gutter
+      // the g bar lives in -- so assume the bar was wiped and rebuild it next pass. This
+      // is the common case; a band only has to cross a color threshold to trigger it.
+      imuGateBarInvalidate();
 
       // Story 08 (#9): emit the device's own verdict + per-segment colors so the
       // downstream renderer applies them directly with no re-derivation. Track-mode
@@ -589,6 +597,7 @@ static void toggleSession(){
 static void exitSummaryAutoView(){
   summaryAutoView = false;
   tft.fillScreen(ST77XX_BLACK);
+  imuGateBarInvalidate();
   activateTires();
   wheels->draw(true);
   forceDrawAfterInit = 2;
@@ -632,6 +641,7 @@ static void serviceFeedback(){
     if (dt >= FB_MS){
       fbState = FB_NONE;              // clear the recording dot
       tft.fillScreen(ST77XX_BLACK);
+      imuGateBarInvalidate();
       activateTires();
       wheels->draw(true);
       forceDrawAfterInit = 2;
@@ -761,6 +771,7 @@ void loop() {
       doRunningMode(time_delta);
       drawSessionFeedback();
       drawInflationIndicator();
+      drawImuGateBar(tft);
     }
   } else {
     menuWasActive = true;
@@ -804,6 +815,7 @@ static void initializeSystem()
 
   extern bool getImuGateEnabled();
   extern uint8_t getLateralGateCentiG();
+  extern uint8_t getGateDwellTenths();
   extern uint8_t getAlertDwellTenths();
   extern uint8_t getImuOrient();
 
@@ -824,10 +836,16 @@ static void initializeSystem()
     THERMAL_MODES=4;
 
   // Push IMU capture-gate settings (global; centi-g and tenths-of-a-second encodings).
+  // Two distinct dwells: Gate Dwl gates when capture STARTS, Dwell gates when the
+  // over/under verdict LATCHES on already-captured frames (#20).
   imuGate.applyConfig(getImuGateEnabled(),
                       getLateralGateCentiG() / 100.0f,
+                      (unsigned long)getGateDwellTenths() * 100UL,
                       (unsigned long)getAlertDwellTenths() * 100UL,
                       (IMUGate::Orient)getImuOrient());
+
+  // The gate settings just changed, so the bar's zone width and colors are stale.
+  imuGateBarInvalidate();
 
   // Single source of truth for the tire window (#14): BOTH modes read the active tire
   // profile, which bundles window + K + tau + camera crop, so switching profile swaps all
@@ -892,8 +910,9 @@ static void initializeSystem()
       Wheels::TireTemps rr(zeros); 
 
       wheels->setTireTemps(fl, fr, rl, rr);
-  //wheels->setTireTemps(0, 0, 0, 0);  
+  //wheels->setTireTemps(0, 0, 0, 0);
   tft.fillScreen(ST77XX_BLACK);
+  imuGateBarInvalidate();
 
     activateTires();
 
