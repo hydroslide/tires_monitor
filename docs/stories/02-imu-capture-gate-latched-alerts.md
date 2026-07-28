@@ -26,7 +26,7 @@ produced the analysis logs, so the g signal needs only **minimal** smoothing.
   capturing**; suppress it while cornering. **Lateral accel only** (a
   hard-braking / longitudinal gate can be added later if it proves necessary).
   > **Amended by #20.** Being under the threshold is no longer sufficient on its
-  > own: lateral g must stay under it for a **capture dwell** (`Gate Dwl 0.1s`,
+  > own: lateral g must stay under it for a **capture dwell** (`Gate Dwell 0.1s`,
   > default 0.5 s) before capture starts. As originally built, capture flipped on
   > the instant g crossed back under the threshold, so the tail of a corner —
   > still unwinding, load still shifting — counted as straight-line data. Setting
@@ -64,7 +64,8 @@ produced the analysis logs, so the g signal needs only **minimal** smoothing.
 - *(#20)* `Show G Bar` — the on-screen lateral-g test bar. The gate had no visible
   output at all, so none of the settings above could be tuned by observation; the
   bar makes the threshold, the capture dwell and the boot calibration all legible
-  while driving. See `docs/SETTINGS.md` → IMU Gate → The G Bar.
+  while driving. See `docs/SETTINGS.md` → Inflation & Camber → The G Bar (the menu
+  was called "IMU Gate" until #22).
 
 ## Acceptance criteria
 

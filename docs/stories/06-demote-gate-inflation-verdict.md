@@ -39,8 +39,9 @@ story 02's **overall** latched over/under state, so this story likely folds into
 - ~~Inflation indicator on/off (on by default in Track mode).~~ **Removed by #21.**
   Once the latched verdict drives the on-screen segment delta bars, an off switch
   left those bars showing an alignment verdict but no inflation one — which reads as
-  "this tire is fine" rather than "this check is disabled". *Camera Settings →
-  Segment Deltas* is the honest visibility control. EEPROM 31 is free again.
+  "this tire is fine" rather than "this check is disabled". *Inflation & Camber →
+  Segment Deltas* is the honest visibility control (that menu was called *Camera
+  Settings* until #22). EEPROM 31 is free again.
 
 ## Acceptance criteria
 
