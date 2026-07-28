@@ -272,12 +272,17 @@ void setThermalMode(uint8_t _thermalMode){
 // The per-corner baseline subtraction was removed in #18 -- see TireProfiles.h for why
 // (the shipped values encoded one track's load pattern, and the static part of the error
 // is a camera aim problem belonging in the pixel crop offsets).
+// #21 keeps the per-corner verdicts instead of collapsing them to one majority vote. The
+// old shape threw away exactly the information the feature exists to deliver -- WHICH tire
+// is wrong -- and let one clearly-over corner be cancelled by its neighbours' neutrals.
+// This is now the ONLY place the inflation comparison is computed; the display and the
+// instrumentation stream both consume the latched result rather than re-deriving it.
 extern byte getminInflationDeltaPct();
-static int computeInterimInflationCondition()
+static void computeInflationVotes(int8_t out[TIRE_COUNT])
 {
-  int overVotes = 0, underVotes = 0;
   float pct = getminInflationDeltaPct() / 100.0f;
   for (int t = 0; t < TIRE_COUNT; t++) {
+    out[t] = 0;
     if (!tempReader->tireSensorIsCamera[t]) continue;
     float edge = (tempReader->tireSectionTemps[t][0] +
                   tempReader->tireSectionTemps[t][2]) / 2.0f;
@@ -285,12 +290,9 @@ static int computeInterimInflationCondition()
     if (edge <= 0.0f) continue;                  // skip unread/invalid frames
     float delta = edge - center;                 // negative => center hotter
     float minDelta = edge * pct;
-    if (delta <= -minDelta) overVotes++;         // center-hot => over-inflation
-    else if (delta >= minDelta) underVotes++;    // edges-hot => under-inflation
+    if (delta <= -minDelta) out[t] = 1;          // center-hot => over-inflation
+    else if (delta >= minDelta) out[t] = -1;     // edges-hot => under-inflation
   }
-  if (overVotes > underVotes) return 1;
-  if (underVotes > overVotes) return -1;
-  return 0;
 }
 
 // Normal Running Mode
@@ -318,12 +320,14 @@ void doRunningMode(int time_delta)
     // accel/gyro over NBP. Kept off the 1 Hz display path so loop timing is intact.
     bool trackMode = (getCurrentModeValue() == 1);
     imuGate.update(readDelta, trackMode);
-    // Story 06: the inflation indicator is a Track-mode feature with its own on/off
-    // toggle. When off (or in Street), feed a neutral condition so the latch never
-    // triggers -- the verdict is inert / hidden, matching the acceptance criteria.
-    extern bool getInflationIndicator();
-    bool inflationOn = trackMode && getInflationIndicator();
-    imuGate.feedCondition(inflationOn ? computeInterimInflationCondition() : 0);
+    // Feed each corner's own verdict. Track-mode only -- in Street the gate is inert and
+    // zeroes the scores anyway. #21 dropped the separate "Inflation" toggle that used to
+    // gate this: now that the latch drives the on-screen segment colors, switching it off
+    // left those bars with no inflation verdict but a live alignment one, which is a
+    // confusing half-state. "Segment Deltas" controls whether any of it is painted.
+    int8_t inflVotes[TIRE_COUNT] = {0, 0, 0, 0};
+    if (trackMode) computeInflationVotes(inflVotes);
+    for (int t = 0; t < TIRE_COUNT; t++) imuGate.feedCondition(t, inflVotes[t]);
     if (!testMode && imuGate.isPresent()) {
       nbp.sendIMU(imuGate.accelG(0), imuGate.accelG(1), imuGate.accelG(2),
                   imuGate.gyroDps(0), imuGate.gyroDps(1), imuGate.gyroDps(2),
@@ -348,12 +352,15 @@ void doRunningMode(int time_delta)
       }
       sessionManager.accumulate(readDelta, sTemps, sValid);
 
-      // Story 06: track inflation-indicator on-time over captured (straight-line) frames
-      // while the indicator is enabled, so the summary can surface the verdict when it
-      // was on >= 50% of the captured session. Latched alert -> signed verdict.
-      if (inflationOn) {
-        int av = (imuGate.alertState() == IMUGate::ALERT_OVER)  ?  1
-               : (imuGate.alertState() == IMUGate::ALERT_UNDER) ? -1 : 0;
+      // Track per-corner inflation on-time over captured (straight-line) frames, so the
+      // summary can surface each tire's verdict when it held for >= 50% of that session's
+      // captured time. Latched per-tire alert -> signed verdict per tire (#21).
+      {
+        int8_t av[TIRE_COUNT];
+        for (int t = 0; t < TIRE_COUNT; t++) {
+          IMUGate::Alert a = imuGate.alertState(t);
+          av[t] = (a == IMUGate::ALERT_OVER) ? 1 : (a == IMUGate::ALERT_UNDER) ? -1 : 0;
+        }
         sessionManager.accumulateInflation(readDelta, imuGate.isCapturing(), av);
       }
 
@@ -412,6 +419,19 @@ void doRunningMode(int time_delta)
       }
 
       wheels->setTireTemps(fl, fr, rl, rr);
+
+      // Hand the display the LATCHED per-corner verdict plus the raw evidence score, so
+      // the segment delta bars paint the gated, dwelled answer instead of re-deriving an
+      // instantaneous one of their own (#21). This is the change that stops those bars
+      // flickering mid-corner: the tire no longer gets a vote while the car is loaded up.
+      for (int c = 0; c < TIRE_COUNT; c++) {
+        IMUGate::Alert a = imuGate.alertState(c);
+        wheels->setInflationVerdict(c, (a == IMUGate::ALERT_OVER) ? 1
+                                     : (a == IMUGate::ALERT_UNDER) ? -1 : 0);
+        wheels->setDwellProgress(c, imuGate.inflScore(c),
+                                 imuGate.inflScoreLatch(), imuGate.inflScoreMax());
+      }
+
       if (forceDrawAfterInit>0){
           tft.fillScreen(ST77XX_BLACK);
           wheels->draw(true);
@@ -431,9 +451,11 @@ void doRunningMode(int time_delta)
       // downstream renderer applies them directly with no re-derivation. Track-mode
       // only -- the raw/active temp channel sets above stay on in all modes. Runs after
       // draw() so the per-band colors are exactly the ones just painted. Delta is the
-      // plain edge-vs-center spread (#18 dropped the baseline correction); a center-hot
-      // spread beyond Threshold votes OVER (+1), edge-hot votes UNDER (-1); Overall is
-      // the latched IMU state.
+      // plain edge-vs-center spread (#18 dropped the baseline correction). Delta and
+      // Threshold stay RAW here on purpose -- they are the un-gated diagnostic signal, and
+      // logging them lets the gate's effect be re-derived offline. The per-corner Verdict
+      // is now the LATCHED value (#21) rather than a third re-implementation of the
+      // comparison; Overall is the majority of those latches.
       if (!testMode && trackMode) {
         float   insDelta[TIRE_COUNT]  = {0};
         float   insThresh[TIRE_COUNT] = {0};
@@ -448,14 +470,11 @@ void doRunningMode(int time_delta)
           float edge = (tempReader->tireSectionTemps[c][0] +
                         tempReader->tireSectionTemps[c][2]) / 2.0f;
           float center = tempReader->tireSectionTemps[c][1];
-          float d   = edge - center;
-          float thr = edge * pct;
-          insDelta[c]  = d;
-          insThresh[c] = thr;
-          if (edge > 0.0f) {                       // skip unread/invalid frames
-            if (d <= -thr)      insVerdict[c] = 1;  // center-hot => over-inflation
-            else if (d >= thr)  insVerdict[c] = -1; // edges-hot  => under-inflation
-          }
+          insDelta[c]  = edge - center;
+          insThresh[c] = edge * pct;
+          IMUGate::Alert a = imuGate.alertState(c);
+          insVerdict[c] = (a == IMUGate::ALERT_OVER) ? 1
+                        : (a == IMUGate::ALERT_UNDER) ? -1 : 0;
           wheels->cornerColors(c, fillCols[c], deltaCols[c]);
         }
         int8_t overall = (imuGate.alertState() == IMUGate::ALERT_OVER)  ?  1
@@ -699,25 +718,11 @@ static void drawSessionFeedback(){
   }
 }
 
-// Paint the latched inflation verdict over the running display (story 06). Track-mode
-// only and gated by the Inflation toggle; once the IMU gate latches OVER/UNDER on
-// straight-line frames it stays visible anywhere on track until the opposite threshold
-// clears it. Small badge top-left so it's glanceable without hiding the tire map.
-static void drawInflationIndicator(){
-  if (getCurrentModeValue() != 1) return;          // Track-mode only
-  extern bool getInflationIndicator();
-  if (!getInflationIndicator()) return;            // menu toggle off
-  IMUGate::Alert a = imuGate.alertState();
-  if (a == IMUGate::ALERT_NONE) return;            // nothing latched
-  uint16_t col = (a == IMUGate::ALERT_OVER) ? ST77XX_RED : ST77XX_CYAN;
-  tft.fillRect(2, 2, 52, 16, ST77XX_BLACK);
-  tft.drawRect(2, 2, 52, 16, col);
-  tft.setFont(nullptr);
-  tft.setTextSize(1);
-  tft.setTextColor(col);
-  tft.setCursor(6, 6);
-  tft.print((a == IMUGate::ALERT_OVER) ? F("OVER") : F("UNDER"));
-}
+// #21 removed drawInflationIndicator() -- the top-left OVER/UNDER badge. It reported a
+// single global verdict, which is exactly the thing that made the feature unhelpful: it
+// could tell you something was wrong but never which corner. The per-tire segment delta
+// bars now carry the latched verdict on the tire it belongs to, so the badge was strictly
+// less information occluding the front-left tile.
 
 void ToggleNightMode(){
     nightMode=!nightMode;
@@ -770,7 +775,6 @@ void loop() {
     } else {
       doRunningMode(time_delta);
       drawSessionFeedback();
-      drawInflationIndicator();
       drawImuGateBar(tft);
     }
   } else {

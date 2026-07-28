@@ -36,6 +36,16 @@ produced the analysis logs, so the g signal needs only **minimal** smoothing.
   overall condition exceeds the **dwell-time** threshold, raise the alert and
   **latch** it until it clears (also judged while capturing). Drives story 06's
   indicator. Replaces the per-frame flicker with a stable state.
+  > **Superseded by #21 — the latch is now PER CORNER.** The single aggregate was
+  > the wrong call: four corners were collapsed to one majority vote *before* the
+  > timer ran, so one genuinely over-inflated tire was cancelled by its neighbours'
+  > neutral votes, and the verdict could never say which corner was wrong — the
+  > only thing you can act on. Each tire now carries a signed evidence score that
+  > grows on agreeing captured frames, subtracts at full rate on opposite ones, and
+  > leaks at 0.75× on neutral ones, saturating at 2× the dwell. The latch is read
+  > straight off that score, so the saturation headroom *is* the hysteresis and
+  > there is no separate latched flag. A rolled-up majority is still available for
+  > the NBP "Overall" channel.
 - **Minimal smoothing** on the lateral-g signal (stable mount).
 - **Orientation auto-calibration on every boot** — no manual step: learn level +
   forward axis at startup. A manual axis/sign override stays available as a fallback.
@@ -60,7 +70,7 @@ produced the analysis logs, so the g signal needs only **minimal** smoothing.
 
 - [ ] Active **only in Track mode** (`currentMode == 1`); inert / hidden in Street mode.
 - [ ] No inflation/segment accumulation while |lateral g| > threshold.
-- [ ] An **overall** (not per-corner) time-in-over/under drives a latched alert after the dwell; it stays latched until the condition clears.
+- [x] ~~An **overall** (not per-corner) time-in-over/under drives a latched alert after the dwell; it stays latched until the condition clears.~~ **Revised by #21:** a **per-corner** signed evidence score drives a per-corner latch after the dwell, and decays back out on sustained neutral/opposite evidence.
 - [ ] Orientation auto-calibrates on every boot; axes map correctly to lateral/longitudinal.
 - [ ] Orientation-calibrated accelerometer + gyro emitted over NBP.
 - [ ] IMU read integrated without disrupting the sensor/display loop timing.

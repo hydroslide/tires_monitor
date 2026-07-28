@@ -97,7 +97,20 @@ struct TireTemps {
     // decide the concrete type (no RTTI on this build).
     bool cornerColors(int corner, uint16_t fill[3], uint16_t delta[3]) const;
 
+    // Latched per-corner inflation verdict from the IMU gate (#21): +1 over, -1 under,
+    // 0 none. Replaces the instantaneous comparison ThreeSectionTire used to run for
+    // itself, so the segment delta bars show the gated, dwelled answer.
+    void setInflationVerdict(int corner, int8_t verdict);
+
+    // Raw signed evidence score for the per-corner dwell bar: |score| climbs toward
+    // `latch` to trip the verdict and saturates at `max`. Both bounds are passed in
+    // rather than assumed so the bar rescales when the Dwell setting changes.
+    void setDwellProgress(int corner, long score, long latch, long max);
+
 private:
+    // Corner index -> ThreeSectionTire, or nullptr if that corner is single-sensor.
+    ThreeSectionTire* cameraCorner(int corner) const;
+
     Tire *frontLeft, *frontRight, *rearLeft, *rearRight;
 
 
