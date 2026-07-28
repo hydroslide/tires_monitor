@@ -247,7 +247,17 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
   // read as "no evidence" rather than "not repainted".
   {
     const int dbH  = 4;
-    const int dbY  = y + height - 7;        // below the delta bars, inside the tire fill
+    // Hug the edge facing the IMU g bar in the centre gutter, so all five bars read as one
+    // instrument: FRONT tires put it at the BOTTOM of the tile, REAR tires at the TOP.
+    // Both land 2 px from that edge, mirrored about the gutter. Anchoring both to the
+    // bottom left the rear bars stranded a whole tile-height from the thing they relate to.
+    // Corner order is 0=FL, 1=FR, 2=RL, 3=RR, so <2 is the front axle.
+    //
+    // The clearance is real rather than lucky: 18pt bold digits are 23 px of ink and the
+    // outer bands are shifted up by textHeight+7, putting their text at y+12..y+35, while
+    // the delta bars occupy y+79..y+91. The first 12 and last 13 rows of the tile are free.
+    const bool isFront = (tireIndex < 2);
+    const int dbY  = isFront ? (y + height - 6) : (y + 2);
     const int half = width / 2;
     const int dbCx = x + half;
 
