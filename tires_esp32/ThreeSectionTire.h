@@ -69,6 +69,19 @@ public:
         return (i >= 0 && i < 3) ? currentDeltaColors[i] : 0;
     }
 
+    // Latched inflation verdict from the IMU gate (#21): +1 over, -1 under, 0 none.
+    // The tire no longer decides this for itself -- it used to recompute the edge-vs-
+    // centre comparison on every draw, un-gated and un-dwelled, which made the delta bars
+    // flicker through every corner as body roll manufactured a fake centre-hot.
+    void setInflationVerdict(int8_t verdict) { latchedInflation = verdict; }
+
+    // Signed evidence score behind that verdict, plus the latch point and saturation
+    // bound, for the per-tire dwell bar. Bounds are supplied rather than assumed so the
+    // bar rescales when the Dwell setting changes.
+    void setDwellProgress(long score, long latch, long max) {
+        dwellScore = score; dwellLatch = latch; dwellMax = max;
+    }
+
 
 private:
 
@@ -79,6 +92,15 @@ private:
     uint16_t sectionTextColors[3];
     
     
+    // Latched inflation verdict + the evidence behind it, pushed in from the IMU gate.
+    int8_t latchedInflation = 0;    // +1 over, -1 under, 0 none
+    int8_t lastLatchedInflation = 0;
+    long   dwellScore = 0;          // signed evidence, ms
+    long   dwellLatch = 0;          // |score| at which the verdict trips
+    long   dwellMax   = 0;          // |score| saturation bound (0 => bar hidden)
+    long   lastDwellScore = 0;
+    bool   dwellBarDrawn = false;
+
     bool initialized = false;
     bool deltaColorsInitialized = false;
     bool crossedThreshold = true;

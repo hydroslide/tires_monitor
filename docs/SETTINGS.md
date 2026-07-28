@@ -44,7 +44,7 @@ mode's *Default Profile*. See [Tire Profiles](#tire-profiles).
 
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
-| **Current Mode** | `Street` | Street / Track | Master mode switch. Selects which *Default Profile* is adopted, and enables the Track-only features (inflation indicator, session recording, balance readout). Changing it immediately re-snaps the active tire profile. |
+| **Current Mode** | `Street` | Street / Track | Master mode switch. Selects which *Default Profile* is adopted, and enables the Track-only features (straight-line capture gating and the per-tire inflation verdict, session recording, balance readout). Changing it immediately re-snaps the active tire profile. |
 | **Temp Scale** | `F` | F / C | Display units. Profile windows and Carcass Offset are authored in °F and converted for display, so switching scale doesn't require re-tuning a profile. |
 | **Night Brightness** | `25` | 0–100 % | Screen brightness **while night mode is active** (swipe-toggled) — it does not affect normal daytime brightness. Percent of full backlight. Low enough not to blind you at night, high enough to still read. |
 | **Test** | `On` | On / Off | Enables the raw **thermal-camera image** views. With it on, the swipe-cycled display has 3 states (off, or all four camera images live); with it off there are 4 states that cycle none → lower pair → upper pair → all four. Primarily a bench/diagnostic aid for checking a camera is aimed and reading sensibly. |
@@ -65,7 +65,6 @@ Both modes have the same two settings; Track has five more.
 | **Balance** | Track | — | action | Opens the front/rear and left/right thermal balance readout. |
 | **View Summary** | Track | — | action | Re-opens the last sealed session summary. |
 | **Auto-Seal** | Track | `Off` | On / Off | Automatically ends (seals) a running session after a sustained stationary period — a backstop for forgetting to swipe to end. Defaults off because it detects stillness from the IMU only (there's no speed input), so it's best-effort and can fire while you're sitting in the paddock. |
-| **Inflation** | Track | `On` | On / Off | Shows the latched over/under-inflation badge. Off suppresses it entirely. |
 
 > **Note:** in Raw mode the displayed number is a *surface* temperature but the profile
 > window is authored in the *carcass* frame, so tires will read roughly one Carcass Offset
@@ -83,7 +82,7 @@ Device-wide display behavior. (The per-corner crop offset *values* live on the t
 | **Show Offsets** | `On` | On / Off | **This is the crop-tuning toggle, and it changes what the thermal image shows.** *On* = the **full** camera frame with vertical guide lines marking where the crop offsets sit — use this while tuning the offsets so you can see what you're cutting. *Off* = the image is cropped to the region **between** the offsets and stretched to fill the display, which is the real working view. Turn it on to tune, off to drive. |
 | **Thermal Gradient** | `On` | On / Off | *On* = smooth interpolated colour within each temperature band (finer detail). *Off* = one flat colour per band, so the image posterizes into cold/warm/ideal/hot blocks — easier to read *which band* a region is in at a glance. Preference, not calibration. |
 | **Hi Freq Updates** | `Off` | On / Off | Redraws the tire display every read (~10 Hz) instead of once a second. Smoother, but far more redraw work. Leave off unless you're chasing something transient. |
-| **Segment Deltas** | `Off` | On / Off | Paints per-band verdict colour bars under each tire, showing which band tripped the inflation or alignment check. A diagnostic overlay — the underlying colours are always computed and always logged over NBP, this only controls whether they're painted on screen. |
+| **Segment Deltas** | `Off` | On / Off | Paints per-band verdict colour bars under each tire, showing which band tripped the inflation or alignment check. Since #21 the **inflation** verdict painted here is the IMU gate's *latched, straight-line-only* one — it no longer flickers through corners — while the alignment fallback stays instantaneous. A diagnostic overlay: the colours are always computed and always logged over NBP, this only controls whether they're painted. |
 | **Inflation Delta %** | `10` | 0–16 % | How far **edge-vs-centre** must diverge before a tire is called over/under-inflated. The comparison is `avg(outer, inner)` vs `centre`, and the threshold is this percent *of the edge temperature* (so ~16 °F at a 160 °F edge). **Lower = more sensitive**, more false calls; higher = only flags gross deviations. |
 | **Alignment Delta %** | `15` | 0–16 % | How far **outer-vs-inner shoulder** must diverge before it's flagged as an alignment (camber) issue rather than a pressure one. Same percent-of-edge basis. **Only evaluated if the inflation check didn't already trip** — inflation takes priority. Note the default of 15 sits near the 16 ceiling, so it's currently a fairly insensitive check. |
 
@@ -154,6 +153,34 @@ the wrong axis. A dot that pegs means the scale is wrong.
 mount noise, and it sets a sensible floor for *Lateral cg* — a threshold below the noise
 band will chatter the gate on and off while going straight.
 
+### The per-tire dwell bars
+
+`Show G Bar` also paints a thin centre-origin bar low inside each tire tile, showing how much
+evidence that corner has built toward an inflation verdict:
+
+```
+|<------------ tile width ------------>|
+[        |####|      :      |    |     ]
+         ^ latch    centre   ^ latch
+   cyan <- UNDER            OVER -> yellow
+```
+
+Each corner carries a **signed evidence score** in milliseconds. On captured (straight-line)
+frames it grows toward OVER while that tire reads centre-hot and toward UNDER while it reads
+edge-hot; a neutral frame leaks it back toward zero at 0.75× rate. Mid-corner the gate stops
+feeding it, so the bar **freezes** rather than drifting. Cross a latch tick and the verdict
+trips, colouring the segment delta bars above.
+
+Two deliberate asymmetries: an *opposite* reading subtracts at full rate (it is real evidence
+the other way) while *neutral* only leaks at 0.75×, and the score saturates at 2× the latch
+point. That saturation is the hysteresis — a fully-committed corner needs roughly 1.3× the
+dwell of neutral driving before it falls back out, so a verdict can't chatter on and off at
+the boundary.
+
+Use them to tune `Dwell 0.1s`: if bars slam to a latch on one straight, the dwell is too
+short; if they never get there over a whole lap, it's too long or `Inflation Delta %` is set
+too tight.
+
 ---
 
 ## Tire Profiles
@@ -205,4 +232,5 @@ Recorded so an old note or screenshot doesn't send you hunting for something tha
 | **Load** | Tire Profiles | #18 | Manually pulled the selected slot into the edit buffer. The edit buffer is gone (#19) — the fields now point straight at the live slot, so there's nothing to load. |
 | **Save Prof** | Tire Profiles | #18 | Saved only the current profile. `Save Config` already writes all three, and a profile-only save became actively misleading once several profiles can hold pending edits at once. |
 | **Street/Track Min · Ideal · Max** | Street/Track Settings | #14 | Modes no longer carry their own window; they name a *Default Profile* and the profile supplies the window. |
+| **Inflation** | Track Settings | #21 | Gated the over/under verdict and its top-left badge. The badge is gone — it reported one global verdict, so it could say something was wrong but never which corner, and the per-tire delta bars now carry that verdict on the tire it belongs to. With the latch driving those bars, an off switch left them showing an alignment verdict but no inflation one, which reads as "this tire is fine" rather than "this check is disabled". *Segment Deltas* is the honest visibility control. EEPROM 31 is free again. |
 | **Camera offset values** | Camera Settings | #15 | Moved onto the tire profile (Tire Profiles → Offsets) so they swap with the tire. The display toggles stayed global. |
