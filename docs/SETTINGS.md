@@ -155,8 +155,10 @@ band will chatter the gate on and off while going straight.
 
 ### The per-tire dwell bars
 
-`Show G Bar` also paints a thin centre-origin bar low inside each tire tile, showing how much
-evidence that corner has built toward an inflation verdict:
+`Show G Bar` also paints a thin centre-origin bar inside each tire tile, showing how much
+evidence that corner has built toward an inflation verdict. Each one hugs the edge facing
+the g bar — **bottom** of the front tiles, **top** of the rear ones — so all five read as a
+single instrument clustered around the centre gutter rather than four strays:
 
 ```
 |<------------ tile width ------------>|
