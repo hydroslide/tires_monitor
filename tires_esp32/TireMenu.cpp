@@ -1,8 +1,13 @@
 #include "TireMenu.h"
 #include "MenuRenderer.h"
 #include "TireProfiles.h"
+#include "TempReader.h"
+#include "OffsetSetup.h"
 
 extern MenuRenderer menuRenderer;
+// The live reader, owned by the sketch. Only "Set Offsets" reads it here, and only to ask
+// whether any corner has a camera worth aiming (#23).
+extern TempReader* tempReader;
 
 // ----------------------------------------------------
 //  1) Global variables for each setting
@@ -563,7 +568,15 @@ static MenuItem profileOffsetsRearRightMenu[] = {
     { "Right", MENU_VALUE, nullptr, nullptr, 0, &profileRightOffsetRRBinding }
 };
 
+// Interactive setup action (#23), defined in section 6.
+static void doSetOffsets();
+
+// "Set Offsets" leads because it is the way these values are meant to be set: the eight
+// numeric fields below it are a pixel aim, and this screen is the only one that shows you
+// the picture you are aiming at. They stay for fine adjustment and for reading back what the
+// mode left behind.
 static MenuItem profileOffsetsMenu[] = {
+    { "Set Offsets", MENU_ACTION, doSetOffsets, nullptr, 0, nullptr },
     { "Front Left",  MENU_SUBMENU, nullptr, profileOffsetsFrontLeftMenu,  sizeof(profileOffsetsFrontLeftMenu)/sizeof(MenuItem),  nullptr },
     { "Front Right", MENU_SUBMENU, nullptr, profileOffsetsFrontRightMenu, sizeof(profileOffsetsFrontRightMenu)/sizeof(MenuItem), nullptr },
     { "Rear Left",   MENU_SUBMENU, nullptr, profileOffsetsRearLeftMenu,   sizeof(profileOffsetsRearLeftMenu)/sizeof(MenuItem),   nullptr },
@@ -789,6 +802,31 @@ static void doResetProfile()
 {
     TireProfiles::resetSelectedToDefault();
     menuRenderer.setStatusMessage("Profile reset");
+}
+
+// -- Interactive camera offset setup (#23) --
+// Raised here, acted on in loop(). An action callback runs several frames deep inside the
+// gesture handler -- it cannot close the menu, and it must not start a mode that draws over
+// the screen the handler is about to re-render. So it just asks, and the sketch (which is
+// also where the reader gets rebuilt on menu close) does the real work.
+static bool offsetSetupRequested = false;
+
+static void doSetOffsets()
+{
+    // Nothing to aim without a camera: every corner is a single-point sensor, so there is no
+    // image to put a crop guide on. Say so rather than opening a black screen.
+    if (!OffsetSetup::hasEditableTargets(tempReader)) {
+        menuRenderer.setStatusMessage("No cameras");
+        return;
+    }
+    offsetSetupRequested = true;
+}
+
+bool consumeOffsetSetupRequest()
+{
+    bool requested = offsetSetupRequested;
+    offsetSetupRequested = false;
+    return requested;
 }
 
 // -- Balance summary action (story 05) --

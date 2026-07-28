@@ -212,7 +212,31 @@ thermal-frame pixel columns.
 
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
-| **Left** / **Right** | `0` | 0–16 columns | How many pixel columns to crop off each side of that corner's camera frame, so the three temperature bands land on actual tread rather than sidewall, wheel or background. **This is where a mis-aimed camera gets corrected** — fixing aim here is right because it also fixes the displayed band temperatures, whereas a temperature fudge would only shift the derived delta. Tune with **Camera Settings → Show Offsets** on so you can see the guide lines against the live image. They're per-profile because different tires and mountings want different crops; all three profiles seed identical. |
+| **Set Offsets** | — | action | **The way these are meant to be set.** Hands the whole screen to the four live camera images with their crop guides drawn on, and walks all eight values in one pass — see [Setting offsets interactively](#setting-offsets-interactively) below. Edits land in the selected profile in RAM; `Save Config` still persists. |
+| **Left** / **Right** | `0` | 0–16 columns | How many pixel columns to crop off each side of that corner's camera frame, so the three temperature bands land on actual tread rather than sidewall, wheel or background. **This is where a mis-aimed camera gets corrected** — fixing aim here is right because it also fixes the displayed band temperatures, whereas a temperature fudge would only shift the derived delta. Kept for fine adjustment and for reading back what **Set Offsets** left behind; tuning by hand here needs **Camera Settings → Show Offsets** on so you can see the guide lines against the live image. They're per-profile because different tires and mountings want different crops; all three profiles seed identical. |
+
+#### Setting offsets interactively
+
+These eight numbers are a **pixel aim against a camera image**, and the numeric fields above
+hide the very image you're aiming. `Set Offsets` fixes that: the menu closes, the four camera
+images fill the screen with no tire map, and every crop guide is drawn on top (regardless of
+the *Show Offsets* toggle, and always over the **uncropped** frame — a guide drawn on an
+already-cropped image tells you nothing).
+
+Exactly one guide is armed at a time, and it **blinks**. That's the only indicator, so the
+gestures are worth knowing:
+
+| Swipe | What it does |
+|---|---|
+| left / right | Slides the **armed** guide the way you swiped. The stored value moves opposite ways on the two guides — both are measured inward from their own edge, so a right offset grows leftward — but on screen the line always follows your finger. Stops at 0 (the image edge) and 16 (mid-image). |
+| down | Next value. Order is fixed: FL, FR, RL, RR, and Left before Right within a corner. **Corners with no camera are skipped** — there's nothing to aim there. |
+| up | Previous value. |
+| down past the last value | **Green border pulses** — you're about to keep. Down again exits to this menu with the edits; up returns to the last value. |
+| up past the first value | **Red border pulses** — you're about to discard. Up again exits and restores every offset to what it was on entry; down returns to the first value. |
+
+Keeping means keeping in the **selected profile, in RAM** — exactly like typing into the
+numeric fields. Nothing reaches EEPROM until root **Save Config**, so a session of aiming is
+still discardable by simply not saving.
 
 ---
 

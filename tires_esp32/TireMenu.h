@@ -25,4 +25,13 @@ void applyModeDefaultProfile();
 // loop(); replaces the old manual "Load" menu item.
 void serviceProfileEditSync();
 
+/**
+ * Poll (and clear) the "Set Offsets" request raised from Tire Profiles -> Offsets (#23).
+ *
+ * A MENU_ACTION callback runs deep inside the gesture handler and has no way to close the
+ * menu or hand the screen to another mode, so it raises this flag and the sketch does both
+ * from loop(). Returns true exactly once per pick.
+ */
+bool consumeOffsetSetupRequest();
+
 #endif // TIRE_MENU_H

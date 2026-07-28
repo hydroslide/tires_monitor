@@ -46,6 +46,12 @@ int ThermalDisplay::thresholdMax     = MAXTEMP;
 bool ThermalDisplay::useGradient = true;
 bool ThermalDisplay::showPixelOffsets = false;
 
+// Interactive crop-offset setup (#23); driven by OffsetSetup while that mode is up.
+bool   ThermalDisplay::setupActive    = false;
+int8_t ThermalDisplay::setupCorner    = -1;
+bool   ThermalDisplay::setupRightSide = false;
+bool   ThermalDisplay::setupBlinkOn   = true;
+
 uint16_t ThermalDisplay::camPalette[256];
 int      ThermalDisplay::lenCold;
 int      ThermalDisplay::lenWarm;
@@ -464,7 +470,11 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
     int leftOff  = 0;
     int rightOff = 0;
     int cropW    = CAMERA_WIDTH;
-    const bool stretchX = !showPixelOffsets;
+    // Offset setup (#23) always shows the FULL frame regardless of the Show Offsets setting:
+    // a guide drawn over an image that has already been cropped to those same offsets is a
+    // line down the edge of the screen saying nothing. You can only aim a crop against the
+    // uncropped picture.
+    const bool stretchX = !showPixelOffsets && !setupActive;
 
     if (stretchX) {
         // Read the per-sensor offsets
@@ -521,8 +531,9 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
     tft.writePixels(framebuf, areaW * areaH);
     tft.endWrite();
 
-    // When not stretching (i.e., showPixelOffsets == true), draw the guide lines on top.
-    if (showPixelOffsets)
+    // When not stretching (i.e., showPixelOffsets == true, or offset setup owns the screen),
+    // draw the guide lines on top.
+    if (showPixelOffsets || setupActive)
         drawPixelOffsets(_tempIndex);
 }
 
@@ -531,14 +542,50 @@ void ThermalDisplay::drawPixelOffsets(int _tempIndex){
     byte leftOffset = tempReader->leftPixelOffset[_tempIndex];
     byte rightOffset = tempReader->rightPixelOffset[_tempIndex];
 
-    if(leftOffset >0){
-        int leftX = (((leftOffset * areaW) / CAMERA_WIDTH)-1)+areaX;   
-        tft.drawFastVLine(leftX, areaY, areaH, OFFSET_LINE_COLOR);
+    // Setup mode draws BOTH guides unconditionally (#23). Outside it the >0 guard stays: a
+    // zero-offset guide lands hard against the image edge and is just clutter when nobody is
+    // aiming the camera. While aiming it is the opposite -- an invisible line is one you
+    // cannot walk back out from zero.
+    const bool always = setupActive;
+
+    // Which guide, if either, is the value being edited. -1 means nothing is armed (the
+    // confirm screens), so every line sits steady.
+    const bool armedHere = setupActive && (setupCorner == (int8_t)_tempIndex);
+
+    if(leftOffset >0 || always){
+        int leftX = (((leftOffset * areaW) / CAMERA_WIDTH)-1)+areaX;
+        drawOffsetGuide(leftX, armedHere && !setupRightSide);
     }
 
-    if (rightOffset >0){
+    if (rightOffset >0 || always){
         int rightX = ((areaW- ((rightOffset * areaW) / CAMERA_WIDTH))+1)+areaX;
-        tft.drawFastVLine(rightX, areaY, areaH, OFFSET_LINE_COLOR);
+        drawOffsetGuide(rightX, armedHere && setupRightSide);
     }
 
+}
+
+// One crop guide.
+//
+// Every pixel is clamped into the image rectangle, because that rectangle -- and only that
+// rectangle -- is re-blitted on the next update. A line drawn in the bezel margin (which is
+// where the arithmetic above puts a 0 offset) would never be erased, so it would smear as
+// the value moved and the blink would have nothing to blink against.
+void ThermalDisplay::drawOffsetGuide(int x, bool armed){
+    const int lo = areaX;
+    const int hi = areaX + areaW - 1;
+
+    if (x < lo) x = lo;
+    if (x > hi) x = hi;
+
+    // The dark half of the blink draws nothing at all: the next frame's blit is the erase,
+    // so there is no second color to paint and no flicker in the image underneath.
+    if (armed && !setupBlinkOn) return;
+
+    // The armed guide is 3 px wide so it is unmistakable at arm's length in daylight -- it
+    // is the only thing on screen saying which of the eight values a swipe will move.
+    const int half = armed ? 1 : 0;
+    for (int gx = x - half; gx <= x + half; gx++){
+        if (gx >= lo && gx <= hi)
+            tft.drawFastVLine(gx, areaY, areaH, OFFSET_LINE_COLOR);
+    }
 }

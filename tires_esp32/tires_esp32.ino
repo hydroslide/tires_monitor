@@ -27,6 +27,7 @@
 #include "TouchMenuHandler.h"   // Handles gestures to navigate the menu
 #include "QuadrantFactory.h"
 #include "ThermalDisplay.h"
+#include "OffsetSetup.h"        // Interactive camera crop-offset mode (#23)
 
 #define WIFI_SSID "TireTempMonitor"
 #define WIFI_PASSWORD "esp32"
@@ -127,6 +128,11 @@ static void sendBootMetadata();
 static void exitSummaryAutoView();
 static void toggleSession();
 static void serviceModeProfileSnap();
+static void applyThermalActivation();
+static void beginOffsetSetup();
+static void endOffsetSetup();
+static void checkOffsetSetupSwipes();
+static void doOffsetSetupMode(int time_delta);
 extern uint8_t getCurrentModeValue();
 extern bool getAutoSealStationary();
 
@@ -208,55 +214,31 @@ void updateThermalDisplays(){
   }
 }    
 
+// Which quadrants show a camera image for the current thermalMode. Split out of
+// setThermalMode() (#23) because the offset-setup mode has to force all four on, and put
+// them back on exit, WITHOUT the repaint below -- the menu is what takes the screen next, so
+// painting the running display first would only flash it.
+static void applyThermalActivation(){
+  if (enableThermalTemps){
+    // Test mode drives all four from one frame set: it is all of them or none.
+    const bool on = (thermalMode != 0);
+    UL->isActive=on;
+    UR->isActive=on;
+    LL->isActive=on;
+    LR->isActive=on;
+  }else{
+    // 0 = none, 1 = rears, 2 = fronts, 3 = all four. switchThermalMode() keeps thermalMode
+    // inside that range with its modulo, so there is no other case to answer for.
+    UL->isActive = (thermalMode == 2 || thermalMode == 3);
+    UR->isActive = (thermalMode == 2 || thermalMode == 3);
+    LL->isActive = (thermalMode == 1 || thermalMode == 3);
+    LR->isActive = (thermalMode == 1 || thermalMode == 3);
+  }
+}
+
 void setThermalMode(uint8_t _thermalMode){
   thermalMode = _thermalMode;
-  if (enableThermalTemps){
-    if (thermalMode == 0){
-        UL->isActive=false;
-        UR->isActive=false;
-        LL->isActive=false;
-        LR->isActive=false;
-    }else{
-        UL->isActive=true;
-        UR->isActive=true;
-        LL->isActive=true;
-        LR->isActive=true;
-    }
-  }else{
-    switch (thermalMode)
-    {
-      case 0:
-        UL->isActive=false;
-        UR->isActive=false;
-        LL->isActive=false;
-        LR->isActive=false;
-        break;
-
-      case 1:
-        UL->isActive=false;
-        UR->isActive=false;
-        LL->isActive=true;
-        LR->isActive=true;
-        break;
-      
-      case 2:
-        UL->isActive=true;
-        UR->isActive=true;
-        LL->isActive=false;
-        LR->isActive=false;
-        break;
-      
-      case 3:
-        UL->isActive=true;
-        UR->isActive=true;
-        LL->isActive=true;
-        LR->isActive=true;
-        break;
-      
-      default:
-        break;
-    }
-  }
+  applyThermalActivation();
   tft.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
   activateTires();
@@ -612,6 +594,80 @@ static void toggleSession(){
   }
 }
 
+// -- Interactive camera crop-offset setup (#23) --
+// A third thing that can own the screen, alongside the running display and the auto summary.
+// While it is up the sketch runs a stripped read/paint loop of its own: the four camera
+// images and nothing else. No tire map (there is no room, and the numbers are not what you
+// are looking at), no IMU gate, no session accumulation, no NBP -- none of that is measuring
+// anything while the car sits still and you aim cameras at it.
+static bool offsetSetupActive  = false;
+static bool offsetSetupPending = false;   // picked in the menu, entered once the menu closes
+
+static void beginOffsetSetup(){
+  // No need to remember thermalMode: nothing can change it while this mode owns the screen
+  // (only checkForSwipes() does, and it is not running), so applyThermalActivation() can
+  // simply re-derive the quadrant flags from it on the way out.
+
+  // All four quadrants live, whatever the running display was showing. updateDisplay() still
+  // no-ops on a corner with no camera, and OffsetSetup leaves those corners out of the walk.
+  for (int i = 0; i < TIRE_COUNT; i++) thermalDisplays[i]->isActive = true;
+
+  // The left swipe is half of the nudge pair here, so it must stop meaning "open the menu".
+  menuHandler.suspendMenu(true);
+
+  tft.fillScreen(ST77XX_BLACK);
+  imuGateBarInvalidate();
+
+  // Edit the ACTIVE profile -- the same slot the numeric Offsets fields target -- so the
+  // images on screen are being cropped by the values under edit.
+  OffsetSetup::begin(tempReader, TireProfiles::activeIndex());
+  offsetSetupActive = true;
+
+  // Paint on the very next pass instead of waiting out a read interval on a black screen.
+  millisSinceLastRead = readIntervalMillis;
+}
+
+static void endOffsetSetup(){
+  offsetSetupActive = false;
+  menuHandler.suspendMenu(false);
+
+  // Put the quadrant activation back the way the running display had it. No repaint: the
+  // menu is about to take the whole screen, and when it closes applyMenuConfig() rebuilds
+  // the display from scratch anyway.
+  applyThermalActivation();
+  activateTires();
+
+  // Back to Tire Profiles -> Offsets, the screen we were launched from. MenuSystem never
+  // moved, so re-opening lands on the same item with no bookkeeping.
+  menuHandler.openMenu();
+}
+
+// Route the four directions into the mode. The touch library's names are NOT the screen's:
+// GESTURE_LEFT is the menu's select/descend swipe, and here it slides the armed guide LEFT.
+// OffsetSetup takes it from there -- including which sign that means for the byte, which
+// differs between the two guides (see the sign rule in OffsetSetup.cpp).
+static void checkOffsetSetupSwipes(){
+  if (menuHandler.SwipedLeft())  OffsetSetup::handleSwipe(OffsetSetup::NUDGE_LEFT);
+  if (menuHandler.SwipedRight()) OffsetSetup::handleSwipe(OffsetSetup::NUDGE_RIGHT);
+  if (menuHandler.SwipedUp())    OffsetSetup::handleSwipe(OffsetSetup::PREV);
+  if (menuHandler.SwipedDown())  OffsetSetup::handleSwipe(OffsetSetup::NEXT);
+
+  // A confirm was answered (or there was nothing to edit): tear the mode down.
+  if (!OffsetSetup::isActive()) endOffsetSetup();
+}
+
+static void doOffsetSetupMode(int time_delta){
+  // Advance the blink phase first so the guides drawn below are in step with the border.
+  OffsetSetup::service(tft);
+
+  millisSinceLastRead += time_delta;
+  if (millisSinceLastRead < readIntervalMillis) return;
+  millisSinceLastRead = 0;
+
+  tempReader->readTemps();
+  for (int i = 0; i < TIRE_COUNT; i++) thermalDisplays[i]->updateDisplay(i);
+}
+
 // Leave the full-screen summary and restore the running display.
 static void exitSummaryAutoView(){
   summaryAutoView = false;
@@ -759,23 +815,43 @@ void loop() {
   menuHandler.loop(time_delta);
   serviceModeProfileSnap();
   serviceProfileEditSync();   // #18: Tire Profiles edit buffer follows the selector
+
+  // "Set Offsets" was picked (#23). The action could not close the menu itself, so do it
+  // here -- and only note the entry: the mode must not start until applyMenuConfig() below
+  // has rebuilt tempReader, or it would be handed a pointer initializeSystem() is about to
+  // delete.
+  if (consumeOffsetSetupRequest()){
+    menuHandler.closeMenu();
+    offsetSetupPending = true;
+  }
+
   if (!menuHandler.isMenuActive()) {
     if(menuWasActive){
       menuWasActive = false;
       applyMenuConfig();
-    }
-    checkForSwipes();
-    serviceFeedback();
-    if (summaryAutoView){
-      // Full-screen sealed summary owns the display; repaint only on page change.
-      if (summaryAutoDirty){
-        SessionManager::renderSummary(tft, sessionManager.summary(), summaryAutoPage);
-        summaryAutoDirty = false;
+      if (offsetSetupPending){
+        offsetSetupPending = false;
+        beginOffsetSetup();
       }
+    }
+    if (offsetSetupActive){
+      // Offset setup owns the screen and all four swipe directions.
+      checkOffsetSetupSwipes();                                 // may end the mode
+      if (offsetSetupActive) doOffsetSetupMode(time_delta);
     } else {
-      doRunningMode(time_delta);
-      drawSessionFeedback();
-      drawImuGateBar(tft);
+      checkForSwipes();
+      serviceFeedback();
+      if (summaryAutoView){
+        // Full-screen sealed summary owns the display; repaint only on page change.
+        if (summaryAutoDirty){
+          SessionManager::renderSummary(tft, sessionManager.summary(), summaryAutoPage);
+          summaryAutoDirty = false;
+        }
+      } else {
+        doRunningMode(time_delta);
+        drawSessionFeedback();
+        drawImuGateBar(tft);
+      }
     }
   } else {
     menuWasActive = true;

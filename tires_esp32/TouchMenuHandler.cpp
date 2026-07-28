@@ -27,6 +27,27 @@ bool TouchMenuHandler::SwipedDown(){
     unhandledSwipeDown=false;
     return temp;
 }
+bool TouchMenuHandler::SwipedLeft(){
+    bool temp = unhandledSwipeLeft;
+    unhandledSwipeLeft=false;
+    return temp;
+}
+
+void TouchMenuHandler::suspendMenu(bool suspend){
+    menuSuspended = suspend;
+}
+
+void TouchMenuHandler::openMenu(){
+    menuActive = true;
+    // Paint immediately rather than waiting for the next gesture: loop() only re-renders
+    // after it has handled one, so without this the screen would keep whatever the mode we
+    // just came back from left on it.
+    render.render();
+}
+
+void TouchMenuHandler::closeMenu(){
+    menuActive = false;
+}
 
 void TouchMenuHandler::loop(int timeDelta) {
     // Poll the touch sensor
@@ -80,6 +101,7 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
 
     unhandledSwipeDown=false;
     unhandledSwipeRight=false;
+    unhandledSwipeLeft=false;
     unhandledSwipeUp=false;
    
     // Session summary screen (story 01) takes over the whole screen; up/down page
@@ -134,8 +156,13 @@ void TouchMenuHandler::handleGesture(TouchScreenController::gesture_t gesture) {
     }
 
     if (!menuActive){
-        if (gesture == TouchScreenController::gesture_t::GESTURE_LEFT)
-            menuActive = true;
+        if (gesture == TouchScreenController::gesture_t::GESTURE_LEFT){
+            // Left is normally the "open the menu" swipe and never reaches the sketch. A
+            // suspended menu hands it over instead, which is what lets offset setup (#23)
+            // use both horizontal directions to walk a guide line.
+            if (menuSuspended) unhandledSwipeLeft = true;
+            else               menuActive = true;
+        }
         else if(gesture == TouchScreenController::gesture_t::GESTURE_RIGHT)
             unhandledSwipeRight=true;
         else if(gesture == TouchScreenController::gesture_t::GESTURE_UP)

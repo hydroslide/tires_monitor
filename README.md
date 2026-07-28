@@ -137,6 +137,18 @@ Every setting is documented — what it does, its range, and how to tune it — 
 
 To activate night mode, swipe right on the main display.
 
+### Aiming the cameras
+
+The eight per-corner crop offsets decide where each camera's three temperature bands land on
+the tread, and they're a pixel aim — you can only set them against the picture. **Tire
+Profiles → Offsets → Set Offsets** hands the whole screen to the four live camera images with
+their crop guides drawn on top and walks all eight values in one pass: the armed guide blinks,
+left/right slides that line under your finger, down/up step through the values, and stepping
+off either end raises a pulsing green (keep) or red (discard) border to confirm before you
+leave. Corners without a camera are skipped. Edits go into the selected profile; **Save
+Config** is still what writes them to EEPROM. Full gesture map in
+[docs/SETTINGS.md](docs/SETTINGS.md#setting-offsets-interactively).
+
 ## Debugging Tools
 
 - `i2c_scanner`: Utility to scan and identify I2C devices on the bus

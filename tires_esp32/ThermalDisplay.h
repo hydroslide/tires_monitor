@@ -92,6 +92,10 @@ private:
     static uint16_t interpolate565(uint16_t c1, uint16_t c2, float t);
 
     void drawPixelOffsets(int _tempIndex);
+    // Draw one crop guide at screen x, clamped into the image rectangle. `armed` marks the
+    // value under edit in offset-setup mode: it is drawn wider, and skipped entirely on the
+    // blink's dark half.
+    void drawOffsetGuide(int x, bool armed);
 
         // ---- HSV/RGB helpers (keep interpolation saturated) ----
     static inline void rgb565_to_888(uint16_t c, uint8_t& r,uint8_t& g,uint8_t& b) {
@@ -154,6 +158,19 @@ public:
     static void setTemperatureRangeF(int minTemp, int idealTemp, int maxTemp);
     static bool useGradient;
     static bool showPixelOffsets;
+
+    // ─── interactive crop-offset setup (#23) ────────────
+    // Set by OffsetSetup while that mode owns the screen. Public statics rather than a
+    // setter pair to match showPixelOffsets / useGradient above -- this class has always
+    // taken its display-wide configuration that way.
+    //
+    // While setupActive, every instance: never stretch-crops (a guide drawn over an
+    // already-cropped image tells you nothing), draws BOTH guides even at offset 0, and
+    // blinks the one value being edited.
+    static bool   setupActive;
+    static int8_t setupCorner;     // armed corner 0..3, or -1 for "nothing armed"
+    static bool   setupRightSide;  // which edge of setupCorner is armed
+    static bool   setupBlinkOn;    // the armed guide's blink phase
 
 };
 
