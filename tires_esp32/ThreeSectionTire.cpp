@@ -10,6 +10,7 @@ extern Adafruit_ST7789 tft;   // from your main sketch
 #include <Fonts/FreeMonoBold18pt7b.h>
 
 extern HWCDC USBSerial;
+extern bool getShowGateBar();   // TireMenu -- shared toggle for the IMU gate tuning aids
 
 void ThreeSectionTire::setSectionTemps(const float temps[3],
                                        bool isFahrenheit,
@@ -111,6 +112,15 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     }
   }
 
+  // The inflation verdict is no longer derived from these temperatures (#21) -- it is
+  // pushed in from the IMU gate's latch, which can flip while the rounded integer temps
+  // sit still (evidence decaying on neutral frames, or a corner latching just as its
+  // reading settles). Without this the delta bars would keep painting a stale verdict.
+  if (latchedInflation != lastLatchedInflation) {
+    changed = true;
+    lastLatchedInflation = latchedInflation;
+  }
+
       bool rectsDrawn = false;
     int bandW = width / 3;
 
@@ -150,19 +160,25 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       }
       int center = 1;
       float avgEdge = (float)(sectionTemps[outer]+sectionTemps[inner]) / 2.0f;
-      float delta = avgEdge-sectionTemps[center]; // First measure for inflation delta
-      float minInflationDelta = avgEdge * (minInflationDeltaPct/100.0f);
-      if (delta >= minInflationDelta){
+      float delta;
+      // Inflation verdict comes from the IMU gate's per-tire latch now (#21), not from a
+      // fresh comparison here. Same underlying test (edge vs centre against Inflation
+      // Delta %), but evaluated only on captured straight-line frames and held until the
+      // evidence decays -- so these bars stop flipping every time the car loads up.
+      // -1 = edges hot (under-inflation), +1 = centre hot (over-inflation).
+      if (latchedInflation < 0){
         currentDeltaColors[outer] = highDeltaColor;
         currentDeltaColors[center] = lowDeltaColor;
         currentDeltaColors[inner] = highDeltaColor;
-      }else if (delta <= minInflationDelta*-1)
+      }else if (latchedInflation > 0)
       {
         currentDeltaColors[outer] = lowDeltaColor;
         currentDeltaColors[center] = highDeltaColor;
         currentDeltaColors[inner] = lowDeltaColor;
       }else{
-        // If no inflation delta tripped, measure for alignment delta
+        // No inflation verdict latched: fall back to the alignment check, which stays
+        // instantaneous. It has no dwell model of its own, and camber wear is a slow
+        // steady signal rather than something a single corner can manufacture.
         delta = sectionTemps[outer] - sectionTemps[inner];
         float minAlignmentDelta = avgEdge * (minAlignmentDeltaPct/100.0f);
         if (delta >= minAlignmentDelta){
@@ -219,6 +235,52 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       }     
     }
   }
+
+  // Per-tire dwell bar (#21). Shows how much evidence this corner has accumulated toward
+  // an inflation verdict, so the dwell is tunable by eye instead of by guesswork: the fill
+  // grows from the centre while the corner reads over/under on captured frames, freezes
+  // mid-corner (the gate stops feeding it), and leaks back on neutral ones. Reaching a
+  // tick latches the verdict and colours the segment bars above.
+  //
+  // Drawn OUTSIDE the `changed || force` block on purpose -- the score moves continuously
+  // while the temperatures may sit still for many seconds, and a frozen bar would be
+  // read as "no evidence" rather than "not repainted".
+  {
+    const int dbH  = 4;
+    const int dbY  = y + height - 7;        // below the delta bars, inside the tire fill
+    const int half = width / 2;
+    const int dbCx = x + half;
+
+    if (dwellMax > 0 && getShowGateBar()) {
+      if (rectsDrawn || !dwellBarDrawn || dwellScore != lastDwellScore) {
+        // Black track repainted every time, which also erases the previous fill -- the
+        // background here is the band colour, so there is nothing simpler to restore to.
+        tft.fillRect(x, dbY, width, dbH, ST77XX_BLACK);
+
+        long mag = (dwellScore < 0) ? -dwellScore : dwellScore;
+        int  len = (int)(((long)half * mag) / dwellMax);
+        if (len > half) len = half;
+        if (len > 0) {
+          if (dwellScore > 0) tft.fillRect(dbCx, dbY, len, dbH, highDeltaColor);
+          else                tft.fillRect(dbCx - len, dbY, len, dbH, lowDeltaColor);
+        }
+
+        // Latch marks last so they stay legible once the fill passes them.
+        int tick = (int)(((long)half * dwellLatch) / dwellMax);
+        tft.drawFastVLine(dbCx - tick, dbY, dbH, 0x7BEF);
+        tft.drawFastVLine(dbCx + tick, dbY, dbH, 0x7BEF);
+
+        lastDwellScore = dwellScore;
+        dwellBarDrawn  = true;
+      }
+    } else if (dwellBarDrawn) {
+      // Turned off (or no gate data): give the strip back to the band colours.
+      for (int i = 0; i < 3; i++)
+        tft.fillRect(x + i * bandW, dbY, bandW, dbH, sectionFillColors[i]);
+      dwellBarDrawn = false;
+    }
+  }
+
   if (shouldResetThreshold){
     shouldResetThreshold=false;
     if (initialized) crossedThreshold = false;

@@ -26,15 +26,19 @@ static const float   GYR_LSB_PER_DPS = 128.0f;  // +/-256 dps
 static const int   CAL_SAMPLES = 64;
 // Minimal smoothing on the lateral-g signal (stable dash mount): light EMA.
 static const float LAT_EMA_ALPHA = 0.35f;
+// Leak rate for a neutral inflation reading, as a fraction of elapsed time (#21). Below 1
+// on purpose: neutral is weaker evidence than a contrary reading, so it should walk a
+// verdict back more slowly than the opposite condition would flip it.
+static const float DECAY_K = 0.75f;
 
 IMUGate::IMUGate()
 : bus(nullptr), present(false), enabled(true), trackActive(false),
   orient(ORIENT_AUTO), thresholdG(0.35f), gateDwellMs(500), dwellMs(2500),
   dieTempC(0.0f), verticalAxis(2), lateralAxis(1),
-  latG(0.0f), latInit(false), zoneMs(0), capturing(true),
-  overAccumMs(0), underAccumMs(0), alert(ALERT_NONE), pendingCond(0)
+  latG(0.0f), latInit(false), zoneMs(0), capturing(true)
 {
   for (int i = 0; i < 3; i++) { accG[i] = 0.0f; gyrDps[i] = 0.0f; restBias[i] = 0.0f; }
+  for (int t = 0; t < TIRE_SLOTS; t++) { inflScoreMs[t] = 0; tireCond[t] = 0; }
 }
 
 bool IMUGate::writeReg(uint8_t reg, uint8_t val) {
@@ -187,10 +191,7 @@ void IMUGate::update(long dtMillis, bool trackMode) {
   if (!present || !enabled || !trackMode) {
     capturing = true;
     zoneMs = 0;
-    overAccumMs = 0;
-    underAccumMs = 0;
-    alert = ALERT_NONE;
-    pendingCond = 0;
+    for (int t = 0; t < TIRE_SLOTS; t++) { inflScoreMs[t] = 0; tireCond[t] = 0; }
     return;
   }
 
@@ -203,32 +204,66 @@ void IMUGate::update(long dtMillis, bool trackMode) {
   zoneMs = zoneNow ? (zoneMs + (unsigned long)dtMillis) : 0;
   capturing = zoneNow && (zoneMs >= gateDwellMs);
 
-  // Overall (not per-corner) time-in-over/under, accumulated only while capturing.
-  // Cornering frames freeze the accumulators and hold the latch untouched.
+  // Per-tire leaky evidence accumulator, advanced only on captured frames. Cornering
+  // frames freeze every score, so a corner neither builds nor decays a verdict.
+  //
+  // #21 replaced a single global over/under pair with one SIGNED score per tire. The old
+  // shape collapsed four corners to one majority vote before the timer ever ran, so a
+  // single genuinely over-inflated tire was cancelled by its neighbours' neutral votes and
+  // the verdict could never say WHICH corner was wrong -- the thing you actually want.
   if (capturing) {
-    if (pendingCond > 0) {
-      overAccumMs += (unsigned long)dtMillis;
-      underAccumMs = 0;
-    } else if (pendingCond < 0) {
-      underAccumMs += (unsigned long)dtMillis;
-      overAccumMs = 0;
-    } else {
-      overAccumMs = 0;
-      underAccumMs = 0;
-    }
-
-    // Debounced hysteresis latch: a condition sustained past the dwell latches the
-    // alert; it stays latched (visible anywhere, even through neutral frames) until
-    // the OPPOSITE condition sustains past the dwell and flips it.
-    if (overAccumMs >= dwellMs) {
-      alert = ALERT_OVER;
-    } else if (underAccumMs >= dwellMs) {
-      alert = ALERT_UNDER;
+    const long cap = (long)dwellMs * 2;   // clamp: 2x dwell of headroom each way
+    for (int t = 0; t < TIRE_SLOTS; t++) {
+      long s = inflScoreMs[t];
+      if (tireCond[t] > 0) {
+        s += dtMillis;                    // evidence for OVER
+      } else if (tireCond[t] < 0) {
+        s -= dtMillis;                    // evidence for UNDER, full rate -- an opposite
+                                          // reading is real evidence, not just absence
+      } else {
+        // Neutral is weaker evidence than a contrary reading, so it only leaks the score
+        // back toward zero at DECAY_K. Without a leak the verdict could never unlatch
+        // within a session; without the asymmetry, neutral would flip it as fast as the
+        // opposite condition and the latch would chatter.
+        long d = (long)((float)dtMillis * DECAY_K);
+        if (d < 1) d = 1;                 // always make progress, even at tiny dt
+        if      (s > 0) { s -= d; if (s < 0) s = 0; }
+        else if (s < 0) { s += d; if (s > 0) s = 0; }
+      }
+      if (s >  cap) s =  cap;
+      if (s < -cap) s = -cap;
+      inflScoreMs[t] = s;
     }
   }
 }
 
-void IMUGate::feedCondition(int cond) {
-  // Latest per-frame verdict; update() applies it (only while capturing in Track).
-  pendingCond = (cond > 0) ? 1 : (cond < 0 ? -1 : 0);
+IMUGate::Alert IMUGate::alertState(int tire) const {
+  // The latch is a pure function of the score -- no separate latched flag to keep in sync.
+  // Hysteresis comes from the 2x cap: a saturated tire has to spend ~1.3x the dwell in
+  // neutral before it falls back under the line, so it cannot chatter at the boundary.
+  if (tire < 0 || tire >= TIRE_SLOTS) return ALERT_NONE;
+  long s = inflScoreMs[tire];
+  if (s >=  (long)dwellMs) return ALERT_OVER;
+  if (s <= -(long)dwellMs) return ALERT_UNDER;
+  return ALERT_NONE;
+}
+
+IMUGate::Alert IMUGate::alertState() const {
+  // Rolled-up verdict for the consumers that still want one number (NBP "Overall").
+  // Majority of the per-tire latches; a tie is NONE.
+  int over = 0, under = 0;
+  for (int t = 0; t < TIRE_SLOTS; t++) {
+    Alert a = alertState(t);
+    if      (a == ALERT_OVER)  over++;
+    else if (a == ALERT_UNDER) under++;
+  }
+  if (over > under)  return ALERT_OVER;
+  if (under > over)  return ALERT_UNDER;
+  return ALERT_NONE;
+}
+
+void IMUGate::feedCondition(int tire, int cond) {
+  // Latest per-frame verdict for one corner; update() applies it (only while capturing).
+  if (tire < 0 || tire >= TIRE_SLOTS) return;
+  tireCond[tire] = (cond > 0) ? 1 : (cond < 0 ? -1 : 0);
 }

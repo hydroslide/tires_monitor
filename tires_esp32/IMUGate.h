@@ -10,7 +10,9 @@
 // The core job: read the car's lateral g and decide whether we are "capturing"
 // (car straight and steady) so inflation/segment reads are only accumulated on the
 // straight, where the center-hot artifact is absent. It also runs a debounced,
-// LATCHED over/under alert driven by an externally-supplied per-frame condition.
+// LATCHED over/under verdict PER CORNER, driven by externally-supplied per-frame
+// conditions -- one signed evidence score per tire that builds on agreeing frames and
+// leaks back on neutral ones, so a verdict both earns its way in and can fall back out.
 //
 // Self-contained register-level driver on purpose: the pinned build profile ships
 // no IMU library, so we talk to the QMI8658C directly over Wire to keep compiling.
@@ -45,16 +47,34 @@ public:
   // and the latch is held clear, so upstream behavior is unchanged.
   void update(long dtMillis, bool trackMode);
 
-  // Per captured-frame condition for the latch: +1 = over, -1 = under, 0 = ok.
-  // Ignored while cornering (not capturing) or outside Track mode.
-  void feedCondition(int cond);
+  // Per captured-frame condition for ONE corner: +1 = over, -1 = under, 0 = ok.
+  // Ignored while cornering (not capturing) or outside Track mode. Corner order is the
+  // firmware-wide 0=FL, 1=FR, 2=RL, 3=RR.
+  void feedCondition(int tire, int cond);
+
+  // Corners the inflation latch tracks: 0=FL, 1=FR, 2=RL, 3=RR.
+  static const int TIRE_SLOTS = 4;
 
   bool  isPresent()   const { return present; }
   bool  isEnabled()   const { return enabled; }
   bool  isCapturing() const { return capturing; }   // true => accumulate reads
   bool  isCornering() const { return present && enabled && trackActive && !capturing; }
   float lateralG()    const { return latG; }        // smoothed, gravity-removed
-  Alert alertState()  const { return alert; }
+
+  // Latched inflation verdict for ONE corner, derived purely from that corner's score.
+  Alert alertState(int tire) const;
+  // Rolled-up verdict across all four (majority; tie => NONE), for consumers that still
+  // want a single number.
+  Alert alertState() const;
+
+  // Raw signed evidence score for a corner, in ms: positive = toward OVER, negative =
+  // toward UNDER. Latches at +/- inflScoreLatch() and saturates at +/- inflScoreMax().
+  // Exposed so the per-tire dwell bar can show how close a corner is to latching.
+  long inflScore(int tire) const {
+    return (tire >= 0 && tire < TIRE_SLOTS) ? inflScoreMs[tire] : 0;
+  }
+  long inflScoreLatch() const { return (long)dwellMs; }
+  long inflScoreMax()   const { return (long)dwellMs * 2; }
 
   // Gate internals, exposed for the on-screen test bar (#20). inZone() is the raw
   // threshold test; isCapturing() is inZone() AND the capture dwell already served, so
@@ -97,10 +117,12 @@ private:
   bool  latInit;
   unsigned long zoneMs;   // continuous time held inside the zone, ms (0 on any exit)
   bool  capturing;
-  unsigned long overAccumMs;   // overall time-in-over while capturing
-  unsigned long underAccumMs;  // overall time-in-under while capturing
-  Alert alert;
-  int   pendingCond;      // last fed per-frame condition (+1/0/-1)
+
+  // Per-corner signed evidence, ms. Grows toward +/- while that corner reads over/under
+  // on captured frames, leaks back toward 0 on neutral ones, clamped to +/- 2*dwellMs.
+  // The latch is read off this (see alertState), so there is no separate latched flag.
+  long  inflScoreMs[TIRE_SLOTS];
+  int8_t tireCond[TIRE_SLOTS];   // last fed per-frame condition per corner (+1/0/-1)
 
   // --- low-level QMI8658C helpers ---
   bool    writeReg(uint8_t reg, uint8_t val);

@@ -41,13 +41,6 @@ static bool showBalance = true;
 // defaults off.
 static bool autoSealStationary = false;
 
-// -- Inflation indicator (story 06; Track-mode only) --
-// Gates & latches the over/under inflation verdict: computed only on straight-line
-// (captured) frames, from calculated temps, presented latched (#18 dropped the
-// per-corner baseline correction).
-// On by default; inert / hidden in Street mode.
-static bool inflationIndicator = true;
-
 // -- Hardware Temp Sensor Indices --
 static uint8_t frontLeftTempIndex  = 0;
 static uint8_t frontRightTempIndex = 0;
@@ -375,20 +368,9 @@ static MenuValueBinding imuOrientBinding = {
     4
 };
 
-// Inflation indicator on/off. On by default; the magic-sentinel load makes 0 safe.
-// EEPROM 31 -- one of the bytes freed by #15. It previously shared byte 49 with Show
-// Balance, so toggling either one silently clobbered the other on the next save/load;
-// #15 freed a whole run of bytes, so the two get one each.
-static MenuValueBinding inflationIndicatorBinding = {
-    VALUE_BOOL,
-    &inflationIndicator,
-    nullptr,
-    0,
-    0,
-    31,
-    nullptr,
-    0
-};
+// EEPROM 31 is FREE again as of #21, which removed the "Inflation" toggle. No magic bump
+// is needed for a removal alone: no binding reads 31 any more, so a stale byte there is
+// simply never loaded. Bump only if something later CLAIMS 31.
 
 // -- Tire profiles (story 04) --
 // The selector and all edit fields bind to TireProfiles globals. Since #14 the selector
@@ -484,8 +466,7 @@ static MenuItem trackSettingsMenu[] = {
     { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
     { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 },
     { "View Summary", MENU_ACTION, doViewSummary,  nullptr, 0, nullptr                 },
-    { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding },
-    { "Inflation",    MENU_VALUE,  nullptr,        nullptr, 0, &inflationIndicatorBinding }
+    { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding }
 };
 
 static MenuItem tempSensorIndicesMenu[] = {
@@ -889,10 +870,6 @@ bool getShowBalance() {
 
 bool getAutoSealStationary() {
     return autoSealStationary;
-}
-
-bool getInflationIndicator() {
-    return inflationIndicator;
 }
 
 bool getShowPixelOffsets() {

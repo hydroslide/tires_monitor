@@ -32,11 +32,13 @@ struct SessionSummary {
     uint16_t durationSec;      // sealed session length
     int16_t  frontRearDelta;   // avg(FL,FR) - avg(RL,RR), rounded (>0 => understeer)
     int16_t  leftRightDelta;   // avg(FL,RL) - avg(FR,RR), rounded (>0 => lefts hotter)
-    // Inflation verdict on-time (story 06). Fraction of CAPTURED (straight-line) time
-    // the latched indicator was on, and the dominant latched verdict. Surfaced on the
-    // summary only when on-time is >= 50% of the captured session.
-    uint8_t  inflationOnPct;   // 0..100, over captured time
-    int8_t   inflationVerdict; // +1 over, -1 under, 0 none/insufficient
+    // Per-corner inflation verdict on-time (story 06, made per-tire by #21). Fraction of
+    // CAPTURED (straight-line) time that corner held a latched verdict, and which verdict
+    // dominated. Surfaced on the summary per corner, only where on-time is >= 50%.
+    // Was a single global pair; a rolled-up number could say something was wrong but
+    // never which tire, which is the one thing you need to act on it.
+    uint8_t  inflationOnPct[4];   // 0..100, over captured time
+    int8_t   inflationVerdict[4]; // +1 over, -1 under, 0 none/insufficient
 };
 
 class SessionManager {
@@ -66,7 +68,7 @@ public:
     // Accumulate inflation-indicator on-time (story 06). Call on the read cadence, Track
     // mode only, while running. Only CAPTURED (straight-line) frames count toward the
     // denominator; alert is the latched verdict this tick (+1 over, -1 under, 0 none).
-    void accumulateInflation(long dtMillis, bool capturing, int alert);
+    void accumulateInflation(long dtMillis, bool capturing, const int8_t alert[4]);
 
     // Best-effort auto-seal backstop (design 5.3): when enabled and the car has been
     // essentially still for a sustained dwell (IMU near-rest -- there is no speed
@@ -99,9 +101,9 @@ private:
     unsigned long elapsedMs;
 
     // Inflation on-time (story 06): captured (straight-line) time and time-in-over/under.
-    unsigned long capturedMs;
-    unsigned long inflOverMs;
-    unsigned long inflUnderMs;
+    unsigned long capturedMs;      // whole-car: capture is not a per-corner state
+    unsigned long inflOverMs[4];
+    unsigned long inflUnderMs[4];
 
     unsigned long stillMs;         // running still-time for the auto-seal backstop
 
