@@ -35,6 +35,12 @@ deliberate, and it's why a flash sometimes wipes your settings:
 > have loaded as a 25.5 s capture dwell. The bump forces a clean re-seed instead. **Expect
 > every menu setting to reset once on the first boot after that flash.**
 
+> **#22 did not bump it.** The menu restructure moved and renamed a lot of items, but an
+> EEPROM address lives on the *binding*, not on the item's position in the tree — so
+> re-parenting a setting moves nothing, and every saved value survived. Deleting the dead
+> *Temp Sensor Indices* simply dropped addresses 20/22/24/26 out of the save/load tree walk;
+> the stale bytes are inert because nothing reads them.
+
 **The active tire profile is deliberately not saved.** On boot it's set to the current
 mode's *Default Profile*. See [Tire Profiles](#tire-profiles).
 
@@ -42,29 +48,49 @@ mode's *Default Profile*. See [Tire Profiles](#tire-profiles).
 
 ## Root menu
 
+Nine items against a nine-row viewport — it fills the screen exactly and does not scroll.
+That leaves **no headroom**: a tenth root item brings the scrollbar back, so anything added
+later has to displace something or nest.
+
+Everything here is grouped on one rule, adopted in #22: **no menu is named after the
+hardware it happens to use.** That is why `Camera Settings`, `IMU Gate` and
+`Hardware Settings` no longer exist — two of them held settings that had nothing to do with
+the named part, and the third held nothing that worked.
+
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
 | **Current Mode** | `Street` | Street / Track | Master mode switch. Selects which *Default Profile* is adopted, and enables the Track-only features (straight-line capture gating and the per-tire inflation verdict, session recording, balance readout). Changing it immediately re-snaps the active tire profile. |
-| **Temp Scale** | `F` | F / C | Display units. Profile windows and Carcass Offset are authored in °F and converted for display, so switching scale doesn't require re-tuning a profile. |
-| **Night Brightness** | `25` | 0–100 % | Screen brightness **while night mode is active** (swipe-toggled) — it does not affect normal daytime brightness. Percent of full backlight. Low enough not to blind you at night, high enough to still read. |
+| **Current Tire** | mode's default | slot 0–2 | The active tire profile, hoisted to the root so swapping tires is one tap. **This is the same value as `Tire Profiles → Profile`** — the two items share one binding, so setting either moves both. Not persisted; see [Tire Profiles](#tire-profiles). |
 | **Test** | `On` | On / Off | Enables the raw **thermal-camera image** views. With it on, the swipe-cycled display has 3 states (off, or all four camera images live); with it off there are 4 states that cycle none → lower pair → upper pair → all four. Primarily a bench/diagnostic aid for checking a camera is aimed and reading sensibly. |
 
-Plus the submenus below, and **`Save Config`** (see [How settings are stored](#how-settings-are-stored)).
+Plus the submenus below — `Temperature`, `Mode Settings`, `Tire Profiles`,
+`Inflation & Camber`, `Display` — and **`Save Config`**
+(see [How settings are stored](#how-settings-are-stored)).
 
 ---
 
-## Street Settings / Track Settings
+## Temperature
 
-Both modes have the same two settings; Track has five more.
+The two global decisions about what a temperature number *is*: which signal it comes from,
+and which unit it's printed in.
 
-| Setting | Menu | Default | Range | What it's for |
-|---|---|---|---|---|
-| **Default Profile** | both | Street → `EC02`, Track → `ECF` | any profile slot | The tire profile this mode adopts. Selecting a mode snaps the active profile to its default — this is how switching Street↔Track swaps the whole temperature window in one move. A manual pick in Tire Profiles overrides it until the next mode change or reboot. |
-| **Display** | both | `Raw` | Raw / Calculated | `Raw` shows the honest measured **surface** temperature. `Calculated` shows the estimated **carcass** temperature — the surface reading smoothed by *Carcass Lag* and offset by *Carcass Offset*. Use Calculated for driving (it's what the window thresholds are authored against); Raw for bench work and diagnosing the sensors. **One shared setting shown in both menus** — changing it in Street changes it in Track. |
-| **Show Balance** | Track | `On` | On / Off | Whether the `Balance` readout below will open. Off makes the item report that it's hidden instead. |
-| **Balance** | Track | — | action | Opens the front/rear and left/right thermal balance readout. |
-| **View Summary** | Track | — | action | Re-opens the last sealed session summary. |
-| **Auto-Seal** | Track | `Off` | On / Off | Automatically ends (seals) a running session after a sustained stationary period — a backstop for forgetting to swipe to end. Defaults off because it detects stillness from the IMU only (there's no speed input), so it's best-effort and can fire while you're sitting in the paddock. |
+| Setting | Default | Range | What it's for |
+|---|---|---|---|
+| **Source** | `Raw` | Raw / Calculated | `Raw` gives the honest measured **surface** temperature. `Calculated` gives the estimated **carcass** temperature — the surface reading smoothed by *Carcass Lag* and offset by *Carcass Offset*. Use Calculated for driving (it's what the window thresholds are authored against); Raw for bench work and diagnosing the sensors. |
+| **Scale** | `F` | F / C | Display units. Profile windows and Carcass Offset are authored in °F and converted for display, so switching scale doesn't require re-tuning a profile. Buried here because it's set once and never touched again. |
+
+> **`Source` is not a display setting**, which is why it isn't under `Display`. Per
+> `TempReader.h`, Calculated mode **replaces** the working section temps
+> (`tireSectionTemps` / `tireTemps`) with `EMA_tau(surface) + K`, so *every downstream
+> display **and decision*** runs on the carcass estimate — the inflation/camber verdict, the
+> balance readout, session recording, the tile colour bands, and the primary NBP channels.
+> Only the raw surface medians kept for the diagnostic channel set are untouched. Picking
+> Raw vs Calculated changes what the device *concludes*, not just what it shows.
+
+> It is also **one global byte, not a per-mode setting.** Until #22 it appeared as
+> "Display" inside both Street Settings and Track Settings, which read as two independent
+> per-mode values; it was always one. (It was *once* genuinely gated on Track mode — #16
+> removed that, because a Calculated pick made in Street was being silently ignored.)
 
 > **Note:** in Raw mode the displayed number is a *surface* temperature but the profile
 > window is authored in the *carcass* frame, so tires will read roughly one Carcass Offset
@@ -72,42 +98,64 @@ Both modes have the same two settings; Track has five more.
 
 ---
 
-## Camera Settings
+## Mode Settings
 
-Device-wide display behavior. (The per-corner crop offset *values* live on the tire profile
-— see [Tire Profiles → Offsets](#offsets).)
+Wraps the two per-mode screens. Street carries a single genuinely per-mode setting; Track
+adds the session tooling.
 
-| Setting | Default | Range | What it's for |
-|---|---|---|---|
-| **Show Offsets** | `On` | On / Off | **This is the crop-tuning toggle, and it changes what the thermal image shows.** *On* = the **full** camera frame with vertical guide lines marking where the crop offsets sit — use this while tuning the offsets so you can see what you're cutting. *Off* = the image is cropped to the region **between** the offsets and stretched to fill the display, which is the real working view. Turn it on to tune, off to drive. |
-| **Thermal Gradient** | `On` | On / Off | *On* = smooth interpolated colour within each temperature band (finer detail). *Off* = one flat colour per band, so the image posterizes into cold/warm/ideal/hot blocks — easier to read *which band* a region is in at a glance. Preference, not calibration. |
-| **Hi Freq Updates** | `Off` | On / Off | Redraws the tire display every read (~10 Hz) instead of once a second. Smoother, but far more redraw work. Leave off unless you're chasing something transient. |
-| **Segment Deltas** | `Off` | On / Off | Paints per-band verdict colour bars under each tire, showing which band tripped the inflation or alignment check. Since #21 the **inflation** verdict painted here is the IMU gate's *latched, straight-line-only* one — it no longer flickers through corners — while the alignment fallback stays instantaneous. A diagnostic overlay: the colours are always computed and always logged over NBP, this only controls whether they're painted. |
-| **Inflation Delta %** | `10` | 0–16 % | How far **edge-vs-centre** must diverge before a tire is called over/under-inflated. The comparison is `avg(outer, inner)` vs `centre`, and the threshold is this percent *of the edge temperature* (so ~16 °F at a 160 °F edge). **Lower = more sensitive**, more false calls; higher = only flags gross deviations. |
-| **Alignment Delta %** | `15` | 0–16 % | How far **outer-vs-inner shoulder** must diverge before it's flagged as an alignment (camber) issue rather than a pressure one. Same percent-of-edge basis. **Only evaluated if the inflation check didn't already trip** — inflation takes priority. Note the default of 15 sits near the 16 ceiling, so it's currently a fairly insensitive check. |
+| Setting | Menu | Default | Range | What it's for |
+|---|---|---|---|---|
+| **Default Profile** | both | Street → `EC02`, Track → `ECF` | any profile slot | The tire profile this mode adopts. Selecting a mode snaps the active profile to its default — this is how switching Street↔Track swaps the whole temperature window in one move. A manual pick in `Current Tire` or `Tire Profiles` overrides it until the next mode change or reboot. |
+| **Show Balance** | Track | `On` | On / Off | Whether the `Balance` readout below will open. Off makes the item report that it's hidden instead. |
+| **Balance** | Track | — | action | Opens the front/rear and left/right thermal balance readout. |
+| **View Summary** | Track | — | action | Re-opens the last sealed session summary. |
+| **Auto-Seal** | Track | `Off` | On / Off | Automatically ends (seals) a running session after a sustained stationary period — a backstop for forgetting to swipe to end. Defaults off because it detects stillness from the IMU only (there's no speed input), so it's best-effort and can fire while you're sitting in the paddock. |
 
 ---
 
-## IMU Gate
+## Inflation & Camber
 
-The onboard 6-axis IMU (QMI8658C) suppresses tire judgements while cornering. This exists
-because the mid-corner reading is a body-roll artifact — the camera crop bleeds onto the
-sidewall at roll angle, manufacturing a fake centre-hot that scales with lateral g and is
-*opposite* to real load physics. Gating to straight-line frames removes roughly 24 of the
-27 °F of that artifact. Full analysis in the design doc §5.4.
+**One feature, one menu.** Deciding whether a tire is over/under-inflated or running bad
+camber is a single pipeline — thresholds → straight-line gate → latch → paint it — but until
+#22 six of its settings lived under `IMU Gate` and three under `Camera Settings`, and not
+one of those three had anything to do with a camera.
 
-**The two dwells are not the same thing.** *Gate Dwl* decides when capture **starts** — how
-long the car must hold lateral g inside the zone before its readings count at all. *Dwell*
-decides when an over/under verdict **latches**, measured only over frames already being
-captured. One gates the input, the other debounces the output.
+Named for the two calls it distinguishes: **edge-vs-centre** divergence is an inflation
+verdict, **outer-vs-inner** is a camber one. What you actually tune sits on this screen; the
+gate mechanics nest one level below.
+
+| Setting | Default | Range | What it's for |
+|---|---|---|---|
+| **Segment Deltas** | `Off` | On / Off | Paints per-band verdict colour bars under each tire, showing which band tripped the inflation or camber check. Since #21 the **inflation** verdict painted here is the gate's *latched, straight-line-only* one — it no longer flickers through corners — while the alignment fallback stays instantaneous. A diagnostic overlay: the colours are always computed and always logged over NBP, this only controls whether they're painted. |
+| **Show G Bar** | `On` | On / Off | Paints the live lateral-g test bar in the gap between the front and rear tires, plus the per-tire dwell bars (both described below). It's how you tune everything else in this menu, and how you confirm the boot calibration was good. Costs a sliver of screen and nothing else — leave it on unless you want the cleanest possible display. |
+| **Inflation Delta %** | `10` | 0–16 % | How far **edge-vs-centre** must diverge before a tire is called over/under-inflated. The comparison is `avg(outer, inner)` vs `centre`, and the threshold is this percent *of the edge temperature* (so ~16 °F at a 160 °F edge). **Lower = more sensitive**, more false calls; higher = only flags gross deviations. |
+| **Alignment Delta %** | `15` | 0–16 % | How far **outer-vs-inner shoulder** must diverge before it's flagged as an alignment (camber) issue rather than a pressure one. Same percent-of-edge basis. **Only evaluated if the inflation check didn't already trip** — inflation takes priority. Note the default of 15 sits near the 16 ceiling, so it's currently a fairly insensitive check. |
+| **Latch 0.1s** | `25` (2.5 s) | 5–100 (0.5–10 s) | How long the over/under condition must persist **on already-captured frames** before the verdict latches. Stops the verdict flickering on brief noise. **Higher = steadier but slower to react.** Called *Dwell 0.1s* before #22. Unrelated to *Gate Dwell* below — see the warning there. |
+
+### Straight-Line Gate
+
+Called `IMU Gate` before #22 — renamed off the chip and onto the job it does. The onboard
+6-axis IMU (QMI8658C) suppresses tire judgements while cornering. This exists because the
+mid-corner reading is a body-roll artifact — the camera crop bleeds onto the sidewall at
+roll angle, manufacturing a fake centre-hot that scales with lateral g and is *opposite* to
+real load physics. Gating to straight-line frames removes roughly 24 of the 27 °F of that
+artifact. Full analysis in the design doc §5.4.
+
+These four decide which frames are allowed to count at all, so they gate the **input** to
+the verdict. They're set-up values — `Orientation` especially — rather than things tuned
+between sessions, which is why they sit below the thresholds rather than beside them.
+
+> **The two dwells are still not the same thing**, and since #22 they're on separate screens
+> with names that say so. **`Gate Dwell`** (here) decides when capture **starts** — how long
+> the car must hold lateral g inside the zone before its readings count at all.
+> **`Latch`** (parent screen) decides when a verdict **trips**, measured only over frames
+> already being captured. One gates the input, the other debounces the output.
 
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
 | **Gate Enable** | `On` | On / Off | Master switch for straight-line gating. Off means inflation reads accumulate everywhere, including mid-corner — which is what produced the original backwards verdict. Leave on. |
-| **Show G Bar** | `On` | On / Off | Paints the live lateral-g test bar in the gap between the front and rear tires (see below). It's how you tune everything else in this menu, and how you confirm the boot calibration was good. Costs a sliver of screen and nothing else — leave it on unless you want the cleanest possible display. |
 | **Lateral cg** | `35` (0.35 g) | 10–100 (0.10–1.00 g) | Lateral-g threshold below which the car counts as "straight and steady" and readings are accepted. **Lower = stricter**, fewer but cleaner frames; higher lets more cornering contamination back in. Raise it only if you're getting too few captured frames to be useful. With the G Bar on, this is the width of the centre segment — turn it and watch the segment resize. |
-| **Gate Dwl 0.1s** | `5` (0.5 s) | 0–50 (0–5 s) | How long lateral g must stay **inside** the zone before capture begins. Before #20 capture flipped on the instant g dropped below threshold, which let the tail of a corner — still unwinding, load still shifting — count as straight-line data. **`0` reproduces that old instant behaviour**, which makes it easy to A/B on the car. **Higher = cleaner frames, fewer of them.** |
-| **Dwell 0.1s** | `25` (2.5 s) | 5–100 (0.5–10 s) | How long the over/under condition must persist **on already-captured frames** before the verdict latches. Stops the verdict flickering on brief noise. **Higher = steadier but slower to react.** Unrelated to *Gate Dwl* above. |
+| **Gate Dwell 0.1s** | `5` (0.5 s) | 0–50 (0–5 s) | How long lateral g must stay **inside** the zone before capture begins. Before #20 capture flipped on the instant g dropped below threshold, which let the tail of a corner — still unwinding, load still shifting — count as straight-line data. **`0` reproduces that old instant behaviour**, which makes it easy to A/B on the car. **Higher = cleaner frames, fewer of them.** Called *Gate Dwl 0.1s* before #22. |
 | **Orientation** | `Auto` | Auto / X / Y / Z | Which accelerometer axis is the car's lateral axis. `Auto` picks a horizontal axis from the sensed gravity direction, preferring Y (correct for a level dash mount). Force X/Y/Z only if Auto guesses wrong on an unusual mounting angle. **Test it with the G Bar: a hard left and a hard right must push the dot in opposite directions.** |
 
 ### The G Bar
@@ -179,7 +227,7 @@ point. That saturation is the hysteresis — a fully-committed corner needs roug
 dwell of neutral driving before it falls back out, so a verdict can't chatter on and off at
 the boundary.
 
-Use them to tune `Dwell 0.1s`: if bars slam to a latch on one straight, the dwell is too
+Use them to tune `Latch 0.1s`: if bars slam to a latch on one straight, the dwell is too
 short; if they never get there over a whole lap, it's too long or `Inflation Delta %` is set
 too tight.
 
@@ -213,7 +261,7 @@ thermal-frame pixel columns.
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
 | **Set Offsets** | — | action | **The way these are meant to be set.** Hands the whole screen to the four live camera images with their crop guides drawn on, and walks all eight values in one pass — see [Setting offsets interactively](#setting-offsets-interactively) below. Edits land in the selected profile in RAM; `Save Config` still persists. |
-| **Left** / **Right** | `0` | 0–16 columns | How many pixel columns to crop off each side of that corner's camera frame, so the three temperature bands land on actual tread rather than sidewall, wheel or background. **This is where a mis-aimed camera gets corrected** — fixing aim here is right because it also fixes the displayed band temperatures, whereas a temperature fudge would only shift the derived delta. Kept for fine adjustment and for reading back what **Set Offsets** left behind; tuning by hand here needs **Camera Settings → Show Offsets** on so you can see the guide lines against the live image. They're per-profile because different tires and mountings want different crops; all three profiles seed identical. |
+| **Left** / **Right** | `0` | 0–16 columns | How many pixel columns to crop off each side of that corner's camera frame, so the three temperature bands land on actual tread rather than sidewall, wheel or background. **This is where a mis-aimed camera gets corrected** — fixing aim here is right because it also fixes the displayed band temperatures, whereas a temperature fudge would only shift the derived delta. Kept for fine adjustment and for reading back what **Set Offsets** left behind; tuning by hand here needs **Display → Show Offsets** on so you can see the guide lines against the live image. They're per-profile because different tires and mountings want different crops; all three profiles seed identical. |
 
 #### Setting offsets interactively
 
@@ -240,11 +288,22 @@ still discardable by simply not saving.
 
 ---
 
-## Hardware Settings
+## Display
+
+Genuine presentation only — how bright the screen is, how the thermal image is coloured,
+whether the crop guides are drawn over it, and how often the tire display repaints. This is
+what was left of `Camera Settings` (#22) once the three verdict settings that were sitting
+in it moved to [Inflation & Camber](#inflation--camber), plus `Night Brightness` down from
+the root.
+
+Note that nothing here changes a *number* — for that see [Temperature](#temperature).
 
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
-| **Temp Sensor Indices** → Front Left / Front Right / Rear Left / Rear Right | `0` | 0–7 | ⚠️ **Currently does nothing.** These are editable and persisted (EEPROM 20/22/24/26) but **nothing in the firmware reads them** — there is no getter. They were presumably intended to remap which physical I²C sensor feeds which corner. Changing them has no effect on the display or any reading. |
+| **Night Brightness** | `25` | 0–100 % | Screen brightness **while night mode is active** (swipe-toggled) — it does not affect normal daytime brightness. Percent of full backlight. Low enough not to blind you at night, high enough to still read. |
+| **Thermal Gradient** | `On` | On / Off | *On* = smooth interpolated colour within each temperature band (finer detail). *Off* = one flat colour per band, so the image posterizes into cold/warm/ideal/hot blocks — easier to read *which band* a region is in at a glance. Preference, not calibration. |
+| **Show Offsets** | `On` | On / Off | **This is the crop-tuning toggle, and it changes what the thermal image shows.** *On* = the **full** camera frame with vertical guide lines marking where the crop offsets sit — use this while tuning the offsets so you can see what you're cutting. *Off* = the image is cropped to the region **between** the offsets and stretched to fill the display, which is the real working view. Turn it on to tune, off to drive. It stays here rather than next to the offset values because it is device-wide, while the values are per-profile. |
+| **Hi Freq Updates** | `Off` | On / Off | Redraws the tire display every read (~10 Hz) instead of once a second. Smoother, but far more redraw work. Leave off unless you're chasing something transient. |
 
 ---
 
@@ -254,6 +313,7 @@ Recorded so an old note or screenshot doesn't send you hunting for something tha
 
 | Setting | Was in | Removed | Why |
 |---|---|---|---|
+| **Temp Sensor Indices** (FL / FR / RL / RR) | Hardware Settings | #22 | Never did anything. Four editable, EEPROM-persisted bytes (20/22/24/26) with **no getter** — nothing in the firmware read them. The real sensor-to-corner mapping is a hardcoded `sensorIndices{0, 7, 3, 4}` in `TempReader`'s constructor, which these never fed. They presented as a working remap and were not one, so the whole `Hardware Settings` branch went with them. The addresses are simply no longer walked by save/load; the stale bytes are inert. |
 | **Base FL / FR / RL / RR** | Tire Profiles | #18 | Per-corner inflation baselines. The shipped values encoded one track's load pattern rather than a property of the car, the artifact they appeared to correct is already removed by the straight-line gate, and any genuinely static component is a camera aim error belonging in the crop offsets above. Full reasoning in the design doc's Amendments section. |
 | **Load** | Tire Profiles | #18 | Manually pulled the selected slot into the edit buffer. The edit buffer is gone (#19) — the fields now point straight at the live slot, so there's nothing to load. |
 | **Save Prof** | Tire Profiles | #18 | Saved only the current profile. `Save Config` already writes all three, and a profile-only save became actively misleading once several profiles can hold pending edits at once. |

@@ -46,11 +46,12 @@ static bool showBalance = true;
 // defaults off.
 static bool autoSealStationary = false;
 
-// -- Hardware Temp Sensor Indices --
-static uint8_t frontLeftTempIndex  = 0;
-static uint8_t frontRightTempIndex = 0;
-static uint8_t rearLeftTempIndex   = 0;
-static uint8_t rearRightTempIndex  = 0;
+// -- Hardware Temp Sensor Indices -- REMOVED (#22)
+// Four menu-editable, EEPROM-persisted bytes (addrs 20/22/24/26) that nothing ever read:
+// there was no getter, and the real mux map is the hardcoded sensorIndices{0, 7, 3, 4} in
+// TempReader's constructor. They presented as a working sensor remap and were not one, so
+// the whole "Hardware Settings" branch went with them. The addresses are simply no longer
+// walked by save/load; the stale bytes are inert, which is why this needed no magic bump.
 
 // -- Camera Offsets --
 // Per-corner crop offsets are no longer globals (#15): they live in TireProfile, are
@@ -177,51 +178,6 @@ static MenuValueBinding autoSealStationaryBinding = {
     0,
     0,
     3,
-    nullptr,
-    0
-};
-
-// Hardware -> Temp Sensor Indices
-static MenuValueBinding frontLeftIndexBinding = {
-    VALUE_BYTE,
-    &frontLeftTempIndex,
-    nullptr,
-    0,
-    7,
-    20,
-    nullptr,
-    0
-};
-
-static MenuValueBinding frontRightIndexBinding = {
-    VALUE_BYTE,
-    &frontRightTempIndex,
-    nullptr,
-    0,
-    7,
-    22,
-    nullptr,
-    0
-};
-
-static MenuValueBinding rearLeftIndexBinding = {
-    VALUE_BYTE,
-    &rearLeftTempIndex,
-    nullptr,
-    0,
-    7,
-    24,
-    nullptr,
-    0
-};
-
-static MenuValueBinding rearRightIndexBinding = {
-    VALUE_BYTE,
-    &rearRightTempIndex,
-    nullptr,
-    0,
-    7,
-    26,
     nullptr,
     0
 };
@@ -452,11 +408,18 @@ static MenuValueBinding profileRightOffsetRRBinding = {
 // ----------------------------------------------------
 //  3) Submenu Item Arrays
 // ----------------------------------------------------
-// "Display" (Raw/Calculated) is one shared global byte surfaced in both mode menus (#16),
-// not a per-mode setting -- changing it here changes it under Track Settings too.
-static MenuItem streetSettingsMenu[] = {
-    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding   },
-    { "Display",         MENU_VALUE, nullptr, nullptr, 0, &calcDisplayModeBinding }
+// -- "Temperature": the two global decisions about what a temperature number IS (#22) --
+// "Source" is the old root-level "Display" (Raw/Calculated). It was surfaced in both mode
+// menus (#16), which read as a per-mode setting; it is neither per-mode NOR a display
+// setting. It is one shared global byte, and per TempReader.h it REPLACES the working
+// section temps with EMA_tau(surface)+K -- so the inflation verdict, the balance readout,
+// session recording and the primary NBP channels all run on whichever signal is picked
+// here. Filing it under "Display" would repeat exactly the mislabel this menu fixes.
+// "Scale" is the old root-level "Temp Scale"; it is a pure unit conversion and is buried
+// here because it is set once and never touched again.
+static MenuItem temperatureMenu[] = {
+    { "Source", MENU_VALUE, nullptr, nullptr, 0, &calcDisplayModeBinding  },
+    { "Scale",  MENU_VALUE, nullptr, nullptr, 0, &temperatureScaleBinding }
 };
 
 // Balance summary action (defined in section 6). Opens the front/rear + left/right
@@ -465,84 +428,69 @@ static void doShowBalance();
 // Session summary recall action (story 01). Opens the last sealed summary; Track-only.
 static void doViewSummary();
 
+// Street has exactly one genuinely per-mode setting now that Source moved to Temperature
+// (#22). Kept as its own screen rather than flattened so the Street/Track split stays
+// symmetrical and there is an obvious home for the next per-mode setting.
+static MenuItem streetSettingsMenu[] = {
+    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding }
+};
+
 static MenuItem trackSettingsMenu[] = {
     { "Default Profile", MENU_VALUE, nullptr,      nullptr, 0, &trackProfileBinding    },
-    { "Display",      MENU_VALUE,  nullptr,        nullptr, 0, &calcDisplayModeBinding },
     { "Show Balance", MENU_VALUE,  nullptr,        nullptr, 0, &showBalanceBinding     },
     { "Balance",      MENU_ACTION, doShowBalance,  nullptr, 0, nullptr                 },
     { "View Summary", MENU_ACTION, doViewSummary,  nullptr, 0, nullptr                 },
     { "Auto-Seal",    MENU_VALUE,  nullptr,        nullptr, 0, &autoSealStationaryBinding }
 };
 
-static MenuItem tempSensorIndicesMenu[] = {
-    { "Front Left",  MENU_VALUE, nullptr, nullptr, 0, &frontLeftIndexBinding  },
-    { "Front Right", MENU_VALUE, nullptr, nullptr, 0, &frontRightIndexBinding },
-    { "Rear Left",   MENU_VALUE, nullptr, nullptr, 0, &rearLeftIndexBinding   },
-    { "Rear Right",  MENU_VALUE, nullptr, nullptr, 0, &rearRightIndexBinding  }
+static MenuItem modeSettingsMenu[] = {
+    { "Street Settings", MENU_SUBMENU, nullptr, streetSettingsMenu, sizeof(streetSettingsMenu)/sizeof(MenuItem), nullptr },
+    { "Track Settings",  MENU_SUBMENU, nullptr, trackSettingsMenu,  sizeof(trackSettingsMenu)/sizeof(MenuItem),  nullptr }
 };
 
-static MenuItem hardwareSettingsMenu[] = {
-    {
-      "Temp Sensor Indices",
-      MENU_SUBMENU,
-      nullptr,
-      tempSensorIndicesMenu,
-      sizeof(tempSensorIndicesMenu)/sizeof(MenuItem),
-      nullptr
-    }
+// -- "Straight-Line Gate": was "IMU Gate" (#22) --
+// Renamed off the chip and onto the job. These four decide which frames are allowed to
+// count at all, so they gate the INPUT to the verdict; they are set-up values (Orientation
+// especially) rather than things tuned between sessions, which is why they sit one level
+// below the thresholds instead of beside them.
+//
+// The two dwells are still NOT the same thing, and they are now deliberately on separate
+// screens with names that say so: "Gate Dwell" here is how long the car must hold
+// sub-threshold lateral g before capture STARTS; "Latch" on the parent screen is how long
+// a verdict must hold on already-captured frames before it TRIPS. See the block comment on
+// the backing variables.
+static MenuItem straightLineGateMenu[] = {
+    { "Gate Enable",     MENU_VALUE, nullptr, nullptr, 0, &imuGateEnabledBinding   },
+    { "Lateral cg",      MENU_VALUE, nullptr, nullptr, 0, &lateralGateCentiGBinding },
+    { "Gate Dwell 0.1s", MENU_VALUE, nullptr, nullptr, 0, &gateDwellTenthsBinding   },
+    { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
 };
 
-// "Camera Settings". The per-corner offset VALUES moved to Tire Profiles -> Offsets (#15);
-// what is left here is genuinely device-wide display behaviour, so it stays global.
-static MenuItem pixelOffsetsMenu[] = {
-    {
-        "Show Offsets",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &showPixelOffsetsBinding
-    },
-    {
-        "Thermal Gradient",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &useThermalGradientBinding
-    },
-    {
-        "Hi Freq Updates",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &highFrequencyUpdatesBinding
-    },
-    {
-        "Segment Deltas",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &showSegmentDeltasBinding
-    },
+// -- "Inflation & Camber": one feature, one menu (#22) --
+// These nine settings are a single pipeline -- thresholds -> straight-line gate -> latch ->
+// paint it -- but they used to be split across "IMU Gate" (6) and "Camera Settings" (3),
+// and not one of those three had anything to do with a camera. Named for the two things the
+// check distinguishes: edge-vs-centre divergence is an inflation call, outer-vs-inner is a
+// camber one. What you actually tune sits on this screen; the gate mechanics nest below.
+static MenuItem inflationCamberMenu[] = {
+    { "Segment Deltas",    MENU_VALUE, nullptr, nullptr, 0, &showSegmentDeltasBinding },
+    { "Show G Bar",        MENU_VALUE, nullptr, nullptr, 0, &showGateBarBinding       },
     { "Inflation Delta %", MENU_VALUE, nullptr, nullptr, 0, &minInflationDeltaPctBinding },
     { "Alignment Delta %", MENU_VALUE, nullptr, nullptr, 0, &minAlignmentDeltaPctBinding },
+    { "Latch 0.1s",        MENU_VALUE, nullptr, nullptr, 0, &alertDwellTenthsBinding  },
+    { "Straight-Line Gate", MENU_SUBMENU, nullptr, straightLineGateMenu, sizeof(straightLineGateMenu)/sizeof(MenuItem), nullptr }
 };
 
-
-
-// Ordered so the two dwells sit next to the value each one gates: Lateral cg defines the
-// zone, Gate Dwl is how long you must stay in it to capture, Dwell is how long a verdict
-// must hold once capturing. See the block comment on the backing variables.
-static MenuItem imuGateMenu[] = {
-    { "Gate Enable",     MENU_VALUE, nullptr, nullptr, 0, &imuGateEnabledBinding   },
-    { "Show G Bar",      MENU_VALUE, nullptr, nullptr, 0, &showGateBarBinding       },
-    { "Lateral cg",      MENU_VALUE, nullptr, nullptr, 0, &lateralGateCentiGBinding },
-    { "Gate Dwl 0.1s",   MENU_VALUE, nullptr, nullptr, 0, &gateDwellTenthsBinding   },
-    { "Dwell 0.1s",      MENU_VALUE, nullptr, nullptr, 0, &alertDwellTenthsBinding  },
-    { "Orientation",     MENU_VALUE, nullptr, nullptr, 0, &imuOrientBinding         },
+// -- "Display": what is left once the mislabelled items go home (#22) --
+// The old "Camera Settings" was named for hardware and held three verdict settings that
+// have moved to Inflation & Camber. What genuinely remains is presentation: how bright the
+// screen is at night, how the thermal image is coloured, whether the crop guides are drawn
+// over it, and how often the tire display repaints.
+static MenuItem displayMenu[] = {
+    { "Night Brightness", MENU_VALUE, nullptr, nullptr, 0, &nightBrightnessBinding      },
+    { "Thermal Gradient", MENU_VALUE, nullptr, nullptr, 0, &useThermalGradientBinding   },
+    { "Show Offsets",     MENU_VALUE, nullptr, nullptr, 0, &showPixelOffsetsBinding     },
+    { "Hi Freq Updates",  MENU_VALUE, nullptr, nullptr, 0, &highFrequencyUpdatesBinding }
 };
 
 // Per-profile camera crop offsets (#15). Mirrors the corner / Left-Right shape the old
@@ -615,6 +563,18 @@ static void doLoad();
 // ----------------------------------------------------
 //  5) Main Menu Definition (with Save/Load items)
 // ----------------------------------------------------
+// Root menu (#22). Exactly 9 items against MenuRenderer's 9-row viewport
+// ((240 - 22 status strip - 30 top margin) / 20), so it fills the screen without
+// scrolling -- it was 11, and scrolled. That is an exact fit with no headroom: a 10th
+// root item brings the scrollbar back, so anything added later has to displace something
+// or nest. Grouped on one rule -- no menu is named after the hardware it happens to use --
+// which is why "Camera Settings", "IMU Gate" and "Hardware Settings" are all gone.
+//
+// "Current Tire" is a second item pointing at the SAME profileSelectBinding as
+// Tire Profiles -> Profile, hoisted to the root so swapping tires is one tap. It needs no
+// supporting code: serviceProfileEditSync() polls g_profileSel from loop() rather than
+// hooking a particular menu item, so it fires whichever of the two wrote it. The binding is
+// EEPROM_NO_PERSIST, so the duplicate reference cannot double-write.
 static MenuItem mainMenu[] = {
     {
       "Current Mode",
@@ -625,67 +585,27 @@ static MenuItem mainMenu[] = {
       &currentModeBinding
     },
     {
-      "Temp Scale",
+      "Current Tire",
       MENU_VALUE,
       nullptr,
       nullptr,
       0,
-      &temperatureScaleBinding
+      &profileSelectBinding
     },
     {
-      "Street Settings",
+      "Temperature",
       MENU_SUBMENU,
       nullptr,
-      streetSettingsMenu,
-      sizeof(streetSettingsMenu)/sizeof(MenuItem),
+      temperatureMenu,
+      sizeof(temperatureMenu)/sizeof(MenuItem),
       nullptr
     },
     {
-      "Track Settings",
+      "Mode Settings",
       MENU_SUBMENU,
       nullptr,
-      trackSettingsMenu,
-      sizeof(trackSettingsMenu)/sizeof(MenuItem),
-      nullptr
-    },
-    {
-        "Night Brightness",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &nightBrightnessBinding
-    },    
-    {
-        "Test",
-        MENU_VALUE,
-        nullptr,
-        nullptr,
-        0,
-        &testEnabledBinding
-    },
-    {
-      "Hardware Settings",
-      MENU_SUBMENU,
-      nullptr,
-      hardwareSettingsMenu,
-      sizeof(hardwareSettingsMenu)/sizeof(MenuItem),
-      nullptr
-    },
-    {
-      "Camera Settings",
-      MENU_SUBMENU,
-      nullptr,
-      pixelOffsetsMenu,
-      sizeof(pixelOffsetsMenu)/sizeof(MenuItem),
-      nullptr
-    },
-    {
-      "IMU Gate",
-      MENU_SUBMENU,
-      nullptr,
-      imuGateMenu,
-      sizeof(imuGateMenu)/sizeof(MenuItem),
+      modeSettingsMenu,
+      sizeof(modeSettingsMenu)/sizeof(MenuItem),
       nullptr
     },
     {
@@ -695,6 +615,30 @@ static MenuItem mainMenu[] = {
       tireProfilesMenu,
       sizeof(tireProfilesMenu)/sizeof(MenuItem),
       nullptr
+    },
+    {
+      "Inflation & Camber",
+      MENU_SUBMENU,
+      nullptr,
+      inflationCamberMenu,
+      sizeof(inflationCamberMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
+      "Display",
+      MENU_SUBMENU,
+      nullptr,
+      displayMenu,
+      sizeof(displayMenu)/sizeof(MenuItem),
+      nullptr
+    },
+    {
+        "Test",
+        MENU_VALUE,
+        nullptr,
+        nullptr,
+        0,
+        &testEnabledBinding
     },
     {
       "Save Config",
