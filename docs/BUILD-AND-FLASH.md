@@ -87,6 +87,42 @@ or core versions) or hit an inexplicable link error.
 
 ---
 
+## How much the flash tells you — `TM_VERBOSE`
+
+The upload is the step that fails on real hardware: a charge-only cable, a board that
+isn't in download mode, a flash chip that won't answer. arduino-cli's default upload
+output hides the esptool conversation that says *which* of those it was, so **`upload`
+and `flash` are verbose by default** — you get the esptool command line, chip and MAC
+detection, per-segment write progress, and the hash verify. That's the output you
+actually need to read when a flash goes wrong.
+
+Before each upload the script also prints what it is about to write, so "why is the board
+running old code?" is answerable from the flash log alone:
+
+```
+==> Uploading to /dev/cu.usbmodem2101
+==> Firmware /Users/you/code/tires_monitor/build/tires_esp32.ino.bin
+==>   986 KiB, built 2026-07-28 13:09:47
+```
+
+Set `TM_VERBOSE` to change the level:
+
+| `TM_VERBOSE` | What you get |
+|---|---|
+| `0` (or `quiet`) | The old terse output — upload prints little more than the write percentage. |
+| unset / `1` | **Default.** Verbose upload + the firmware summary above. |
+| `2` (or `debug`) | Also a verbose *compile* (every gcc/link line) and arduino-cli's own debug log. A firehose — for when the toolchain itself is suspect. |
+
+```bash
+TM_VERBOSE=2 ./scripts/tm.sh flash        # macOS / Linux
+$env:TM_VERBOSE=2; .\scripts\tm.ps1 flash # Windows
+```
+
+Level 2 is what to attach to a bug report. Note it makes `build` loud too, so the compile
+output is long — that's deliberate.
+
+---
+
 ## Typical session
 
 ```bash
@@ -175,6 +211,10 @@ the firmware could roughly triple before partitioning becomes a concern.
 Run `./scripts/tm.sh doctor` first. It checks, in order: toolchain present → board
 enumerated on USB at all → serial devices → arduino-cli detection → resolved port. That
 sequence tells you immediately whether you have a cable problem or a software problem.
+
+If `doctor` looks clean and the flash still fails, re-run it with `TM_VERBOSE=2` (see
+above) — that surfaces the raw esptool exchange, which is usually where the real reason
+is written.
 
 | Symptom | Cause / fix |
 |---|---|
