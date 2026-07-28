@@ -20,6 +20,10 @@
   Extra args pass through to arduino-cli:
     .\scripts\tm.ps1 build --profile waveshare169-latest
 
+  Verbosity of the flash path is set with TM_VERBOSE:
+    $env:TM_VERBOSE=0; .\scripts\tm.ps1 flash   quiet -- the old terse output
+    $env:TM_VERBOSE=2; .\scripts\tm.ps1 flash   debug -- verbose compile + CLI trace log
+
   If you get an execution-policy error, run this once:
     Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 #>
@@ -50,6 +54,29 @@ $BuildDir  = Join-Path $RepoRoot 'build'
 $BoardVid  = '0x303a'
 $BoardPids = @('0x1001', '0x821e')
 $MonitorBaud = if ($env:TM_BAUD) { $env:TM_BAUD } else { '9600' }  # USBSerial.begin(9600)
+
+# --- verbosity ----------------------------------------------------------------
+# The upload is the step that fails on real hardware -- bad cable, board not in
+# download mode, flash chip not answering -- and arduino-cli's default output
+# hides the esptool conversation that says WHICH of those it was. So a verbose
+# upload is the DEFAULT here: you get the esptool command line, the chip/MAC
+# detection, per-segment write progress and the hash verify, which is exactly
+# what you need to read when a flash goes wrong.
+#
+#   TM_VERBOSE=0 (quiet)   the old terse output
+#   TM_VERBOSE=1 (default) verbose upload + a pre-flash summary of the binary
+#   TM_VERBOSE=2 (debug)   also a verbose compile and arduino-cli's own debug log
+$Verbosity = switch ("$($env:TM_VERBOSE)") {
+    { $_ -in '0', 'quiet' } { 0; break }
+    { $_ -in '2', 'debug' } { 2; break }
+    default                 { 1 }
+}
+$UploadVerbosityArgs = switch ($Verbosity) {
+    0       { @() }
+    2       { @('--verbose', '--log', '--log-level', 'debug') }
+    default { @('--verbose') }
+}
+$BuildVerbosityArgs = if ($Verbosity -ge 2) { @('--verbose', '--log', '--log-level', 'debug') } else { @() }
 
 function Write-Info { param($m) Write-Host "==> $m" -ForegroundColor Green }
 function Write-Warn { param($m) Write-Host "warning: $m" -ForegroundColor Yellow }
@@ -160,7 +187,7 @@ function Invoke-Setup {
 
 function Invoke-Build {
     Assert-Cli
-    $buildArgs = @('compile', '--build-path', $BuildDir, $SketchDir) + $Rest
+    $buildArgs = @('compile') + $BuildVerbosityArgs + @('--build-path', $BuildDir, $SketchDir) + $Rest
     $rc = Invoke-Timed 'Build' {
         Write-Host "$ arduino-cli $($buildArgs -join ' ')" -ForegroundColor DarkGray
         & arduino-cli @buildArgs
@@ -180,13 +207,28 @@ function Reset-Board {
     return $true
 }
 
+# What is actually about to be written, so a "why is the board running old code?"
+# question can be answered from the flash log alone.
+function Show-Firmware {
+    $bin = Join-Path $BuildDir 'tires_esp32.ino.bin'
+    if (-not (Test-Path $bin)) {
+        Write-Warn "No built binary at $bin -- run '.\scripts\tm.ps1 build' first"
+        return
+    }
+    $f = Get-Item $bin
+    Write-Info "Firmware $bin"
+    # Floor, not [int] -- [int] banker's-rounds and would disagree with tm.sh.
+    Write-Info ("  {0} KiB, built {1:yyyy-MM-dd HH:mm:ss}" -f [Math]::Floor($f.Length / 1024), $f.LastWriteTime)
+}
+
 function Invoke-Upload {
     Assert-Cli
     $port = Get-BoardPortOrDie
     Write-Info "Uploading to $port"
+    if ($Verbosity -ge 1) { Show-Firmware }
     Write-Warn 'If this hangs, close any open serial monitor -- the port is exclusive.'
 
-    $uploadArgs = @('upload', '--port', $port, '--input-dir', $BuildDir, $SketchDir) + $Rest
+    $uploadArgs = @('upload', '--port', $port) + $UploadVerbosityArgs + @('--input-dir', $BuildDir, $SketchDir) + $Rest
     $rc = Invoke-Timed 'Upload' {
         Write-Host "$ arduino-cli $($uploadArgs -join ' ')" -ForegroundColor DarkGray
         & arduino-cli @uploadArgs
@@ -203,8 +245,9 @@ function Invoke-Upload {
     Write-Warn 'Upload failed. Hard-resetting the board and retrying once...'
     [void](Reset-Board -Port $port)
     Start-Sleep -Milliseconds 500
-    $retryArgs = @('upload', '--port', (Get-BoardPortOrDie), '--input-dir', $BuildDir, $SketchDir) + $Rest
+    $retryArgs = @('upload', '--port', (Get-BoardPortOrDie)) + $UploadVerbosityArgs + @('--input-dir', $BuildDir, $SketchDir) + $Rest
     $rc = Invoke-Timed 'Upload (retry)' {
+        Write-Host "$ arduino-cli $($retryArgs -join ' ')" -ForegroundColor DarkGray
         & arduino-cli @retryArgs
     }
     if ($rc -eq 0) {
@@ -219,6 +262,9 @@ Upload failed twice.
 Put the board into download mode by hand and try again:
     hold BOOT, tap RST, release BOOT
     .\scripts\tm.ps1 upload
+
+For the full arduino-cli/esptool trace:
+    `$env:TM_VERBOSE=2; .\scripts\tm.ps1 upload
 
 If it still fails, the cable is the usual culprit -- see docs/BUILD-AND-FLASH.md
 "@

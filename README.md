@@ -86,6 +86,11 @@ Short version, once set up:
 Windows: `.\scripts\tm.ps1 <same>`. Or use the status-bar buttons / `Cmd+Shift+B` in
 VS Code.
 
+The flash is verbose by default — it prints which binary it is writing and the full
+esptool exchange, because that is what tells you *why* an upload failed. Turn it down
+with `TM_VERBOSE=0`, or all the way up with `TM_VERBOSE=2`
+([details](docs/BUILD-AND-FLASH.md#how-much-the-flash-tells-you--tm_verbose)).
+
 Core and library versions are pinned in
 [`tires_esp32/sketch.yaml`](tires_esp32/sketch.yaml) and installed automatically on the
 first build — there is nothing to click through in a Library Manager. For reference, the

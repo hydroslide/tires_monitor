@@ -18,6 +18,10 @@
 # Extra args pass through to arduino-cli, e.g.:
 #   ./scripts/tm.sh build --profile waveshare169-latest
 #   ./scripts/tm.sh build --clean
+#
+# Verbosity of the flash path is set with TM_VERBOSE (see below):
+#   TM_VERBOSE=0 ./scripts/tm.sh flash   quiet -- the old terse output
+#   TM_VERBOSE=2 ./scripts/tm.sh flash   debug -- verbose compile + CLI trace log
 
 set -euo pipefail
 
@@ -38,6 +42,43 @@ BUILD_DIR="$REPO_ROOT/build"
 readonly BOARD_VID="0x303a"
 readonly BOARD_PIDS="0x1001 0x821e"
 readonly MONITOR_BAUD="${TM_BAUD:-9600}"   # matches USBSerial.begin(9600) in tires_esp32.ino
+
+# --- verbosity ----------------------------------------------------------------
+# The upload is the step that fails on real hardware -- bad cable, board not in
+# download mode, flash chip not answering -- and arduino-cli's default output
+# hides the esptool conversation that says WHICH of those it was. So a verbose
+# upload is the DEFAULT here: you get the esptool command line, the chip/MAC
+# detection, per-segment write progress and the hash verify, which is exactly
+# what you need to read when a flash goes wrong.
+#
+#   TM_VERBOSE=0 (quiet)  the old terse output -- upload prints little more than
+#                         "Writing at ... 100%"
+#   TM_VERBOSE=1 (default) verbose upload + a pre-flash summary of the binary
+#   TM_VERBOSE=2 (debug)  also a verbose compile (every gcc/link line) and
+#                         arduino-cli's own debug log -- a firehose, for when the
+#                         toolchain itself is suspect
+case "${TM_VERBOSE:-1}" in
+  0|quiet) TM_VERBOSITY=0 ;;
+  2|debug) TM_VERBOSITY=2 ;;
+  *)       TM_VERBOSITY=1 ;;
+esac
+readonly TM_VERBOSITY
+
+# Flag words for arduino-cli, printed space-separated for unquoted expansion at
+# the call site. No flag contains a space, so word splitting is safe here.
+upload_verbosity_flags() {
+  case "$TM_VERBOSITY" in
+    0) ;;
+    1) printf '%s' '--verbose' ;;
+    2) printf '%s' '--verbose --log --log-level debug' ;;
+  esac
+}
+build_verbosity_flags() {
+  case "$TM_VERBOSITY" in
+    2) printf '%s' '--verbose --log --log-level debug' ;;
+    *) ;;
+  esac
+}
 
 # --- output helpers -----------------------------------------------------------
 if [ -t 1 ]; then
@@ -164,16 +205,33 @@ cmd_setup() {
 
 cmd_build() {
   require_cli
-  timed "Build" run arduino-cli compile --build-path "$BUILD_DIR" "$SKETCH_DIR" "$@"
+  # shellcheck disable=SC2046  # deliberate word splitting -- the flags have no spaces
+  timed "Build" run arduino-cli compile $(build_verbosity_flags) \
+      --build-path "$BUILD_DIR" "$SKETCH_DIR" "$@"
+}
+
+# What is actually about to be written, so a "why is the board running old code?"
+# question can be answered from the flash log alone.
+report_firmware() {
+  local bin="$BUILD_DIR/tires_esp32.ino.bin"
+  [ -f "$bin" ] || { warn "No built binary at $bin -- run './scripts/tm.sh build' first"; return 0; }
+  local size stamp
+  size="$(wc -c < "$bin" | tr -d ' ')"
+  stamp="$(date -r "$bin" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo unknown)"
+  info "Firmware $bin"
+  info "  $(( size / 1024 )) KiB, built $stamp"
 }
 
 cmd_upload() {
   require_cli
   local port; port="$(port_or_die)"
   info "Uploading to $port"
+  if [ "$TM_VERBOSITY" -ge 1 ]; then report_firmware; fi
   warn "If this hangs, close any open serial monitor -- the port is exclusive."
 
-  if timed "Upload" run arduino-cli upload --port "$port" --input-dir "$BUILD_DIR" "$SKETCH_DIR" "$@"; then
+  # shellcheck disable=SC2046  # deliberate word splitting -- the flags have no spaces
+  if timed "Upload" run arduino-cli upload --port "$port" $(upload_verbosity_flags) \
+      --input-dir "$BUILD_DIR" "$SKETCH_DIR" "$@"; then
     TM_UPLOAD_ELAPSED="$TM_LAST_ELAPSED"
     info "Upload complete. View output with: ./scripts/tm.sh monitor"
     return 0
@@ -184,7 +242,9 @@ cmd_upload() {
   # A hard reset clears it, so retry once before bothering the user.
   warn "Upload failed. Hard-resetting the board and retrying once..."
   reset_board "$port" || true
-  if timed "Upload (retry)" run arduino-cli upload --port "$(port_or_die)" --input-dir "$BUILD_DIR" "$SKETCH_DIR" "$@"; then
+  # shellcheck disable=SC2046  # deliberate word splitting -- the flags have no spaces
+  if timed "Upload (retry)" run arduino-cli upload --port "$(port_or_die)" $(upload_verbosity_flags) \
+      --input-dir "$BUILD_DIR" "$SKETCH_DIR" "$@"; then
     TM_UPLOAD_ELAPSED="$TM_LAST_ELAPSED"
     info "Upload complete on retry. View output with: ./scripts/tm.sh monitor"
     return 0
@@ -195,6 +255,9 @@ cmd_upload() {
 Put the board into download mode by hand and try again:
     hold BOOT, tap RST, release BOOT
     ./scripts/tm.sh upload
+
+For the full arduino-cli/esptool trace:
+    TM_VERBOSE=2 ./scripts/tm.sh upload
 
 If it still fails, the cable is the usual culprit -- see docs/BUILD-AND-FLASH.md"
 }
@@ -343,7 +406,9 @@ cmd_doctor() {
 }
 
 usage() {
-  sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^#//; s/^ //'
+  # Print the header comment block and stop at the first line of actual code, so
+  # this keeps working when the header grows.
+  sed -n '2,/^[^#]/p' "${BASH_SOURCE[0]}" | sed '$d; s/^#//; s/^ //'
 }
 
 main() {
