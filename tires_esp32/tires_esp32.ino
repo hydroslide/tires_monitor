@@ -74,6 +74,16 @@ static bool summaryAutoView = false;   // full-screen summary is showing (runnin
 static int  summaryAutoPage = 0;
 static bool summaryAutoDirty = false;  // needs a (re)paint
 
+// Debounce for the session-toggle swipe (Track mode). The touch library often reports a
+// single physical swipe twice, so starting a session would immediately end it; and the
+// swipe that dismisses the summary can bleed into starting a fresh one. After any
+// session start/end -- and after dismissing the summary -- we ignore the toggle swipe for
+// SWIPE_LOCK_MS so the second registration is dropped.
+static unsigned long swipeLockSetMs = 0;
+static const unsigned long SWIPE_LOCK_MS = 1000;
+static void armSwipeLock(){ swipeLockSetMs = millis(); }
+static bool sessionSwipeLocked(){ return (millis() - swipeLockSetMs) < SWIPE_LOCK_MS; }
+
 // ... after initializing tft in setup() ...
 QuadrantFactory factory(tft, /*margin=*/ 5);
 
@@ -592,6 +602,8 @@ static void toggleSession(){
                          wheels->minTemp, wheels->idealTemp, wheels->maxTemp);
     fbState = FB_START; fbSetMs = millis();
   }
+  // Lock out the toggle swipe so a double-registered swipe can't immediately reverse this.
+  armSwipeLock();
 }
 
 // -- Interactive camera crop-offset setup (#23) --
@@ -689,14 +701,19 @@ void checkForSwipes(){
   if (summaryAutoView){
     if (su && summaryAutoPage < SessionManager::PAGE_COUNT - 1){ summaryAutoPage++; summaryAutoDirty = true; }
     else if (sd && summaryAutoPage > 0){ summaryAutoPage--; summaryAutoDirty = true; }
-    else if (sr) exitSummaryAutoView();
+    else if (sr){
+      exitSummaryAutoView();
+      // A double-registered dismiss swipe would otherwise fall through next loop and start
+      // a new session -- hold the toggle lock across the hand-off back to the running view.
+      armSwipeLock();
+    }
     return;
   }
 
   if (track){
     // Track mode: the left/right swipe toggles the SESSION (not Night Mode). Up/down
-    // still switch the thermal display mode.
-    if (sr) toggleSession();
+    // still switch the thermal display mode. The toggle is debounced (see SWIPE_LOCK_MS).
+    if (sr && !sessionSwipeLocked()) toggleSession();
     if (su) switchThermalMode(true);
     if (sd) switchThermalMode(false);
   } else {
@@ -752,25 +769,26 @@ static const unsigned long FB_BLINK_MS = 500;
 static void drawSessionFeedback(){
   if (fbState == FB_NONE) return;
 
-  const int s = FB_R * 2;                            // both shapes share this footprint
+  const int s = FB_R * 2;                            // the stop square's footprint
   const int x = FB_CX - FB_R, y = FB_CY - FB_R;
 
-  // The dark half paints the footprint black rather than restoring the tire underneath.
-  // That costs nothing visually: the badge occludes that patch of the front-right tire for
-  // the whole FB_MS either way, and expiry repaints the screen (FB_START) or hands off to
-  // the summary (FB_END), so nothing is left behind.
-  if ((((millis() - fbSetMs) / FB_BLINK_MS) & 1UL) != 0){
-    tft.fillRect(x, y, s, s, ST77XX_BLACK);
-    return;
-  }
+  // "Dark" half of the current blink cycle. Each state clears exactly the footprint of the
+  // shape it draws -- NOT a shared square -- so only the one badge pulses. Clearing a full
+  // square under the round recording dot would flicker the tire-map corners black in step
+  // with the dot, which reads as a circle AND a square blinking together.
+  const bool dark = (((millis() - fbSetMs) / FB_BLINK_MS) & 1UL) != 0;
 
   if (fbState == FB_START){
-    tft.fillCircle(FB_CX, FB_CY, FB_R, ST77XX_RED);  // recording dot
+    // Recording dot: the circle itself blinks red -> black -> red within its own footprint.
+    tft.fillCircle(FB_CX, FB_CY, FB_R, dark ? ST77XX_BLACK : ST77XX_RED);
   } else { // FB_END
-    tft.fillRect(x, y, s, s, ST77XX_BLACK);          // stop square
-    // 2 px outline so it reads on black at a glance
-    tft.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
-    tft.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
+    // Stop badge: a steady black square whose 2 px white outline pulses on/off, so it reads
+    // on black at a glance without the fill flickering.
+    tft.fillRect(x, y, s, s, ST77XX_BLACK);
+    if (!dark){
+      tft.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
+      tft.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
+    }
   }
 }
 

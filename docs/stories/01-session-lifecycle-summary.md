@@ -26,7 +26,14 @@ hit while driving, so session control is a gesture.
   running → **end**.
 - **Swipe feedback:** on **start**, a small red "recording" dot in the upper-right
   corner for 5 s; on **end**, a small black "stop" square in the same spot for 5 s,
-  then the session summary is shown.
+  then the session summary is shown. The dot pulses within its own round footprint
+  and the square shows a pulsing outline over a steady black fill, so each reads as a
+  single blinking badge (not two shapes at once).
+- **Toggle debounce (1 s):** the touch layer often reports one physical swipe twice,
+  which would start a session and immediately end it (or bleed a summary-dismiss swipe
+  into starting a new one). The session-toggle swipe is locked out for 1 s after any
+  start/end and after dismissing the summary, so the duplicate registration is dropped.
+  Up/down (thermal-mode switching) is unaffected.
 - **Seal on end:** ending freezes accumulation (peaks, averages, balance,
   time-in-window) at that instant; everything after is ignored. Swipe-end at the
   start of the cooldown lap so the cruise back isn't included.
