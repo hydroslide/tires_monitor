@@ -3,6 +3,7 @@
 
 #include "Tire.h"
 #include <Adafruit_GFX.h>
+#include "DisplayBase.h"
 #include <Fonts/FreeSans9pt7b.h>  // scalable 11-pixel font
 
 /**

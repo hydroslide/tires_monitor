@@ -3,6 +3,7 @@
 
 #include <Adafruit_ST7789.h>
 #include <Adafruit_GFX.h>
+class DisplayBase;
 
 class Tire {
 

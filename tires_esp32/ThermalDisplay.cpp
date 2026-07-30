@@ -56,10 +56,10 @@ int      ThermalDisplay::lenHot;
 uint16_t* ThermalDisplay::framebuf = nullptr;
 TempReader* ThermalDisplay::tempReader = nullptr;
 
-ThermalDisplay::ThermalDisplay(Adafruit_ST7789 &displayTFT,
+ThermalDisplay::ThermalDisplay(DisplayBase &displayTFT,
                                int areaX, int areaY,
                                int areaW, int areaH)
-  : tft(displayTFT),
+  : display(displayTFT),
     areaX(areaX), areaY(areaY), areaW(areaW), areaH(areaH)
 {
     if (!framebuf){
@@ -446,11 +446,8 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
         }
     }
 
-    // Push the entire buffer to ST7789 at (areaX, areaY)
-    tft.startWrite();
-    tft.setAddrWindow(areaX, areaY, areaW, areaH);
-    tft.writePixels(framebuf, areaW * areaH);
-    tft.endWrite();
+    // Push the entire buffer to display at (areaX, areaY)
+    display.pushPixels(areaX, areaY, areaW, areaH, framebuf, areaW * areaH);
 
     if (showPixelOffsets)
         drawPixelOffsets(_tempIndex);
@@ -515,11 +512,8 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
         }
     }
 
-    // Push the entire buffer to ST7789 at (areaX, areaY)
-    tft.startWrite();
-    tft.setAddrWindow(areaX, areaY, areaW, areaH);
-    tft.writePixels(framebuf, areaW * areaH);
-    tft.endWrite();
+    // Push the entire buffer to display at (areaX, areaY)
+    display.pushPixels(areaX, areaY, areaW, areaH, framebuf, areaW * areaH);
 
     // When not stretching (i.e., showPixelOffsets == true), draw the guide lines on top.
     if (showPixelOffsets)
@@ -533,12 +527,12 @@ void ThermalDisplay::drawPixelOffsets(int _tempIndex){
 
     if(leftOffset >0){
         int leftX = (((leftOffset * areaW) / CAMERA_WIDTH)-1)+areaX;   
-        tft.drawFastVLine(leftX, areaY, areaH, OFFSET_LINE_COLOR);
+        display.drawFastVLine(leftX, areaY, areaH, OFFSET_LINE_COLOR);
     }
 
     if (rightOffset >0){
         int rightX = ((areaW- ((rightOffset * areaW) / CAMERA_WIDTH))+1)+areaX;
-        tft.drawFastVLine(rightX, areaY, areaH, OFFSET_LINE_COLOR);
+        display.drawFastVLine(rightX, areaY, areaH, OFFSET_LINE_COLOR);
     }
 
 }
