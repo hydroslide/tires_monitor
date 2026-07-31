@@ -131,13 +131,32 @@ they do rather than the hardware they use, so each one groups a whole feature:
 5. **Tire Profiles**: The temperature window (Min/Ideal/Max), carcass offset and lag, and per-corner camera crop offsets — the profile supplies the window on Track, and in Street unless Street's `Override Window` is on. Carcass offset, lag and crop always come from the profile, in both modes
 6. **Inflation & Camber**: The whole over/under-inflation and camber check in one place — the delta thresholds, the verdict latch, what gets painted, and the **Straight-Line Gate** (capture threshold, gate dwell, axis orientation) that decides which frames count
 7. **Display**: Night brightness, thermal image colouring, crop guide overlay, and tire redraw rate
-8. **Test**: Enable the raw thermal-camera image views
+8. **Test**: ⚠️ *temporarily* selects the display rendering path — buffered (On) vs direct (Off). See [Display rendering](#display-rendering) below. Normally: enable the raw thermal-camera image views
 9. **Save Config**: Save current settings to EEPROM
 
 Every setting is documented — what it does, its range, and how to tune it — in
 [docs/SETTINGS.md](docs/SETTINGS.md).
 
 To activate night mode, swipe right on the main display.
+
+### Display rendering
+
+Everything on screen is drawn through a `DisplayBase` interface with two interchangeable
+implementations: **buffered** (the frame is composed into a 134 KB off-screen canvas in
+PSRAM, then pushed to the panel in one burst — no flicker, no visible partial frames) and
+**direct** (straight to the panel, the original behaviour, kept as an escape hatch).
+
+**The `Test` menu item currently picks between them, at runtime, applied when you close the
+menu.** That is a temporary staging measure so the two can be compared on the car by eye; it
+costs `Test` its normal meaning meanwhile (the camera-image views are pinned on). Once the
+buffered path is confirmed on the car, it becomes the default and `Test` goes back to what it
+was.
+
+Design notes, the flush map, and the reason the canvas is never cleared between frames are in
+[tires_esp32/BufferedDisplay.md](tires_esp32/BufferedDisplay.md). The one rule worth knowing
+before touching rendering code: **nothing outside the display classes may hold an
+`Adafruit_ST7789&`** — on the buffered path it paints straight to the glass and is wiped by
+the next flush, with no compile error.
 
 ### Aiming the cameras
 

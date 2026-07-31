@@ -40,7 +40,7 @@ void imuGateBarInvalidate() { forceRedraw = true; }
 
 // Repaint the bar band across [x0, x1), splitting at the zone edges so each run gets the
 // right color. Used both for the full bar and for restoring the strip under a moved dot.
-static void paintBarSpan(Adafruit_ST7789& d, int16_t x0, int16_t x1,
+static void paintBarSpan(DisplayBase& d, int16_t x0, int16_t x1,
                          int16_t zoneHalf, uint16_t centerColor) {
   if (x0 < BAR_X)          x0 = BAR_X;
   if (x1 > BAR_X + BAR_W)  x1 = BAR_X + BAR_W;
@@ -60,7 +60,7 @@ static void paintBarSpan(Adafruit_ST7789& d, int16_t x0, int16_t x1,
   if (b > a) d.fillRect(a, BAR_Y, b - a, BAR_H, ST77XX_RED);
 }
 
-void drawImuGateBar(Adafruit_ST7789& d) {
+void drawImuGateBar(DisplayBase& d) {
   if (!getShowGateBar()) {
     // Toggled off mid-run: wipe the gutter once so the bar does not linger. The tire map
     // never draws here, so black is the correct background to leave behind.

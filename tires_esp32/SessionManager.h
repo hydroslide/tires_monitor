@@ -2,7 +2,7 @@
 #define SESSION_MANAGER_H
 
 #include <Arduino.h>
-#include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 
 // Session lifecycle + end-of-session summary (design 5.3, story 01 / issue #2).
 //
@@ -79,7 +79,7 @@ public:
     // Full-screen summary renderer, shared by the auto-post-seal path (sketch) and the
     // menu View Summary action. page 0 = 2x2 car map, page 1 = session-level.
     static const int PAGE_COUNT = 2;
-    static void renderSummary(Adafruit_ST7789& d, const SessionSummary& s, int page);
+    static void renderSummary(DisplayBase& d, const SessionSummary& s, int page);
 
 private:
     bool  running;

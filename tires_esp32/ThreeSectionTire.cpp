@@ -1,6 +1,7 @@
 #include "ThreeSectionTire.h"
 #include <Arduino.h>          // for round()
-extern Adafruit_ST7789 tft;   // from your main sketch
+#include "DisplayBase.h"
+extern DisplayBase& display;
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
@@ -128,19 +129,19 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
 
 
     if (((!textOnly) && (force || crossedThreshold)) || (textOnly && crossedThreshold)){
-      tft.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
+      display.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
 
       // fill three vertical bands
       for (int i = 0; i < 3; i++) {
           int bx = x + i * bandW;
           int bw = bandW; 
           lastSectionFillColors[i] = sectionFillColors[i];
-          tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+          display.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+          //display.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
       }       
 
       // draw outer outline
-      //tft.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
+      //display.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
       rectsDrawn=true;
       drawsSinceForce=0;
     }
@@ -203,9 +204,9 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
             int bw = bandW;
             int bandH = height/8;
             int startY = (y+height) - (bandH *2);
-            tft.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
-            //tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-            //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+            display.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
+            //display.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+            //display.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
           }
         }
       }
@@ -214,22 +215,27 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
 
     // draw each temperature string center-aligned in its band
     
-    tft.setFont(&FreeMonoBold18pt7b);
-    tft.setTextSize(1);
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setTextSize(1);
 
     for (int i = 0; i < 3; i++) {
       if (sectionChanged[i] || true){
         char buf[8];
 
         if (!rectsDrawn && !textOnly){
-          // Redraw the last temp with background color
-          tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);    
-          printTemp(lastTemps[i], i, bandW, textOnly);
+          // Erase the previous reading by repainting it in the band fill colour. The
+          // shadow has to be erased too, at the same +2/+2 offset it was drawn at --
+          // otherwise every reading that changes without crossing a colour threshold
+          // (the common case at 1 Hz) leaves black specks trailing the old digits.
+          //
+          // Repainting is the only way to erase here: FreeMonoBold18pt7b is a GFXfont,
+          // and Adafruit_GFX::drawChar ignores the background colour for custom fonts --
+          // it draws set pixels only. There is no opaque-background shortcut available.
+          printTemp(lastTemps[i], i, bandW, sectionFillColors[i], sectionFillColors[i], true);
         }
 
-        uint16_t textColor = (textOnly) ? ST77XX_BLACK : sectionTextColors[i];
-        tft.setTextColor(textColor, sectionFillColors[i]);    
-        String tempString = printTemp(sectionTemps[i], i, bandW, false);
+        String tempString = printTemp(sectionTemps[i], i, bandW,
+                                      sectionTextColors[i], ST77XX_BLACK, true);
 
         lastTemps[i] = sectionTemps[i];
       }     
@@ -265,20 +271,20 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
       if (rectsDrawn || !dwellBarDrawn || dwellScore != lastDwellScore) {
         // Black track repainted every time, which also erases the previous fill -- the
         // background here is the band colour, so there is nothing simpler to restore to.
-        tft.fillRect(x, dbY, width, dbH, ST77XX_BLACK);
+        display.fillRect(x, dbY, width, dbH, ST77XX_BLACK);
 
         long mag = (dwellScore < 0) ? -dwellScore : dwellScore;
         int  len = (int)(((long)half * mag) / dwellMax);
         if (len > half) len = half;
         if (len > 0) {
-          if (dwellScore > 0) tft.fillRect(dbCx, dbY, len, dbH, highDeltaColor);
-          else                tft.fillRect(dbCx - len, dbY, len, dbH, lowDeltaColor);
+          if (dwellScore > 0) display.fillRect(dbCx, dbY, len, dbH, highDeltaColor);
+          else                display.fillRect(dbCx - len, dbY, len, dbH, lowDeltaColor);
         }
 
         // Latch marks last so they stay legible once the fill passes them.
         int tick = (int)(((long)half * dwellLatch) / dwellMax);
-        tft.drawFastVLine(dbCx - tick, dbY, dbH, 0x7BEF);
-        tft.drawFastVLine(dbCx + tick, dbY, dbH, 0x7BEF);
+        display.drawFastVLine(dbCx - tick, dbY, dbH, 0x7BEF);
+        display.drawFastVLine(dbCx + tick, dbY, dbH, 0x7BEF);
 
         lastDwellScore = dwellScore;
         dwellBarDrawn  = true;
@@ -286,7 +292,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     } else if (dwellBarDrawn) {
       // Turned off (or no gate data): give the strip back to the band colours.
       for (int i = 0; i < 3; i++)
-        tft.fillRect(x + i * bandW, dbY, bandW, dbH, sectionFillColors[i]);
+        display.fillRect(x + i * bandW, dbY, bandW, dbH, sectionFillColors[i]);
       dwellBarDrawn = false;
     }
   }
@@ -299,7 +305,15 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
   //USBSerial.println("");
 }
 
-String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline){
+// Draw one band's reading, optionally with a drop shadow offset +2/+2.
+//
+// Colours are explicit parameters rather than pre-set by the caller, because this is used
+// both to draw a reading and to erase the previous one, and the erase pass needs the shadow
+// painted in the band fill colour while the draw pass needs it black. The older shape --
+// caller calls setTextColor(), this function overrides it inside the shadow branch -- could
+// not express the erase case at all.
+String ThreeSectionTire::printTemp(int temp, int i, int bandW,
+                                   uint16_t glyphColor, uint16_t shadowColor, bool drawShadow){
       
     String tempString = String(temp) ;//+ (char)0xF7 + tempUnit;
     uint16_t textWidth, textHeight;    
@@ -307,7 +321,7 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int extraYBuffer = 7;
     int extraXBuffer = -3;
 
-    tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
+    display.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
     int xShift = 0;
     int xShiftDir = 0;
@@ -328,15 +342,15 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int yMod = (i==0 || i==2)? ((textHeight+extraYBuffer)*yDir):0;
     int startY = (y + ((height+textHeight) / 2))+yMod;// - (textHeight / 2);
 
-    if (drawOutline){
-      tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);   
-      tft.setCursor(startX+2, startY+2);
-      tft.println(tempString);
-      tft.setTextColor(sectionTextColors[i], sectionFillColors[i]);   
+    if (drawShadow){
+      display.setTextColor(shadowColor, sectionFillColors[i]);
+      display.setCursor(startX+2, startY+2);
+      display.println(tempString);
     }
 
-    tft.setCursor(startX, startY);
-    tft.println(tempString);
+    display.setTextColor(glyphColor, sectionFillColors[i]);
+    display.setCursor(startX, startY);
+    display.println(tempString);
     return tempString;
 }
 

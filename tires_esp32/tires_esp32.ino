@@ -28,6 +28,10 @@
 #include "QuadrantFactory.h"
 #include "ThermalDisplay.h"
 #include "OffsetSetup.h"        // Interactive camera crop-offset mode (#23)
+#include "DisplayBase.h"
+#include "StandardDisplay.h"
+#include "BufferedDisplay.h"
+#include "DisplayProxy.h"
 
 #define WIFI_SSID "TireTempMonitor"
 #define WIFI_PASSWORD "esp32"
@@ -46,6 +50,10 @@ bool enableThermalTemps = false;
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
 Adafruit_ST7789 tft = Adafruit_ST7789(&hspi, LCD_CS, LCD_DC, LCD_RST);
+StandardDisplay standardDisplay(tft);
+BufferedDisplay bufferedDisplay(tft);
+DisplayProxy displayProxy;
+DisplayBase& display = displayProxy;
 
 // WifiSerial instance
 WifiSerial wifiSerial;
@@ -85,7 +93,7 @@ static void armSwipeLock(){ swipeLockSetMs = millis(); }
 static bool sessionSwipeLocked(){ return (millis() - swipeLockSetMs) < SWIPE_LOCK_MS; }
 
 // ... after initializing tft in setup() ...
-QuadrantFactory factory(tft, /*margin=*/ 5);
+QuadrantFactory factory(display, /*margin=*/ 5);
 
 // // To create the upper-left ThermalDisplay:
 ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
@@ -124,7 +132,8 @@ long timeDelta()
   MenuSystem &menuSystem = getTireMenuSystem();
 
   // 3) Create MenuRenderer
-  MenuRenderer menuRenderer(menuSystem, tft);
+  MenuRenderer menuRenderer(menuSystem, display);
+  //MenuRenderer menuRenderer(menuSystem, standardDisplay)
 
   // 4) Create TouchMenuHandler
   TouchMenuHandler menuHandler(menuSystem, menuRenderer, cstTouch);
@@ -255,7 +264,7 @@ static void applyThermalActivation(){
 void setThermalMode(uint8_t _thermalMode){
   thermalMode = _thermalMode;
   applyThermalActivation();
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
   activateTires();
   if (!(enableThermalTemps && thermalMode ==2))
@@ -431,7 +440,7 @@ void doRunningMode(int time_delta)
       }
 
       if (forceDrawAfterInit>0){
-          tft.fillScreen(ST77XX_BLACK);
+          display.fillScreen(ST77XX_BLACK);
           wheels->draw(true);
           forceDrawAfterInit--;
       }else if (enableThermalTemps && thermalMode == 2)
@@ -486,13 +495,17 @@ void doRunningMode(int time_delta)
       wifiSerial.loop();
     }
 
+    // Overlays last, so they sit on top of the tire map and the camera quadrants, and --
+    // critically -- so they are in the canvas before the flush below. Moved here out of
+    // loop() (#28); see the note at that call site. Both read state that only changes on
+    // this read cadence, so sampling them at 10 Hz rather than loop rate costs nothing:
+    // the g bar follows imuGate, and the badge is a 500 ms blink.
+    drawSessionFeedback();
+    drawImuGateBar(display);
 
-
-    // for (int i=0; i>TempReader::TIRE_COUNT; i++){
-      
-    // }
-    // if (tempReader->tireSensorIsCamera[0])
-    //   UR->updateDisplay(tempReader->tire_frames[0]);
+    // F5: the running display's frame is complete. 10 Hz, unchanged from March.
+    // Flush buffered display to screen (no-op for StandardDisplay)
+    display.drawScreen();
   }
 
 
@@ -521,19 +534,26 @@ void setup()
   nbp.sendMetadata("NAME", "Tire Temp Reader");
   nbp.sendMetadata("VERSION", "0.1");
 
+  // Set default display implementation
+  displayProxy.setImplementation(&standardDisplay);
+
   // SPI + TFT
   hspi.begin(LCD_SCK, -1, LCD_MOSI, LCD_CS);
   //tft.setSPISpeed(80000000);
   // Slow down SPI to 40MHz (more stable than 80MHz)
-  tft.setSPISpeed(40000000);
-  tft.init(240, 280, SPI_MODE0);
+  display.setSPISpeed(40000000);
+  display.init(240, 280, SPI_MODE0);
   // Use the real CP437 charset (#17). Adafruit_GFX otherwise applies a legacy shift --
   // `if (!_cp437 && (c >= 176)) c++` -- which would silently render the degree ring
   // (0xF8) as the stray dot at 0xF9. Only affects chars >= 176; all our strings are
-  // ASCII, so nothing else changes. MenuRenderer references this same tft.
-  tft.cp437(true);
-  tft.setRotation(3);
-  tft.fillScreen(ST77XX_BLACK);
+  // ASCII, so nothing else changes. MenuRenderer references this same display.
+  //
+  // Re-asserted in initializeSystem() after the implementation is chosen: this call lands
+  // on whichever impl is active NOW (StandardDisplay), and the buffered canvas does not
+  // exist yet, so it would otherwise never receive the flag.
+  display.cp437(true);
+  display.setRotation(3);
+  display.fillScreen(ST77XX_BLACK);
 
   // I2C for touch
   Wire.setPins(IIC_SDA, IIC_SCL);
@@ -592,6 +612,12 @@ void setup()
   // months later without external notes.
   if (!testMode) sendBootMetadata();
 
+  // F2: the boot paint happens here, outside loop(). loop() then returns early for its
+  // first 2 seconds (the firstRun USB grace period), so without this flush the buffered
+  // path would sit black for 2 s while the direct path came up instantly -- which reads
+  // as a bug when comparing the two.
+  display.drawScreen();
+
   USBSerial.println("Bottom of ESP32 Tires Setup");
 }
 
@@ -638,7 +664,7 @@ static void beginOffsetSetup(){
   // The left swipe is half of the nudge pair here, so it must stop meaning "open the menu".
   menuHandler.suspendMenu(true);
 
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
 
   // Edit the ACTIVE profile -- the same slot the numeric Offsets fields target -- so the
@@ -681,7 +707,7 @@ static void checkOffsetSetupSwipes(){
 
 static void doOffsetSetupMode(int time_delta){
   // Advance the blink phase first so the guides drawn below are in step with the border.
-  OffsetSetup::service(tft);
+  OffsetSetup::service(display);
 
   millisSinceLastRead += time_delta;
   if (millisSinceLastRead < readIntervalMillis) return;
@@ -689,12 +715,16 @@ static void doOffsetSetupMode(int time_delta){
 
   tempReader->readTemps();
   for (int i = 0; i < TIRE_COUNT; i++) thermalDisplays[i]->updateDisplay(i);
+
+  // F3: this mode owns the screen and did not exist in March, so without its own flush
+  // the buffered path would show whatever was on the glass when it was entered.
+  display.drawScreen();
 }
 
 // Leave the full-screen summary and restore the running display.
 static void exitSummaryAutoView(){
   summaryAutoView = false;
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
   activateTires();
   wheels->draw(true);
@@ -743,7 +773,7 @@ static void serviceFeedback(){
   if (fbState == FB_START){
     if (dt >= FB_MS){
       fbState = FB_NONE;              // clear the recording dot
-      tft.fillScreen(ST77XX_BLACK);
+      display.fillScreen(ST77XX_BLACK);
       imuGateBarInvalidate();
       activateTires();
       wheels->draw(true);
@@ -791,14 +821,14 @@ static void drawSessionFeedback(){
 
   if (fbState == FB_START){
     // Recording dot: the circle itself blinks red -> black -> red within its own footprint.
-    tft.fillCircle(FB_CX, FB_CY, FB_R, dark ? ST77XX_BLACK : ST77XX_RED);
+    display.fillCircle(FB_CX, FB_CY, FB_R, dark ? ST77XX_BLACK : ST77XX_RED);
   } else { // FB_END
     // Stop badge: a steady black square whose 2 px white outline pulses on/off, so it reads
     // on black at a glance without the fill flickering.
-    tft.fillRect(x, y, s, s, ST77XX_BLACK);
+    display.fillRect(x, y, s, s, ST77XX_BLACK);
     if (!dark){
-      tft.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
-      tft.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
+      display.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
+      display.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
     }
   }
 }
@@ -873,13 +903,20 @@ void loop() {
       if (summaryAutoView){
         // Full-screen sealed summary owns the display; repaint only on page change.
         if (summaryAutoDirty){
-          SessionManager::renderSummary(tft, sessionManager.summary(), summaryAutoPage);
+          SessionManager::renderSummary(display, sessionManager.summary(), summaryAutoPage);
           summaryAutoDirty = false;
+          display.drawScreen();   // F4: edge-triggered, so it must flush its own frame
         }
       } else {
+        // drawSessionFeedback() and drawImuGateBar() used to be called here, after
+        // doRunningMode() returned -- i.e. after its flush. Once per second the 1 Hz block
+        // repaints the tire map, which wipes the badge footprint and the g bar's gutter
+        // (ThreeSectionTire's clear rect is inflated by bufferPix on every side), and the
+        // flush then pushed a frame with both of them missing. They were re-asserted only
+        // on the following pass, after the glass had already updated -- a ~100 ms dropout
+        // of the g bar and session badge, every second. They now run inside
+        // doRunningMode(), immediately before the flush, so they land in the same frame.
         doRunningMode(time_delta);
-        drawSessionFeedback();
-        drawImuGateBar(tft);
       }
     }
   } else {
@@ -967,7 +1004,7 @@ static void initializeSystem()
   highFrequencyUpdates = getHighFrequencyUpdates();
   USBSerial.println((highFrequencyUpdates)? "highFrequencyUpdates Enabled": "highFrequencyUpdates Disabled");
 
-  enableThermalTemps = getTestEnabled();
+  enableThermalTemps = true;  // hardcoded — Test toggle is used for BufferedDisplay switching
   if (enableThermalTemps)
     THERMAL_MODES = 3;
   else
@@ -1016,6 +1053,30 @@ static void initializeSystem()
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
+  // Switch display implementation based on Test toggle.
+  //
+  // STAGED (#28): tying the buffer to Test is temporary, so the buffered and direct
+  // paths can be A/B'd on the car by eye before the buffer becomes the default.
+  // Phase 2 decouples them and restores Test's documented meaning.
+  //
+  // begin() is where the 134 KB canvas is actually allocated -- deferred out of
+  // static init so it lands in PSRAM rather than internal DRAM, and so it costs
+  // nothing at all when Test is off. If it fails we say so and stay on the direct
+  // path rather than running with a display that silently draws nothing.
+  bool useBuffered = getTestEnabled();
+  if (useBuffered && !bufferedDisplay.begin()) {
+    USBSerial.println("BufferedDisplay unavailable -- falling back to direct draw");
+    useBuffered = false;
+  }
+  displayProxy.setImplementation(useBuffered ? (DisplayBase*)&bufferedDisplay : (DisplayBase*)&standardDisplay);
+
+  // Re-assert the text defaults on whichever implementation just became active.
+  // setup() set these on StandardDisplay before the canvas existed, and each
+  // implementation keeps its own GFX text state, so they do not carry across.
+  // Without this the degree ring (0xF8) renders as the stray dot at 0xF9 -- but
+  // only on the buffered path, which is a miserable bug to chase.
+  display.cp437(true);
+
   tempReader = new TempReader();
   tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
@@ -1056,14 +1117,14 @@ static void initializeSystem()
 
       wheels->setTireTemps(fl, fr, rl, rr);
   //wheels->setTireTemps(0, 0, 0, 0);
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
 
     activateTires();
 
 
   wheels->draw(true);
-  //tft.fillScreen(ST77XX_BLACK);
+  //display.fillScreen(ST77XX_BLACK);
   forceDrawAfterInit = 2;
 }
 

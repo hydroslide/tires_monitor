@@ -2,7 +2,7 @@
 #define IMU_GATE_BAR_H
 
 #include <Arduino.h>
-#include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 
 // On-screen lateral-g test bar for the IMU capture gate (#20).
 //
@@ -28,7 +28,7 @@
 // Paint the bar. Call once per loop pass while the running display owns the screen; the
 // function is cheap when nothing has moved. Suppress while the menu or the full-screen
 // summary is up -- they own the whole panel.
-void drawImuGateBar(Adafruit_ST7789& d);
+void drawImuGateBar(DisplayBase& d);
 
 // Force a full repaint on the next drawImuGateBar() call. The bar's gutter sits inside
 // the clear rect ThreeSectionTire uses (x-bufferPix .. y+height+bufferPix), so any tire

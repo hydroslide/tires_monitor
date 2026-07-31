@@ -12,8 +12,8 @@ extern uint8_t getTemperatureScaleValue();
 // The session manager lives in the sketch; View Summary recalls its last summary.
 extern SessionManager sessionManager;
 
-MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
-: menu(menuSystem), display(tft)
+MenuRenderer::MenuRenderer(MenuSystem &menuSystem, DisplayBase &display)
+: menu(menuSystem), display(display)
 {
     state.dropdownOpen = false;
     state.numericEditing = false;
@@ -29,7 +29,17 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
     statusMessage[0] = '\0';
 }
 
+// F1. Composing and flushing are split because renderFrame() has three early returns
+// (summary / balance / name-entry sub-screens), each of which owns the whole screen. A
+// single drawScreen() at the end of the compose function -- which is where March put it,
+// on a tree that had none of those sub-screens -- would never run for them, so on the
+// buffered path they would compose into the canvas and never reach the glass.
 void MenuRenderer::render() {
+    renderFrame();
+    display.drawScreen();
+}
+
+void MenuRenderer::renderFrame() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
 
@@ -471,7 +481,7 @@ void MenuRenderer::exitBalance() {
 
 // Draw one balance row: label, the pair "<a> / <b> <unit>", then the signed delta and
 // the plain-language bias hint on the next line.
-static void drawBalanceRow(Adafruit_ST7789& d, int16_t y, const char* label,
+static void drawBalanceRow(DisplayBase& d, int16_t y, const char* label,
                            float a, float b, float delta, const char* hint, char unit) {
     d.setTextSize(2);
     d.setTextColor(ST77XX_WHITE);

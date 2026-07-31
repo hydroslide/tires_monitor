@@ -1,5 +1,6 @@
 #include "Wheels.h"
-extern Adafruit_ST7789 tft;  // your global display
+#include "DisplayBase.h"
+extern DisplayBase& display;
 
 Wheels::Wheels(int _bufferPix,
                uint16_t _outlineColor,
@@ -22,8 +23,8 @@ Wheels::Wheels(int _bufferPix,
     lowTempTextColor(_lowTempTextColor), normalTempTextColor(_normalTempTextColor),
     idealTempTextColor(_idealTempTextColor), highTempTextColor(_highTempTextColor)
 {
-    int tireW  = (tft.width()  - bufferPix*3) / 2;
-    int tireH  = (tft.height() - bufferPix*3) / 2;
+    int tireW  = (display.width()  - bufferPix*3) / 2;
+    int tireH  = (display.height() - bufferPix*3) / 2;
     int x0 = bufferPix, x1 = x0 + tireW + bufferPix;
     int y0 = bufferPix, y1 = y0 + tireH + bufferPix;
 

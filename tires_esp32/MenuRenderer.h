@@ -2,8 +2,8 @@
 #define MENU_RENDERER_H
 
 #include <Arduino.h>
+#include "DisplayBase.h"
 #include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
 #include "MenuSystem.h"
 
 
@@ -27,9 +27,9 @@ struct MenuRenderState {
 
 class MenuRenderer {
 public:
-    MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft);
+    MenuRenderer(MenuSystem &menuSystem, DisplayBase &display);
 
-    // Renders the current menu
+    // Renders the current menu and pushes the result to the screen.
     void render();
 
     // Access to the render state
@@ -71,8 +71,13 @@ public:
     void summaryPageStep(int dir);
 
 private:
+    // Composes the current menu into the display without flushing. Split out of render()
+    // so its three early returns (summary / balance / name-entry) still get a flush --
+    // see the note above render()'s definition.
+    void renderFrame();
+
     MenuSystem &menu;
-    Adafruit_ST7789 &display;
+    DisplayBase &display;
     MenuRenderState state;
 
     byte textSize=2;
