@@ -13,9 +13,12 @@ int16_t StandardDisplay::height() { return tft.height(); }
 // --- Screen/rect drawing ---
 void StandardDisplay::fillScreen(uint16_t color) { tft.fillScreen(color); }
 void StandardDisplay::fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) { tft.fillRect(x, y, w, h, color); }
+void StandardDisplay::drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) { tft.drawRect(x, y, w, h, color); }
 void StandardDisplay::fillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t radius, uint16_t color) { tft.fillRoundRect(x, y, w, h, radius, color); }
 void StandardDisplay::drawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t radius, uint16_t color) { tft.drawRoundRect(x, y, w, h, radius, color); }
+void StandardDisplay::fillCircle(int16_t x, int16_t y, int16_t r, uint16_t color) { tft.fillCircle(x, y, r, color); }
 void StandardDisplay::drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) { tft.drawFastVLine(x, y, h, color); }
+void StandardDisplay::drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) { tft.drawFastHLine(x, y, w, color); }
 
 // --- Text ---
 void StandardDisplay::setCursor(int16_t x, int16_t y) { tft.setCursor(x, y); }
@@ -23,6 +26,8 @@ void StandardDisplay::setTextColor(uint16_t color) { tft.setTextColor(color); }
 void StandardDisplay::setTextColor(uint16_t color, uint16_t bg) { tft.setTextColor(color, bg); }
 void StandardDisplay::setTextSize(uint8_t size) { tft.setTextSize(size); }
 void StandardDisplay::setFont(const GFXfont *f) { tft.setFont(f); }
+void StandardDisplay::setTextWrap(bool w) { tft.setTextWrap(w); }
+void StandardDisplay::cp437(bool x) { tft.cp437(x); }
 void StandardDisplay::getTextBounds(const char *str, int16_t x, int16_t y, int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h) { tft.getTextBounds(str, x, y, x1, y1, w, h); }
 void StandardDisplay::getTextBounds(const String &str, int16_t x, int16_t y, int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h) { tft.getTextBounds(str, x, y, x1, y1, w, h); }
 

@@ -19,11 +19,14 @@ public:
     // --- Screen/rect drawing ---
     void fillScreen(uint16_t color) override { _impl->fillScreen(color); }
     void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) override { _impl->fillRect(x, y, w, h, color); }
+    void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) override { _impl->drawRect(x, y, w, h, color); }
     void fillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h,
                        int16_t radius, uint16_t color) override { _impl->fillRoundRect(x, y, w, h, radius, color); }
     void drawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h,
                        int16_t radius, uint16_t color) override { _impl->drawRoundRect(x, y, w, h, radius, color); }
+    void fillCircle(int16_t x, int16_t y, int16_t r, uint16_t color) override { _impl->fillCircle(x, y, r, color); }
     void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) override { _impl->drawFastVLine(x, y, h, color); }
+    void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) override { _impl->drawFastHLine(x, y, w, color); }
 
     // --- Text ---
     void setCursor(int16_t x, int16_t y) override { _impl->setCursor(x, y); }
@@ -31,6 +34,8 @@ public:
     void setTextColor(uint16_t color, uint16_t bg) override { _impl->setTextColor(color, bg); }
     void setTextSize(uint8_t size) override { _impl->setTextSize(size); }
     void setFont(const GFXfont *f) override { _impl->setFont(f); }
+    void setTextWrap(bool w) override { _impl->setTextWrap(w); }
+    void cp437(bool x) override { _impl->cp437(x); }
     void getTextBounds(const char *str, int16_t x, int16_t y,
                        int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h) override { _impl->getTextBounds(str, x, y, x1, y1, w, h); }
     void getTextBounds(const String &str, int16_t x, int16_t y,

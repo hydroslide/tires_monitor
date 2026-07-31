@@ -982,9 +982,29 @@ static void initializeSystem()
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
-  // Switch display implementation based on Test toggle
+  // Switch display implementation based on Test toggle.
+  //
+  // STAGED (#28): tying the buffer to Test is temporary, so the buffered and direct
+  // paths can be A/B'd on the car by eye before the buffer becomes the default.
+  // Phase 2 decouples them and restores Test's documented meaning.
+  //
+  // begin() is where the 134 KB canvas is actually allocated -- deferred out of
+  // static init so it lands in PSRAM rather than internal DRAM, and so it costs
+  // nothing at all when Test is off. If it fails we say so and stay on the direct
+  // path rather than running with a display that silently draws nothing.
   bool useBuffered = getTestEnabled();
+  if (useBuffered && !bufferedDisplay.begin()) {
+    USBSerial.println("BufferedDisplay unavailable -- falling back to direct draw");
+    useBuffered = false;
+  }
   displayProxy.setImplementation(useBuffered ? (DisplayBase*)&bufferedDisplay : (DisplayBase*)&standardDisplay);
+
+  // Re-assert the text defaults on whichever implementation just became active.
+  // setup() set these on StandardDisplay before the canvas existed, and each
+  // implementation keeps its own GFX text state, so they do not carry across.
+  // Without this the degree ring (0xF8) renders as the stray dot at 0xF9 -- but
+  // only on the buffered path, which is a miserable bug to chase.
+  display.cp437(true);
 
   tempReader = new TempReader();
   tempReader->useFarenheit = (scaleVal == 0);
