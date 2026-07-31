@@ -27,9 +27,9 @@ struct MenuRenderState {
 
 class MenuRenderer {
 public:
-    MenuRenderer(MenuSystem &menuSystem, DisplayBase &tft);
+    MenuRenderer(MenuSystem &menuSystem, DisplayBase &display);
 
-    // Renders the current menu
+    // Renders the current menu and pushes the result to the screen.
     void render();
 
     // Access to the render state
@@ -71,6 +71,11 @@ public:
     void summaryPageStep(int dir);
 
 private:
+    // Composes the current menu into the display without flushing. Split out of render()
+    // so its three early returns (summary / balance / name-entry) still get a flush --
+    // see the note above render()'s definition.
+    void renderFrame();
+
     MenuSystem &menu;
     DisplayBase &display;
     MenuRenderState state;

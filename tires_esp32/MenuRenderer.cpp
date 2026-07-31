@@ -29,7 +29,17 @@ MenuRenderer::MenuRenderer(MenuSystem &menuSystem, DisplayBase &display)
     statusMessage[0] = '\0';
 }
 
+// F1. Composing and flushing are split because renderFrame() has three early returns
+// (summary / balance / name-entry sub-screens), each of which owns the whole screen. A
+// single drawScreen() at the end of the compose function -- which is where March put it,
+// on a tree that had none of those sub-screens -- would never run for them, so on the
+// buffered path they would compose into the canvas and never reach the glass.
 void MenuRenderer::render() {
+    renderFrame();
+    display.drawScreen();
+}
+
+void MenuRenderer::renderFrame() {
     // Clear the screen
     display.fillScreen(ST77XX_BLACK);
 
@@ -104,8 +114,6 @@ void MenuRenderer::render() {
 
     // Reserved bottom strip for transient status messages ("Saved", etc.).
     drawStatusStrip();
-
-    display.drawScreen();
 }
 
 void MenuRenderer::setStatusMessage(const char* msg, uint16_t ms) {

@@ -489,8 +489,15 @@ void doRunningMode(int time_delta)
       wifiSerial.loop();
     }
 
+    // Overlays last, so they sit on top of the tire map and the camera quadrants, and --
+    // critically -- so they are in the canvas before the flush below. Moved here out of
+    // loop() (#28); see the note at that call site. Both read state that only changes on
+    // this read cadence, so sampling them at 10 Hz rather than loop rate costs nothing:
+    // the g bar follows imuGate, and the badge is a 500 ms blink.
+    drawSessionFeedback();
+    drawImuGateBar(display);
 
-
+    // F5: the running display's frame is complete. 10 Hz, unchanged from March.
     // Flush buffered display to screen (no-op for StandardDisplay)
     display.drawScreen();
   }
@@ -599,6 +606,12 @@ void setup()
   // months later without external notes.
   if (!testMode) sendBootMetadata();
 
+  // F2: the boot paint happens here, outside loop(). loop() then returns early for its
+  // first 2 seconds (the firstRun USB grace period), so without this flush the buffered
+  // path would sit black for 2 s while the direct path came up instantly -- which reads
+  // as a bug when comparing the two.
+  display.drawScreen();
+
   USBSerial.println("Bottom of ESP32 Tires Setup");
 }
 
@@ -691,6 +704,10 @@ static void doOffsetSetupMode(int time_delta){
 
   tempReader->readTemps();
   for (int i = 0; i < TIRE_COUNT; i++) thermalDisplays[i]->updateDisplay(i);
+
+  // F3: this mode owns the screen and did not exist in March, so without its own flush
+  // the buffered path would show whatever was on the glass when it was entered.
+  display.drawScreen();
 }
 
 // Leave the full-screen summary and restore the running display.
@@ -877,11 +894,18 @@ void loop() {
         if (summaryAutoDirty){
           SessionManager::renderSummary(display, sessionManager.summary(), summaryAutoPage);
           summaryAutoDirty = false;
+          display.drawScreen();   // F4: edge-triggered, so it must flush its own frame
         }
       } else {
+        // drawSessionFeedback() and drawImuGateBar() used to be called here, after
+        // doRunningMode() returned -- i.e. after its flush. Once per second the 1 Hz block
+        // repaints the tire map, which wipes the badge footprint and the g bar's gutter
+        // (ThreeSectionTire's clear rect is inflated by bufferPix on every side), and the
+        // flush then pushed a frame with both of them missing. They were re-asserted only
+        // on the following pass, after the glass had already updated -- a ~100 ms dropout
+        // of the g bar and session badge, every second. They now run inside
+        // doRunningMode(), immediately before the flush, so they land in the same frame.
         doRunningMode(time_delta);
-        drawSessionFeedback();
-        drawImuGateBar(display);
       }
     }
   } else {
