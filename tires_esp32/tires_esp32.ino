@@ -1031,6 +1031,7 @@ static void initializeSystem()
   display.cp437(true);
 
   tempReader = new TempReader();
+  tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
 
   // Calculated (surface->carcass) mode is available in BOTH modes (#16): the Display
