@@ -223,14 +223,19 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
         char buf[8];
 
         if (!rectsDrawn && !textOnly){
-          // Redraw the last temp with background color
-          display.setTextColor(sectionFillColors[i], sectionFillColors[i]);
-          printTemp(lastTemps[i], i, bandW, textOnly);
+          // Erase the previous reading by repainting it in the band fill colour. The
+          // shadow has to be erased too, at the same +2/+2 offset it was drawn at --
+          // otherwise every reading that changes without crossing a colour threshold
+          // (the common case at 1 Hz) leaves black specks trailing the old digits.
+          //
+          // Repainting is the only way to erase here: FreeMonoBold18pt7b is a GFXfont,
+          // and Adafruit_GFX::drawChar ignores the background colour for custom fonts --
+          // it draws set pixels only. There is no opaque-background shortcut available.
+          printTemp(lastTemps[i], i, bandW, sectionFillColors[i], sectionFillColors[i], true);
         }
 
-        uint16_t textColor = sectionTextColors[i];//(textOnly) ? ST77XX_BLACK : sectionTextColors[i];
-        display.setTextColor(textColor, sectionFillColors[i]);
-        String tempString = printTemp(sectionTemps[i], i, bandW, true);
+        String tempString = printTemp(sectionTemps[i], i, bandW,
+                                      sectionTextColors[i], ST77XX_BLACK, true);
 
         lastTemps[i] = sectionTemps[i];
       }     
@@ -300,7 +305,15 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
   //USBSerial.println("");
 }
 
-String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline){
+// Draw one band's reading, optionally with a drop shadow offset +2/+2.
+//
+// Colours are explicit parameters rather than pre-set by the caller, because this is used
+// both to draw a reading and to erase the previous one, and the erase pass needs the shadow
+// painted in the band fill colour while the draw pass needs it black. The older shape --
+// caller calls setTextColor(), this function overrides it inside the shadow branch -- could
+// not express the erase case at all.
+String ThreeSectionTire::printTemp(int temp, int i, int bandW,
+                                   uint16_t glyphColor, uint16_t shadowColor, bool drawShadow){
       
     String tempString = String(temp) ;//+ (char)0xF7 + tempUnit;
     uint16_t textWidth, textHeight;    
@@ -329,15 +342,13 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int yMod = (i==0 || i==2)? ((textHeight+extraYBuffer)*yDir):0;
     int startY = (y + ((height+textHeight) / 2))+yMod;// - (textHeight / 2);
 
-    if (drawOutline){
-      
-      display.setTextColor(ST77XX_BLACK, sectionFillColors[i]);
-      //display.setTextColor(sectionFillColors[i], sectionFillColors[i]);
+    if (drawShadow){
+      display.setTextColor(shadowColor, sectionFillColors[i]);
       display.setCursor(startX+2, startY+2);
       display.println(tempString);
-      display.setTextColor(sectionTextColors[i], sectionFillColors[i]);
     }
 
+    display.setTextColor(glyphColor, sectionFillColors[i]);
     display.setCursor(startX, startY);
     display.println(tempString);
     return tempString;

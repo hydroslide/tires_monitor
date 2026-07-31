@@ -113,7 +113,11 @@ private:
     bool anySectionColorChanged();
 
 
-    String printTemp(int temp, int i, int bandW, bool drawOutline = false);
+    // Draw one band's reading, optionally with a drop shadow. Also used to ERASE the
+    // previous reading, by passing the band fill colour for both glyph and shadow --
+    // hence the explicit colours and no defaults. See the definition.
+    String printTemp(int temp, int i, int bandW,
+                     uint16_t glyphColor, uint16_t shadowColor, bool drawShadow);
 
     // Helper: classify one section’s color/text from temp + thresholds
     void classifyOne(int idx, float tempC,
