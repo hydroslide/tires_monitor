@@ -2,7 +2,7 @@
 #include "ThermalDisplay.h"
 #include <Arduino.h>
 
-QuadrantFactory::QuadrantFactory(Adafruit_ST7789 &displayTFT, int margin)
+QuadrantFactory::QuadrantFactory(DisplayBase &displayTFT, int margin)
   : tft(displayTFT), margin(margin)
 {
     // Nothing else to do here

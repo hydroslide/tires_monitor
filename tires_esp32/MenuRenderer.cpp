@@ -12,8 +12,8 @@ extern uint8_t getTemperatureScaleValue();
 // The session manager lives in the sketch; View Summary recalls its last summary.
 extern SessionManager sessionManager;
 
-MenuRenderer::MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft)
-: menu(menuSystem), display(tft)
+MenuRenderer::MenuRenderer(MenuSystem &menuSystem, DisplayBase &display)
+: menu(menuSystem), display(display)
 {
     state.dropdownOpen = false;
     state.numericEditing = false;
@@ -104,6 +104,8 @@ void MenuRenderer::render() {
 
     // Reserved bottom strip for transient status messages ("Saved", etc.).
     drawStatusStrip();
+
+    display.drawScreen();
 }
 
 void MenuRenderer::setStatusMessage(const char* msg, uint16_t ms) {

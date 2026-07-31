@@ -62,10 +62,10 @@ int      ThermalDisplay::lenHot;
 uint16_t* ThermalDisplay::framebuf = nullptr;
 TempReader* ThermalDisplay::tempReader = nullptr;
 
-ThermalDisplay::ThermalDisplay(Adafruit_ST7789 &displayTFT,
+ThermalDisplay::ThermalDisplay(DisplayBase &displayTFT,
                                int areaX, int areaY,
                                int areaW, int areaH)
-  : tft(displayTFT),
+  : display(displayTFT),
     areaX(areaX), areaY(areaY), areaW(areaW), areaH(areaH)
 {
     if (!framebuf){
@@ -452,11 +452,8 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
         }
     }
 
-    // Push the entire buffer to ST7789 at (areaX, areaY)
-    tft.startWrite();
-    tft.setAddrWindow(areaX, areaY, areaW, areaH);
-    tft.writePixels(framebuf, areaW * areaH);
-    tft.endWrite();
+    // Push the entire buffer to display at (areaX, areaY)
+    display.pushPixels(areaX, areaY, areaW, areaH, framebuf, areaW * areaH);
 
     if (showPixelOffsets)
         drawPixelOffsets(_tempIndex);
@@ -525,11 +522,8 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
         }
     }
 
-    // Push the entire buffer to ST7789 at (areaX, areaY)
-    tft.startWrite();
-    tft.setAddrWindow(areaX, areaY, areaW, areaH);
-    tft.writePixels(framebuf, areaW * areaH);
-    tft.endWrite();
+    // Push the entire buffer to display at (areaX, areaY)
+    display.pushPixels(areaX, areaY, areaW, areaH, framebuf, areaW * areaH);
 
     // When not stretching (i.e., showPixelOffsets == true, or offset setup owns the screen),
     // draw the guide lines on top.
@@ -586,6 +580,6 @@ void ThermalDisplay::drawOffsetGuide(int x, bool armed){
     const int half = armed ? 1 : 0;
     for (int gx = x - half; gx <= x + half; gx++){
         if (gx >= lo && gx <= hi)
-            tft.drawFastVLine(gx, areaY, areaH, OFFSET_LINE_COLOR);
+            display.drawFastVLine(gx, areaY, areaH, OFFSET_LINE_COLOR);
     }
 }

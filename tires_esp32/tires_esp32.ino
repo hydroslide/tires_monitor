@@ -28,6 +28,10 @@
 #include "QuadrantFactory.h"
 #include "ThermalDisplay.h"
 #include "OffsetSetup.h"        // Interactive camera crop-offset mode (#23)
+#include "DisplayBase.h"
+#include "StandardDisplay.h"
+#include "BufferedDisplay.h"
+#include "DisplayProxy.h"
 
 #define WIFI_SSID "TireTempMonitor"
 #define WIFI_PASSWORD "esp32"
@@ -46,6 +50,10 @@ bool enableThermalTemps = false;
 HWCDC USBSerial;
 SPIClass hspi(HSPI);
 Adafruit_ST7789 tft = Adafruit_ST7789(&hspi, LCD_CS, LCD_DC, LCD_RST);
+StandardDisplay standardDisplay(tft);
+BufferedDisplay bufferedDisplay(tft);
+DisplayProxy displayProxy;
+DisplayBase& display = displayProxy;
 
 // WifiSerial instance
 WifiSerial wifiSerial;
@@ -85,7 +93,7 @@ static void armSwipeLock(){ swipeLockSetMs = millis(); }
 static bool sessionSwipeLocked(){ return (millis() - swipeLockSetMs) < SWIPE_LOCK_MS; }
 
 // ... after initializing tft in setup() ...
-QuadrantFactory factory(tft, /*margin=*/ 5);
+QuadrantFactory factory(display, /*margin=*/ 5);
 
 // // To create the upper-left ThermalDisplay:
 ThermalDisplay* UL = factory.createDisplay(/*top=*/ true, /*left=*/ true);
@@ -124,7 +132,8 @@ long timeDelta()
   MenuSystem &menuSystem = getTireMenuSystem();
 
   // 3) Create MenuRenderer
-  MenuRenderer menuRenderer(menuSystem, tft);
+  MenuRenderer menuRenderer(menuSystem, display);
+  //MenuRenderer menuRenderer(menuSystem, standardDisplay)
 
   // 4) Create TouchMenuHandler
   TouchMenuHandler menuHandler(menuSystem, menuRenderer, cstTouch);
@@ -249,7 +258,7 @@ static void applyThermalActivation(){
 void setThermalMode(uint8_t _thermalMode){
   thermalMode = _thermalMode;
   applyThermalActivation();
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
   activateTires();
   if (!(enableThermalTemps && thermalMode ==2))
@@ -425,7 +434,7 @@ void doRunningMode(int time_delta)
       }
 
       if (forceDrawAfterInit>0){
-          tft.fillScreen(ST77XX_BLACK);
+          display.fillScreen(ST77XX_BLACK);
           wheels->draw(true);
           forceDrawAfterInit--;
       }else if (enableThermalTemps && thermalMode == 2)
@@ -482,11 +491,8 @@ void doRunningMode(int time_delta)
 
 
 
-    // for (int i=0; i>TempReader::TIRE_COUNT; i++){
-      
-    // }
-    // if (tempReader->tireSensorIsCamera[0])
-    //   UR->updateDisplay(tempReader->tire_frames[0]);
+    // Flush buffered display to screen (no-op for StandardDisplay)
+    display.drawScreen();
   }
 
 
@@ -515,19 +521,26 @@ void setup()
   nbp.sendMetadata("NAME", "Tire Temp Reader");
   nbp.sendMetadata("VERSION", "0.1");
 
+  // Set default display implementation
+  displayProxy.setImplementation(&standardDisplay);
+
   // SPI + TFT
   hspi.begin(LCD_SCK, -1, LCD_MOSI, LCD_CS);
   //tft.setSPISpeed(80000000);
   // Slow down SPI to 40MHz (more stable than 80MHz)
-  tft.setSPISpeed(40000000);
-  tft.init(240, 280, SPI_MODE0);
+  display.setSPISpeed(40000000);
+  display.init(240, 280, SPI_MODE0);
   // Use the real CP437 charset (#17). Adafruit_GFX otherwise applies a legacy shift --
   // `if (!_cp437 && (c >= 176)) c++` -- which would silently render the degree ring
   // (0xF8) as the stray dot at 0xF9. Only affects chars >= 176; all our strings are
-  // ASCII, so nothing else changes. MenuRenderer references this same tft.
-  tft.cp437(true);
-  tft.setRotation(3);
-  tft.fillScreen(ST77XX_BLACK);
+  // ASCII, so nothing else changes. MenuRenderer references this same display.
+  //
+  // Re-asserted in initializeSystem() after the implementation is chosen: this call lands
+  // on whichever impl is active NOW (StandardDisplay), and the buffered canvas does not
+  // exist yet, so it would otherwise never receive the flag.
+  display.cp437(true);
+  display.setRotation(3);
+  display.fillScreen(ST77XX_BLACK);
 
   // I2C for touch
   Wire.setPins(IIC_SDA, IIC_SCL);
@@ -927,7 +940,7 @@ static void initializeSystem()
   highFrequencyUpdates = getHighFrequencyUpdates();
   USBSerial.println((highFrequencyUpdates)? "highFrequencyUpdates Enabled": "highFrequencyUpdates Disabled");
 
-  enableThermalTemps = getTestEnabled();
+  enableThermalTemps = true;  // hardcoded — Test toggle is used for BufferedDisplay switching
   if (enableThermalTemps)
     THERMAL_MODES = 3;
   else
@@ -969,8 +982,11 @@ static void initializeSystem()
 
   char tempUnit = (scaleVal == 0) ? 'F' : 'C';
 
+  // Switch display implementation based on Test toggle
+  bool useBuffered = getTestEnabled();
+  displayProxy.setImplementation(useBuffered ? (DisplayBase*)&bufferedDisplay : (DisplayBase*)&standardDisplay);
+
   tempReader = new TempReader();
-  tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
 
   // Calculated (surface->carcass) mode is available in BOTH modes (#16): the Display
@@ -1009,7 +1025,7 @@ static void initializeSystem()
 
       wheels->setTireTemps(fl, fr, rl, rr);
   //wheels->setTireTemps(0, 0, 0, 0);
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
 
     activateTires();

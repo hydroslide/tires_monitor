@@ -2,8 +2,9 @@
 #define MENU_RENDERER_H
 
 #include <Arduino.h>
-#include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
+#include <Adafruit_GFX.h>
+#include "DisplayBase.h"
 #include "MenuSystem.h"
 
 
@@ -27,7 +28,7 @@ struct MenuRenderState {
 
 class MenuRenderer {
 public:
-    MenuRenderer(MenuSystem &menuSystem, Adafruit_ST7789 &tft);
+    MenuRenderer(MenuSystem &menuSystem, DisplayBase &tft);
 
     // Renders the current menu
     void render();
@@ -72,7 +73,7 @@ public:
 
 private:
     MenuSystem &menu;
-    Adafruit_ST7789 &display;
+    DisplayBase &display;
     MenuRenderState state;
 
     byte textSize=2;
