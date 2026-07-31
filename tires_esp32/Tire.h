@@ -1,9 +1,8 @@
 #ifndef TIRE_H
 #define TIRE_H
 
-#include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 #include <Adafruit_GFX.h>
-class DisplayBase;
 
 class Tire {
 

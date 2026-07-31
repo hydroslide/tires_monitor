@@ -640,7 +640,7 @@ static void beginOffsetSetup(){
   // The left swipe is half of the nudge pair here, so it must stop meaning "open the menu".
   menuHandler.suspendMenu(true);
 
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
 
   // Edit the ACTIVE profile -- the same slot the numeric Offsets fields target -- so the
@@ -683,7 +683,7 @@ static void checkOffsetSetupSwipes(){
 
 static void doOffsetSetupMode(int time_delta){
   // Advance the blink phase first so the guides drawn below are in step with the border.
-  OffsetSetup::service(tft);
+  OffsetSetup::service(display);
 
   millisSinceLastRead += time_delta;
   if (millisSinceLastRead < readIntervalMillis) return;
@@ -696,7 +696,7 @@ static void doOffsetSetupMode(int time_delta){
 // Leave the full-screen summary and restore the running display.
 static void exitSummaryAutoView(){
   summaryAutoView = false;
-  tft.fillScreen(ST77XX_BLACK);
+  display.fillScreen(ST77XX_BLACK);
   imuGateBarInvalidate();
   activateTires();
   wheels->draw(true);
@@ -745,7 +745,7 @@ static void serviceFeedback(){
   if (fbState == FB_START){
     if (dt >= FB_MS){
       fbState = FB_NONE;              // clear the recording dot
-      tft.fillScreen(ST77XX_BLACK);
+      display.fillScreen(ST77XX_BLACK);
       imuGateBarInvalidate();
       activateTires();
       wheels->draw(true);
@@ -793,14 +793,14 @@ static void drawSessionFeedback(){
 
   if (fbState == FB_START){
     // Recording dot: the circle itself blinks red -> black -> red within its own footprint.
-    tft.fillCircle(FB_CX, FB_CY, FB_R, dark ? ST77XX_BLACK : ST77XX_RED);
+    display.fillCircle(FB_CX, FB_CY, FB_R, dark ? ST77XX_BLACK : ST77XX_RED);
   } else { // FB_END
     // Stop badge: a steady black square whose 2 px white outline pulses on/off, so it reads
     // on black at a glance without the fill flickering.
-    tft.fillRect(x, y, s, s, ST77XX_BLACK);
+    display.fillRect(x, y, s, s, ST77XX_BLACK);
     if (!dark){
-      tft.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
-      tft.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
+      display.drawRect(x,     y,     s,     s,     ST77XX_WHITE);
+      display.drawRect(x + 1, y + 1, s - 2, s - 2, ST77XX_WHITE);
     }
   }
 }
@@ -875,13 +875,13 @@ void loop() {
       if (summaryAutoView){
         // Full-screen sealed summary owns the display; repaint only on page change.
         if (summaryAutoDirty){
-          SessionManager::renderSummary(tft, sessionManager.summary(), summaryAutoPage);
+          SessionManager::renderSummary(display, sessionManager.summary(), summaryAutoPage);
           summaryAutoDirty = false;
         }
       } else {
         doRunningMode(time_delta);
         drawSessionFeedback();
-        drawImuGateBar(tft);
+        drawImuGateBar(display);
       }
     }
   } else {
@@ -1052,7 +1052,7 @@ static void initializeSystem()
 
 
   wheels->draw(true);
-  //tft.fillScreen(ST77XX_BLACK);
+  //display.fillScreen(ST77XX_BLACK);
   forceDrawAfterInit = 2;
 }
 

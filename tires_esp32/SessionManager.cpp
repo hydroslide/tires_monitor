@@ -221,14 +221,14 @@ bool SessionManager::pollAutoSeal(long dtMillis, bool enabled, bool still) {
 // --- Full-screen summary renderer --------------------------------------------------
 // Screen is 280 wide x 240 tall (rotation 3), same frame the menu/balance views use.
 
-static void drawWindowBar(Adafruit_ST7789& d, int16_t x, int16_t y,
+static void drawWindowBar(DisplayBase& d, int16_t x, int16_t y,
                           int16_t w, int16_t h, uint8_t pct) {
     d.drawRect(x, y, w, h, ST77XX_WHITE);
     int16_t fillW = (int16_t)(((int32_t)(w - 2) * (int32_t)pct) / 100);
     if (fillW > 0) d.fillRect(x + 1, y + 1, fillW, h - 2, ST77XX_GREEN);
 }
 
-static void drawCorner(Adafruit_ST7789& d, int16_t x0, int16_t y0,
+static void drawCorner(DisplayBase& d, int16_t x0, int16_t y0,
                        const char* label, const SessionSummary& s, int i) {
     d.setFont(nullptr);
     d.setTextSize(1);
@@ -275,7 +275,7 @@ static void drawCorner(Adafruit_ST7789& d, int16_t x0, int16_t y0,
     }
 }
 
-void SessionManager::renderSummary(Adafruit_ST7789& d, const SessionSummary& s, int page) {
+void SessionManager::renderSummary(DisplayBase& d, const SessionSummary& s, int page) {
     d.fillScreen(ST77XX_BLACK);
     d.setFont(nullptr);
 

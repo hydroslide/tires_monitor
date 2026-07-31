@@ -2,7 +2,6 @@
 #define THERMALDISPLAY_H
 
 #include <Arduino.h>
-#include <Adafruit_ST7789.h>
 #include "DisplayBase.h"
 #include <Arduino_GFX_Library.h>
 #include "TempReader.h"
@@ -17,7 +16,7 @@
  * of a ST7789 display.
  *
  * Constructor parameters:
- *  - displayTFT: reference to an initialized Adafruit_ST7789 object
+ *  - displayTFT: reference to an initialized DisplayBase object
  *  - areaX, areaY: upper‐left corner (in pixels) of the region on the 280×240 screen
  *  - areaW, areaH: width and height (in pixels) of the region to update (e.g. 240×180)
  *
@@ -123,7 +122,7 @@ public:
     /**
      * Constructor
      *
-     * @param displayTFT   Reference to an already-initialized Adafruit_ST7789 instance
+     * @param displayTFT   Reference to an already-initialized DisplayBase instance
      * @param areaX        X coordinate of upper-left corner of update region
      * @param areaY        Y coordinate of upper-left corner of update region
      * @param areaW        Width (in pixels) of update region (e.g. 240)

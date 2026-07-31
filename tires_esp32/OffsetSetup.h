@@ -2,7 +2,7 @@
 #define OFFSET_SETUP_H
 
 #include <Arduino.h>
-#include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 
 class TempReader;
 
@@ -67,7 +67,7 @@ void handleSwipe(Swipe swipe);
 // Per-frame: advance the blink phase and repaint the confirm border when -- and only when --
 // it changed. Call BEFORE the camera quadrants are repainted so the armed guide blinks in
 // step with the border.
-void service(Adafruit_ST7789& tft);
+void service(DisplayBase& display);
 
 }  // namespace OffsetSetup
 

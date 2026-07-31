@@ -547,7 +547,7 @@ static MenuItem tireProfilesMenu[] = {
     { "Ideal",     MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowIdealBinding},
     { "Max",       MENU_VALUE,  nullptr,        nullptr, 0, &profileWindowMaxBinding  },
     // Display names only (#17) -- the fields stay offsetK / tauSeconds in code. "\xF8" is
-    // the CP437 degree ring; tft.cp437(true) in setup() makes it render literally.
+    // the CP437 degree ring; display.cp437(true) in setup() makes it render literally.
     { "Carcass Offset \xF8", MENU_VALUE, nullptr, nullptr, 0, &profileOffsetKBinding   },
     { "Carcass Lag s", MENU_VALUE,  nullptr,        nullptr, 0, &profileTauBinding     },
     { "Offsets",   MENU_SUBMENU, nullptr, profileOffsetsMenu, sizeof(profileOffsetsMenu)/sizeof(MenuItem), nullptr },

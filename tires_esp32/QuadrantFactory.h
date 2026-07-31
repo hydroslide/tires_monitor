@@ -2,7 +2,6 @@
 #define QUADRANTFACTORY_H
 
 #include <Arduino.h>
-#include <Adafruit_ST7789.h>
 #include "DisplayBase.h"
 #include "ThermalDisplay.h"
 
@@ -27,7 +26,7 @@ public:
     /**
      * Constructor
      *
-     * @param displayTFT  Reference to the initialized 280×240 Adafruit_ST7789
+     * @param displayTFT  Reference to the initialized 280×240 DisplayBase
      * @param margin      Margin (in pixels) to leave on all four sides inside each quadrant
      */
     QuadrantFactory(DisplayBase &displayTFT, int margin);

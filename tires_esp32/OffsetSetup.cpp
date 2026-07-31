@@ -52,9 +52,9 @@ const int16_t SCREEN_W  = 280;
 const int16_t SCREEN_H  = 240;
 const int16_t BORDER_PX = 3;
 
-void paintBorder(Adafruit_ST7789& tft, uint16_t color) {
+void paintBorder(DisplayBase& display, uint16_t color) {
     for (int16_t i = 0; i < BORDER_PX; i++)
-        tft.drawRect(i, i, SCREEN_W - 2 * i, SCREEN_H - 2 * i, color);
+        display.drawRect(i, i, SCREEN_W - 2 * i, SCREEN_H - 2 * i, color);
 }
 
 // Push a corner's pair into the live TempReader. ThermalDisplay reads its guides from there,
@@ -194,7 +194,7 @@ void handleSwipe(Swipe swipe) {
     syncArmed();
 }
 
-void service(Adafruit_ST7789& tft) {
+void service(DisplayBase& display) {
     if (!active) return;
 
     const bool lit = ((millis() / PULSE_MS) & 1UL) == 0;
@@ -207,7 +207,7 @@ void service(Adafruit_ST7789& tft) {
     if (want != borderLit || stage != borderStage) {
         uint16_t color = ST77XX_BLACK;
         if (want) color = (stage == STAGE_CONFIRM_SAVE) ? ST77XX_GREEN : ST77XX_RED;
-        paintBorder(tft, color);
+        paintBorder(display, color);
         borderLit   = want;
         borderStage = stage;
     }

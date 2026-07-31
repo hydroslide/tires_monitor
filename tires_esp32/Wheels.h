@@ -1,9 +1,8 @@
 #ifndef WHEELS_H
 #define WHEELS_H
 
-#include <Adafruit_ST7789.h>
-#include <Adafruit_GFX.h>
 #include "DisplayBase.h"
+#include <Adafruit_GFX.h>
 #include "Tire.h"
 #define PURPLE 0xE01F
 #define DARK_GREEN 	0x06A0//0x06E0//0x0680 //0x05E0

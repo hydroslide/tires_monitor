@@ -473,7 +473,7 @@ void MenuRenderer::exitBalance() {
 
 // Draw one balance row: label, the pair "<a> / <b> <unit>", then the signed delta and
 // the plain-language bias hint on the next line.
-static void drawBalanceRow(Adafruit_ST7789& d, int16_t y, const char* label,
+static void drawBalanceRow(DisplayBase& d, int16_t y, const char* label,
                            float a, float b, float delta, const char* hint, char unit) {
     d.setTextSize(2);
     d.setTextColor(ST77XX_WHITE);
