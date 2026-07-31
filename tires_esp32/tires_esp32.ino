@@ -154,6 +154,12 @@ static void checkOffsetSetupSwipes();
 static void doOffsetSetupMode(int time_delta);
 extern uint8_t getCurrentModeValue();
 extern bool getAutoSealStationary();
+// Street tire temp window (#27) -- file scope because resolveTireWindow(),
+// initializeSystem() and sendBootMetadata() all reach for it.
+extern bool getStreetWindowEnabled();
+extern uint8_t getStreetMin();
+extern uint8_t getStreetIdeal();
+extern uint8_t getStreetMax();
 
 // Last Current Mode seen by the profile snap (#14). Seeded in setup() right after the
 // boot resolve so the watcher in loop() only fires on an actual mode change.
@@ -618,6 +624,11 @@ void setup()
 // Start or end a session (story 01). End seals immediately and emits the summary over
 // NBP; start/end both raise the on-screen swipe feedback. Track-mode only (the caller
 // gates this), reading the window/unit from the active display config.
+//
+// That indirection is what keeps it correct for free under #27: the window comes from
+// wheels->min/ideal/maxTemp, and Wheels is built from resolveTireWindow(), so a session
+// always seals against the window that was on screen. (In practice the Street override
+// never reaches here -- the caller gates on Track -- but nothing has to know that.)
 static void toggleSession(){
   if (sessionManager.isRunning()){
     sessionManager.end();
@@ -930,6 +941,35 @@ static void cleanupObjects()
 }
 
 
+// -- Which tire temperature window is actually in force (#27) --
+// One resolver, because two callers have to agree: initializeSystem() builds the thermal
+// thresholds and the Wheels tire map from this, and sendBootMetadata() reports it. When
+// #14 made the profile the single source of truth it had to fix exactly this pair by hand;
+// routing both through one function is what keeps NBP honest about what is on screen.
+//
+// Track always reads the active profile. Street reads the Street window when "Override
+// Window" is on, and falls back to the profile when it is off.
+//
+// ONLY the window moves. K, tau and the camera crop offsets are still read from the active
+// profile by both modes -- nothing else carries them -- so Street's "Default Profile" is
+// still doing real work even with the override on.
+static void resolveTireWindow(float& outMin, float& outIdeal, float& outMax)
+{
+  const bool street = (getCurrentModeValue() == 0);
+
+  if (street && getStreetWindowEnabled()) {
+    outMin   = getStreetMin();
+    outIdeal = getStreetIdeal();
+    outMax   = getStreetMax();
+    return;
+  }
+
+  const TireProfile& p = TireProfiles::active();
+  outMin   = p.windowMin;
+  outIdeal = p.windowIdeal;
+  outMax   = p.windowMax;
+}
+
 static void initializeSystem()
 {
   cleanupObjects();
@@ -982,18 +1022,25 @@ static void initializeSystem()
   // The gate settings just changed, so the bar's zone width and colors are stale.
   imuGateBarInvalidate();
 
-  // Single source of truth for the tire window (#14): BOTH modes read the active tire
-  // profile, which bundles window + K + tau + camera crop, so switching profile swaps all
-  // of them at once. The mode only chooses which profile is the default -- see
+  // The active tire profile bundles window + K + tau + camera crop, so switching profile
+  // swaps all of them at once (#14); the mode chooses which profile is the default -- see
   // applyModeDefaultProfile(), which snaps the active slot at boot and on mode changes.
+  //
+  // The WINDOW is the one piece Street may take elsewhere (#27) -- see resolveTireWindow().
+  // K and tau stay on the profile in both modes regardless.
   const TireProfile& p = TireProfiles::active();
-  float minTemp   = p.windowMin;
-  float idealTemp = p.windowIdeal;
-  float maxTemp   = p.windowMax;
+  float minTemp, idealTemp, maxTemp;
+  resolveTireWindow(minTemp, idealTemp, maxTemp);
   float calcTau   = p.tauSeconds;
   float calcK     = p.offsetK;
   USBSerial.print("Active tire profile: ");
   USBSerial.println(p.name);
+  USBSerial.print("Tire window: ");
+  USBSerial.print((int)minTemp); USBSerial.print("/");
+  USBSerial.print((int)idealTemp); USBSerial.print("/");
+  USBSerial.print((int)maxTemp);
+  USBSerial.println((getCurrentModeValue() == 0 && getStreetWindowEnabled())
+                      ? " (Street override)" : " (profile)");
 
     ThermalDisplay::useGradient = getUseThermalGradient();
     ThermalDisplay::showPixelOffsets = getShowPixelOffsets();
@@ -1083,7 +1130,8 @@ static void initializeSystem()
 
 // Emit self-describing boot metadata (story 08 / #9): firmware SHA + the active config
 // so a dump is interpretable long after capture. Mirrors initializeSystem()'s window/K/tau
-// resolution: since #14 both modes report the active tire profile's values.
+// resolution -- both now share resolveTireWindow() (#27) rather than re-deriving it, so the
+// reported window cannot drift from the one on screen.
 static void sendBootMetadata()
 {
   extern uint8_t getTemperatureScaleValue();
@@ -1092,18 +1140,25 @@ static void sendBootMetadata()
 
   bool track = (getCurrentModeValue() == 1);
 
-  // The active profile is the mode's default profile (or a manual override), so it is the
-  // window actually on screen in either mode.
+  // The active profile is the mode's default profile (or a manual pick), and it still
+  // supplies K / tau / crop in both modes.
   const TireProfile& p = TireProfiles::active();
+
+  // The window goes through the same resolver the display does (#27), so a Street override
+  // is reported rather than the profile window it replaced. Reporting the profile's numbers
+  // while the screen showed different ones would make a capture uninterpretable in exactly
+  // the way this metadata exists to prevent.
+  float winMin, winIdeal, winMax;
+  resolveTireWindow(winMin, winIdeal, winMax);
 
   NBPProtocol::BootMetadata m;
   m.firmwareSha = FIRMWARE_GIT_SHA;
   m.modeName    = track ? "Track" : "Street";
   m.unit        = (getTemperatureScaleValue() == 0) ? 'F' : 'C';
   m.profileName = p.name;
-  m.windowMin   = p.windowMin;
-  m.windowIdeal = p.windowIdeal;
-  m.windowMax   = p.windowMax;
+  m.windowMin   = (int)winMin;
+  m.windowIdeal = (int)winIdeal;
+  m.windowMax   = (int)winMax;
   m.offsetK     = p.offsetK;
   m.tauSeconds  = p.tauSeconds;
 

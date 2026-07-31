@@ -26,7 +26,7 @@ deliberate, and it's why a flash sometimes wipes your settings:
 
 | Group | Magic | Bumped when |
 |---|---|---|
-| Menu settings | `SETTINGS_MAGIC`, currently `0xA8` | a setting moves address or changes meaning, **or a new setting claims an address no earlier firmware wrote** |
+| Menu settings | `SETTINGS_MAGIC`, currently `0xA9` | a setting moves address or changes meaning, **or a new setting claims an address no earlier firmware wrote** |
 | Tire profiles | `PROFILE_MAGIC`, currently `0x5D` | the `TireProfile` struct layout changes |
 
 > `SETTINGS_MAGIC` went `0xA7` → `0xA8` in #20, which added *Gate Dwl 0.1s* and *Show G Bar*
@@ -34,6 +34,14 @@ deliberate, and it's why a flash sometimes wipes your settings:
 > loader copies stored bytes in **without range-clamping** — so a stale `0xFF` at 32 would
 > have loaded as a 25.5 s capture dwell. The bump forces a clean re-seed instead. **Expect
 > every menu setting to reset once on the first boot after that flash.**
+
+> `0xA8` → `0xA9` in #27, which gave Street its own window and claimed the last four bytes
+> #14 freed: EEPROM 10, 14, 16 and 18. Same hazard in its most literal form — those bytes
+> still hold a *pre-#14* save's `streetMax` / `trackMin` / `trackIdeal` / `trackMax`, so
+> without the bump a stale `trackMax = 180` at 18 would have loaded as *Override Window =
+> On* and a stale `trackMin = 100` at 14 as the Street *Ideal*: plausible-looking numbers
+> nobody typed. **Expect every menu setting to reset once on the first boot after that
+> flash.**
 
 > **#22 did not bump it.** The menu restructure moved and renamed a lot of items, but an
 > EEPROM address lives on the *binding*, not on the item's position in the tree — so
@@ -59,7 +67,7 @@ the named part, and the third held nothing that worked.
 
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
-| **Current Mode** | `Street` | Street / Track | Master mode switch. Selects which *Default Profile* is adopted, and enables the Track-only features (straight-line capture gating and the per-tire inflation verdict, session recording, balance readout). Changing it immediately re-snaps the active tire profile. |
+| **Current Mode** | `Street` | Street / Track | Master mode switch. Selects which *Default Profile* is adopted, and enables the Track-only features (straight-line capture gating and the per-tire inflation verdict, session recording, balance readout). Changing it immediately re-snaps the active tire profile. It also decides **which temperature window is in force**: Track always uses the active profile's, Street uses its own if `Street Settings → Override Window` is on. |
 | **Current Tire** | mode's default | slot 0–2 | The active tire profile, hoisted to the root so swapping tires is one tap. **This is the same value as `Tire Profiles → Profile`** — the two items share one binding, so setting either moves both. Not persisted; see [Tire Profiles](#tire-profiles). |
 | **Test** | `On` | On / Off | ⚠️ **Temporarily repurposed (#28): this selects the display rendering path.** `On` = buffered (the frame is composed off-screen and pushed in one burst — no flicker); `Off` = the original direct-to-screen path. No reflash needed; the switch applies when you close the menu. The camera-image views it used to gate are **pinned on** meanwhile, so the swipe-cycled display always has 3 states rather than 4. This is a staging measure so the two rendering paths can be compared on the car by eye — **Phase 2 decouples them, makes buffered the default, and restores the original meaning below.** <br><br>_Original meaning (returns in Phase 2):_ enables the raw **thermal-camera image** views. With it on the swipe-cycled display has 3 states (off, or all four camera images live); with it off there are 4 that cycle none → lower pair → upper pair → all four. Primarily a bench/diagnostic aid for checking a camera is aimed and reading sensibly. |
 
@@ -100,12 +108,14 @@ and which unit it's printed in.
 
 ## Mode Settings
 
-Wraps the two per-mode screens. Street carries a single genuinely per-mode setting; Track
-adds the session tooling.
+Wraps the two per-mode screens. Street carries its own temperature window; Track adds the
+session tooling.
 
 | Setting | Menu | Default | Range | What it's for |
 |---|---|---|---|---|
-| **Default Profile** | both | Street → `EC02`, Track → `ECF` | any profile slot | The tire profile this mode adopts. Selecting a mode snaps the active profile to its default — this is how switching Street↔Track swaps the whole temperature window in one move. A manual pick in `Current Tire` or `Tire Profiles` overrides it until the next mode change or reboot. |
+| **Default Profile** | both | Street → `EC02`, Track → `ECF` | any profile slot | The tire profile this mode adopts. Selecting a mode snaps the active profile to its default — this is how switching Street↔Track swaps the whole temperature window in one move. A manual pick in `Current Tire` or `Tire Profiles` overrides it until the next mode change or reboot. **Still matters in Street even with `Override Window` on**, because the profile is the only thing carrying Carcass Offset, Carcass Lag and the camera crop offsets. |
+| **Override Window** | Street | `On` | On / Off | Whether Street uses its own `Min`/`Ideal`/`Max` below instead of the active profile's window. Off falls straight back to the profile — the post-#14 behavior — so you can A/B the two without retyping numbers. Track has no equivalent: on track the profile *is* the window. |
+| **Min · Ideal · Max** | Street | `40` / `120` / `160` | 0–255 °F-seed | Street's tire temperature window, applied when `Override Window` is on. Same convention as the profile window: authored as Fahrenheit and converted for display per `Temperature → Scale`. Street is a different problem from track — it's a "are these anywhere near warm" scale, not a tuning target, and it needs to stay put while you swap between profiles that are all tuned for track heat. Pinning it to a profile meant either wrecking that profile's window for track use or keeping a decoy profile whose Carcass Offset/Lag you didn't want. Ordering (`min ≤ ideal ≤ max`) is enforced downstream by the display, not here. |
 | **Show Balance** | Track | `On` | On / Off | Whether the `Balance` readout below will open. Off makes the item report that it's hidden instead. |
 | **Balance** | Track | — | action | Opens the front/rear and left/right thermal balance readout. |
 | **View Summary** | Track | — | action | Re-opens the last sealed session summary. |
@@ -317,6 +327,6 @@ Recorded so an old note or screenshot doesn't send you hunting for something tha
 | **Base FL / FR / RL / RR** | Tire Profiles | #18 | Per-corner inflation baselines. The shipped values encoded one track's load pattern rather than a property of the car, the artifact they appeared to correct is already removed by the straight-line gate, and any genuinely static component is a camera aim error belonging in the crop offsets above. Full reasoning in the design doc's Amendments section. |
 | **Load** | Tire Profiles | #18 | Manually pulled the selected slot into the edit buffer. The edit buffer is gone (#19) — the fields now point straight at the live slot, so there's nothing to load. |
 | **Save Prof** | Tire Profiles | #18 | Saved only the current profile. `Save Config` already writes all three, and a profile-only save became actively misleading once several profiles can hold pending edits at once. |
-| **Street/Track Min · Ideal · Max** | Street/Track Settings | #14 | Modes no longer carry their own window; they name a *Default Profile* and the profile supplies the window. |
+| **Track Min · Ideal · Max** | Track Settings | #14 | Track no longer carries its own window; it names a *Default Profile* and the profile supplies the window. On track that's right — the window is part of what you're tuning, and it belongs with the tire. **Street's three came back in #27** (see *Mode Settings*): street isn't a tuning target, and its window has to survive swapping between profiles that are all tuned for track heat. |
 | **Inflation** | Track Settings | #21 | Gated the over/under verdict and its top-left badge. The badge is gone — it reported one global verdict, so it could say something was wrong but never which corner, and the per-tire delta bars now carry that verdict on the tire it belongs to. With the latch driving those bars, an off switch left them showing an alignment verdict but no inflation one, which reads as "this tire is fine" rather than "this check is disabled". *Segment Deltas* is the honest visibility control. EEPROM 31 is free again. |
 | **Camera offset values** | Camera Settings | #15 | Moved onto the tire profile (Tire Profiles → Offsets) so they swap with the tire. The display toggles stayed global. |

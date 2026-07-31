@@ -127,8 +127,8 @@ they do rather than the hardware they use, so each one groups a whole feature:
 1. **Current Mode**: Choose between Street and Track modes
 2. **Current Tire**: The active tire profile — the same value as `Tire Profiles → Profile`, hoisted so swapping tires is one tap
 3. **Temperature**: `Source` (Raw surface vs Calculated carcass) and `Scale` (F/C). Source is a signal switch, not a display one — it changes what the device concludes, not just what it shows
-4. **Mode Settings**: **Street Settings** / **Track Settings** — the per-mode default tire profile, plus the Track-only balance and session items
-5. **Tire Profiles**: The temperature window (Min/Ideal/Max), carcass offset and lag, and per-corner camera crop offsets — the profile is what actually supplies the window to both modes
+4. **Mode Settings**: **Street Settings** / **Track Settings** — the per-mode default tire profile; Street also carries its own temperature window (`Override Window` + Min/Ideal/Max), and Track adds the balance and session items
+5. **Tire Profiles**: The temperature window (Min/Ideal/Max), carcass offset and lag, and per-corner camera crop offsets — the profile supplies the window on Track, and in Street unless Street's `Override Window` is on. Carcass offset, lag and crop always come from the profile, in both modes
 6. **Inflation & Camber**: The whole over/under-inflation and camber check in one place — the delta thresholds, the verdict latch, what gets painted, and the **Straight-Line Gate** (capture threshold, gate dwell, axis orientation) that decides which frames count
 7. **Display**: Night brightness, thermal image colouring, crop guide overlay, and tire redraw rate
 8. **Test**: ⚠️ *temporarily* selects the display rendering path — buffered (On) vs direct (Off). See [Display rendering](#display-rendering) below. Normally: enable the raw thermal-camera image views

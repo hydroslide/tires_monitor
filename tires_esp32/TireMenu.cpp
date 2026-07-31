@@ -30,6 +30,31 @@ static uint8_t nightBrightness   = 25;
 static uint8_t streetProfile = 1;
 static uint8_t trackProfile  = 0;
 
+// -- Street tire temp window (#27) --
+// Street gets its own Min/Ideal/Max back, and in Street mode it OVERRIDES the active
+// profile's window. #14 was right that two windows for the same tire is redundant on
+// track -- but street is not the same tire problem. A street window is not a tuning
+// target, it is a "are these anywhere near warm" scale, and it has to stay put while you
+// swap between profiles that are all tuned for track heat. Pinning it to a profile meant
+// either editing that profile's window (breaking it for track) or keeping a decoy
+// "street" profile whose K/tau/crop you did not actually want.
+//
+// So this overrides ONLY the window. K, tau and the camera crop offsets still come from
+// the active profile in both modes -- nothing else carries them -- which is why the
+// Street "Default Profile" above still matters in Street mode.
+//
+// The values are the pre-#14 Street window, unchanged: 40/120/160 in the same F-seed
+// convention TireProfile.window* uses (stored as F, displayed/converted per Temperature
+// Scale). Track is untouched and still reads the profile.
+//
+// Off is a real position: it falls straight back to the active profile's window, which is
+// exactly the post-#14 behavior, so this can be A/B'd against the profile without
+// retyping the numbers.
+static bool    streetWindowEnabled = true;
+static uint8_t streetMin           = 40;
+static uint8_t streetIdeal         = 120;
+static uint8_t streetMax           = 160;
+
 // -- Calculated display mode (story 03; Track-mode only) --
 // 0=Raw surface, 1=Calculated (EMA_tau(surface)+K carcass estimate).
 static uint8_t calcDisplayMode = 0;
@@ -119,9 +144,9 @@ static MenuValueBinding nightBrightnessBinding = {
 };
 
 // Per-mode default tire profile (#14). Persisted at two of the addresses freed by the
-// removed Street/Track Min/Ideal/Max bytes (6 and 8); the rest (10, 14, 16, 18) are now
-// free. The labels are the live profile slot names, so renaming a profile renames the
-// choices here too.
+// removed Street/Track Min/Ideal/Max bytes (6 and 8); the rest (10, 14, 16, 18) were free
+// until #27 claimed all four (see below). The labels are the live profile slot names, so
+// renaming a profile renames the choices here too.
 static MenuValueBinding streetProfileBinding = {
     VALUE_ENUM,
     &streetProfile,
@@ -142,6 +167,61 @@ static MenuValueBinding trackProfileBinding = {
     8,
     g_profileNameLabels,
     PROFILE_COUNT
+};
+
+// Street tire temp window (#27). These reclaim the last four bytes #14 freed: 10 was the
+// old streetMax, 14/16/18 the old trackMin/Ideal/Max. Reusing them is safe only because
+// SETTINGS_MAGIC is bumped alongside -- a block saved by #14..#26 firmware never WROTE
+// these four, so they still hold whatever a pre-#14 save left there, and
+// loadMenuFromEEPROMHelper() copies bytes in verbatim with no min/max clamping. Without
+// the bump a stale trackMax=180 at 18 would load as streetWindowEnabled=true and a stale
+// trackMin=100 at 14 as the Street ideal. See MenuSystem.cpp.
+//
+// Same 0..255 range as the profile window fields: the window is a raw F-seed byte, and
+// clamping min <= ideal <= max is the display's job (ThermalDisplay::setTemperatureRangeC),
+// not the menu's -- so the ordering rule stays in exactly one place.
+static MenuValueBinding streetWindowEnabledBinding = {
+    VALUE_BOOL,
+    &streetWindowEnabled,
+    nullptr,
+    0,
+    0,
+    18,
+    nullptr,
+    0
+};
+
+static MenuValueBinding streetMinBinding = {
+    VALUE_BYTE,
+    &streetMin,
+    nullptr,
+    0,
+    255,
+    10,
+    nullptr,
+    0
+};
+
+static MenuValueBinding streetIdealBinding = {
+    VALUE_BYTE,
+    &streetIdeal,
+    nullptr,
+    0,
+    255,
+    14,
+    nullptr,
+    0
+};
+
+static MenuValueBinding streetMaxBinding = {
+    VALUE_BYTE,
+    &streetMax,
+    nullptr,
+    0,
+    255,
+    16,
+    nullptr,
+    0
 };
 
 // Calculated display mode (EEPROM addr 1; free byte, magic-sentinel load makes 0 safe)
@@ -428,11 +508,20 @@ static void doShowBalance();
 // Session summary recall action (story 01). Opens the last sealed summary; Track-only.
 static void doViewSummary();
 
-// Street has exactly one genuinely per-mode setting now that Source moved to Temperature
-// (#22). Kept as its own screen rather than flattened so the Street/Track split stays
-// symmetrical and there is an obvious home for the next per-mode setting.
+// Street's own tire temp window (#27) joins Default Profile here -- this is the "obvious
+// home for the next per-mode setting" the #22 comment left room for, and the window is
+// the one thing street genuinely wants to hold independently of whichever track-tuned
+// profile happens to be active.
+//
+// "Override Window" leads the three values it governs: with it off they are inert and the
+// active profile's window applies, which is the post-#14 behavior. Track Settings
+// deliberately gets no equivalent -- on track the profile IS the window.
 static MenuItem streetSettingsMenu[] = {
-    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding }
+    { "Default Profile", MENU_VALUE, nullptr, nullptr, 0, &streetProfileBinding      },
+    { "Override Window", MENU_VALUE, nullptr, nullptr, 0, &streetWindowEnabledBinding },
+    { "Min",             MENU_VALUE, nullptr, nullptr, 0, &streetMinBinding          },
+    { "Ideal",           MENU_VALUE, nullptr, nullptr, 0, &streetIdealBinding        },
+    { "Max",             MENU_VALUE, nullptr, nullptr, 0, &streetMaxBinding          }
 };
 
 static MenuItem trackSettingsMenu[] = {
@@ -840,6 +929,27 @@ uint8_t getStreetProfile() {
 
 uint8_t getTrackProfile() {
     return trackProfile;
+}
+
+// Street tire temp window (#27). Read by the sketch's resolveTireWindow(), which is what
+// initializeSystem() and sendBootMetadata() both go through -- in Street mode with the
+// override on these replace the active profile's window everywhere it is consumed (thermal
+// thresholds, the Wheels tire map, and therefore any session started from it). Raw F-seed
+// bytes, exactly like TireProfile.window*; unit conversion happens downstream.
+bool getStreetWindowEnabled() {
+    return streetWindowEnabled;
+}
+
+uint8_t getStreetMin() {
+    return streetMin;
+}
+
+uint8_t getStreetIdeal() {
+    return streetIdeal;
+}
+
+uint8_t getStreetMax() {
+    return streetMax;
 }
 
 uint8_t getCalcDisplayMode() {
