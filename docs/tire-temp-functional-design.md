@@ -274,6 +274,34 @@ profile supplies the window, K and τ. The active selection is transient: it is 
 from the current mode's default at boot and re-snapped on every mode change, and is never
 persisted. Seed windows were retuned at the same time: **ECF 120/160/200, EC02 110/140/170**.
 
+> **Partly superseded by #27** — the profile is still the single source of truth for the
+> window on **Track**, and for K, τ and crop in *both* modes. Street can now override the
+> window. See below.
+
+### #27 — Street takes its window back (Track keeps the profile's)
+
+#14 above was right that two windows for the same tire is redundant — on track. Street is a
+different problem and #14 over-generalised. A track window is part of what you are *tuning*,
+so it belongs with the tire; a street window is a fixed "are these anywhere near warm"
+scale that has to stay put while you swap between profiles that are all tuned for track
+heat. Pinning it to a profile left only bad options: edit a profile's window and wreck it
+for track use, or keep a decoy "street" profile whose K/τ/crop you did not actually want.
+
+So **Street Settings** regains **Min / Ideal / Max**, defaulting to the pre-#14 Street
+window (**40/120/160**, F-seed, unchanged), plus an **Override Window** toggle. With the
+toggle on and Current Mode = Street, that window replaces `TireProfiles::active().window*`
+everywhere it is consumed. With it off, Street falls back to the profile — exactly the
+post-#14 behavior — so the two can be compared without retyping numbers. Track is untouched.
+
+**Only the window moves.** K, τ and the per-corner camera crop offsets still come from the
+active profile in both modes, because nothing else carries them — which is why Street's
+*Default Profile* still does real work with the override on.
+
+One resolver, `resolveTireWindow()` in the sketch, decides this; both `initializeSystem()`
+(thermal thresholds + the `Wheels` tire map) and `sendBootMetadata()` go through it, so the
+window NBP reports cannot drift from the one on screen. A session inherits it for free via
+`wheels->min/ideal/maxTemp` — though in practice sessions stay Track-only.
+
 ### #16 — Calculated display is available in both modes
 
 The design (and the stories' global constraint) treated calculated mode as Track-only.

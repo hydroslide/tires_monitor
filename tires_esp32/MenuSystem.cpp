@@ -18,9 +18,14 @@ extern HWCDC USBSerial;
 // camera-offset bytes at 31..38 and re-purposed 31 for the inflation indicator, so an old
 // stored offset would have loaded as that toggle. #20 then claimed 32 and 33 for the
 // capture dwell and the g-bar toggle -- addresses no earlier firmware ever WROTE, so a
-// pre-#20 block holds junk there and an uncleared 0xFF would have read as a 25.5 s dwell.)
+// pre-#20 block holds junk there and an uncleared 0xFF would have read as a 25.5 s dwell.
+// #27 then claimed the last four bytes #14 freed -- 10, 14, 16, 18 -- for the Street
+// window and its override toggle. Same hazard in its most literal form: those bytes still
+// hold a pre-#14 save's streetMax / trackMin / trackIdeal / trackMax, so without a bump a
+// stale trackMax=180 at 18 would load as "override on" and a stale trackMin=100 at 14 as
+// the Street ideal -- plausible-looking numbers nobody typed.)
 static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 255; above all binding addrs
-static const uint8_t  SETTINGS_MAGIC      = 0xA8;
+static const uint8_t  SETTINGS_MAGIC      = 0xA9;
 
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
