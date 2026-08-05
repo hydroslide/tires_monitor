@@ -26,7 +26,7 @@ deliberate, and it's why a flash sometimes wipes your settings:
 
 | Group | Magic | Bumped when |
 |---|---|---|
-| Menu settings | `SETTINGS_MAGIC`, currently `0xA9` | a setting moves address or changes meaning, **or a new setting claims an address no earlier firmware wrote** |
+| Menu settings | `SETTINGS_MAGIC`, currently `0xAA` | a setting moves address or changes meaning, **or a new setting claims an address no earlier firmware wrote** |
 | Tire profiles | `PROFILE_MAGIC`, currently `0x5D` | the `TireProfile` struct layout changes |
 
 > `SETTINGS_MAGIC` went `0xA7` → `0xA8` in #20, which added *Gate Dwl 0.1s* and *Show G Bar*
@@ -42,6 +42,12 @@ deliberate, and it's why a flash sometimes wipes your settings:
 > On* and a stale `trackMin = 100` at 14 as the Street *Ideal*: plausible-looking numbers
 > nobody typed. **Expect every menu setting to reset once on the first boot after that
 > flash.**
+
+> `0xA9` → `0xAA` in #31, which added the three lens-correction settings at EEPROM 34, 35
+> and 36. Same hazard, but here the stale byte is *actively dangerous* rather than merely
+> wrong: an uncleared `0xFF` at 34 loads as a **255° field of view**, and the re-projection
+> degenerates as the field of view approaches 180°. The bump forces a clean re-seed.
+> **Expect every menu setting to reset once on the first boot after that flash.**
 
 > **#22 did not bump it.** The menu restructure moved and renamed a lot of items, but an
 > EEPROM address lives on the *binding*, not on the item's position in the tree — so
@@ -300,13 +306,17 @@ still discardable by simply not saving.
 
 ## Display
 
-Genuine presentation only — how bright the screen is, how the thermal image is coloured,
-whether the crop guides are drawn over it, and how often the tire display repaints. This is
-what was left of `Camera Settings` (#22) once the three verdict settings that were sitting
-in it moved to [Inflation & Camber](#inflation--camber), plus `Night Brightness` down from
-the root.
+Mostly presentation — how bright the screen is, how the thermal image is coloured, whether
+the crop guides are drawn over it, and how often the tire display repaints. This is what was
+left of `Camera Settings` (#22) once the three verdict settings that were sitting in it moved
+to [Inflation & Camber](#inflation--camber), plus `Night Brightness` down from the root.
 
-Note that nothing here changes a *number* — for that see [Temperature](#temperature).
+**The four lens settings (#31) are the exception, and they do change numbers.** They live
+here on the same "device-wide, so it lives here" rule that already put `Show Offsets` here
+rather than next to the per-profile offset values — the root menu is an exact 9-of-9 fit
+against the screen, so a `Camera` root submenu would have to displace something. This menu
+is now 8 of 9 rows; the next item added to it should push the four lens settings into a
+`Lens` submenu rather than displacing anything.
 
 | Setting | Default | Range | What it's for |
 |---|---|---|---|
@@ -314,6 +324,36 @@ Note that nothing here changes a *number* — for that see [Temperature](#temper
 | **Thermal Gradient** | `On` | On / Off | *On* = smooth interpolated colour within each temperature band (finer detail). *Off* = one flat colour per band, so the image posterizes into cold/warm/ideal/hot blocks — easier to read *which band* a region is in at a glance. Preference, not calibration. |
 | **Show Offsets** | `On` | On / Off | **This is the crop-tuning toggle, and it changes what the thermal image shows.** *On* = the **full** camera frame with vertical guide lines marking where the crop offsets sit — use this while tuning the offsets so you can see what you're cutting. *Off* = the image is cropped to the region **between** the offsets and stretched to fill the display, which is the real working view. Turn it on to tune, off to drive. It stays here rather than next to the offset values because it is device-wide, while the values are per-profile. |
 | **Hi Freq Updates** | `Off` | On / Off | Recomposes the tire numbers and bars every read (~10 Hz) instead of once a second. Smoother, and useful when chasing something transient. With **Test** *On* (the buffered path) the cost is CPU only — the screen is pushed at 10 Hz either way, and this just changes how often the tire map is redrawn into the frame first. With **Test** *Off* it also multiplies SPI traffic, which is the more expensive of the two. |
+| **Lens Correct** | `On` | On / Off | **Master switch for the fisheye correction (#31), and it changes measured temperatures — not just the picture.** The wide-angle MLX90640 is a ~110° lens, so straight lines bow: a tire reads as an oval and its circumferential grooves arc like longitude lines. That's not only cosmetic. The three band medians are taken over **fixed-width column bands**, and fixed columns are equal slices of *tire* only if the projection is linear across the width — it isn't, so the outer-vs-inner comparison behind the camber and inflation verdicts was reading bands that didn't match the physical thirds of the tread. *On* re-projects each frame to a rectilinear (pinhole) image at the moment of capture, so the medians, the thermal image, NBP and balance all inherit the fix. *Off* is the raw sensor frame, exactly as it behaved before #31 — keep it for A/B-ing the correction on the car. |
+| **Camera Degrees** | `110` | 60–140° | The lens's field of view across the 32-pixel width, fed straight into the correction. `110` is the wide-angle part's datasheet figure and the right place to start, but the real lens isn't exactly an ideal fisheye, so **this is meant to be tuned by eye** — see **Set Camera Degrees** below. Capped at 140 deliberately: the maths degenerates as the field of view approaches 180°, and by 140 the centre of the image is already de-magnified more than 2.2×. |
+| **Fit to View** | `Off` | On / Off | What to do with the rows the correction has no data for. Preserving the horizontal field of view (which is what keeps your crop offsets valid) means the corrected top and bottom rows want scene content from **beyond what the sensor captured**. *Off* = letterbox: those pixels are painted **black**, because there is genuinely nothing there and a fabricated value would render as a real reading. *On* = squash the image vertically to fill the frame instead. Lines stay straight either way — an anisotropic squash is an affine map, and affine maps preserve straightness — you only lose aspect ratio. **Neither mode can move a measurement**: the band medians only sample rows 10–12, where toggling this shifts the sampling by 0.012 px at 110° and at most 0.071 px anywhere in range. Defaults *off* so the cost of the correction is visible while you're finding the right **Camera Degrees**. |
+| **Set Camera Degrees** | — | action | Opens the interactive tuning mode — the only screen that shows you the picture you're judging. Full-screen four-quadrant live thermal view, uncropped, with the current value drawn in the top margin. **Swipe left/right** = −1/+1°. **Swipe down** = pulsing green border, down again keeps. **Swipe up** = pulsing red border, up again discards and restores the value you entered with. Keeps in RAM only; root **Save Config** is still the only thing that writes EEPROM. Refuses to open (and says so) if no corner has a camera, or if **Lens Correct** is off — tuning a correction that isn't running is swiping at a raw image and wondering why nothing moves. |
+
+### Tuning Camera Degrees on the car
+
+Park where a tire fills a quadrant with its circumferential grooves clearly visible, open
+**Set Camera Degrees**, and swipe until **the grooves run straight and parallel** and the
+tire outline reads as a rectangle rather than an oval.
+
+- Grooves still **bowing outward** (barrel — the ends curve away from centre) → value is
+  **too low**, under-correcting. Swipe right.
+- Grooves bowing **inward** (pincushion) → **too high**, over-correcting. Swipe left.
+- Straight and parallel → done. Swipe down twice to keep, then root **Save Config**.
+
+**Tune with Fit to View off.** The black bands are the honest running total of what the
+correction is spending — 7.8 % of the frame at 110°, 14.6 % at 140° — and they grow as you
+raise the value. They cost you nothing measured (the median rows are never in them), but
+seeing them is what tells you to prefer the *lowest* value that actually straightens the
+grooves. Turn Fit to View on once you've settled.
+
+With Fit to View **on**, the same information shows up as vertical squash instead: the image
+renders 0.855× as tall as true rectilinear at 110°, 0.661× at 140°. If the tire starts
+looking squat, that's a high **Camera Degrees** being absorbed — not a sign the value is
+wrong.
+
+**Re-check the crop offsets afterwards.** The horizontal framing is preserved by
+construction, so they should still be close — but "close" isn't "verified," and
+[Set Offsets](#offsets) makes confirming them a 30-second job.
 
 ---
 

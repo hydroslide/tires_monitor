@@ -31,8 +31,19 @@ class TempReader {
                        bool useMiddleRows,
                        float medians_out[3], int leftOffset, int rightOffset);
         void flipFrameHorizontal(float frame[FRAME_PIXELS]);
+        // Re-project the raw fisheye frame to a rectilinear one, in place (#31). Called
+        // from readFrame() straight after the flip, so every consumer downstream inherits
+        // the correction without knowing it happened. No-op when correction is off.
+        void dewarpFrame(float f[FRAME_PIXELS]);
         bool newTempIsInvalid(int i, int j);
         void resetTireSensor(int i);
+
+        // Lens-correction config (#31). Static because initializeSystem() re-news the
+        // TempReader on every menu close and the setting must not die with the instance --
+        // nor must the 768-entry lookup table it drives get rebuilt that often.
+        static bool    lensEnabled;
+        static uint8_t lensFovDegrees;
+        static bool    lensFitToView;
 
         // Calculated-mode state (story 03).
         float calcTauSeconds = 15.0f;             // EMA time constant, seconds
@@ -76,6 +87,51 @@ class TempReader {
         // per read (dtMillis = read cadence), AFTER readTemps() so the raw validity
         // filter (which keys off lastTireSectionTemps) stays on the raw signal.
         void  updateCalculated(long dtMillis);
+
+        // --- Fisheye lens correction (#31) ---
+        //
+        // The wide-angle MLX90640 is a ~110 degree lens, so straight lines in the world --
+        // a tire's circumferential grooves -- bow outward in the raw frame. That is not
+        // only a looks problem: getSectionMedians() slices the frame into three
+        // FIXED-WIDTH column bands, and fixed columns are equal slices of TIRE only if the
+        // projection is linear across the width. It is not, so the outer/inner comparison
+        // behind the camber and inflation verdicts has been reading bands that do not match
+        // the physical thirds of the tread.
+        //
+        // The frame is therefore re-projected the moment it lands, inside readFrame(),
+        // before the medians, before fillTireFrame(), before the image. One insertion
+        // point; everything downstream inherits it.
+        //
+        // Config and lookup table are STATIC on purpose: initializeSystem() deletes and
+        // re-news the TempReader every single time the menu closes, and rebuilding a
+        // 768-entry atan/sqrt map on each of those would be pure waste. The table rebuilds
+        // only when the field of view or the fit mode actually changes.
+        //
+        // fovDegrees is the field of view across the 32-pixel WIDTH. Range is enforced
+        // here as well as in the menu -- the map degenerates as it approaches 180 (the
+        // rectilinear focal length goes to zero), so it must never be reachable.
+        static void configureLens(bool enabled, uint8_t fovDegrees, bool fitToView);
+
+        // False for a pixel the corrected frame has no source data for: with Fit to View
+        // off, the top and bottom rows want scene content from beyond the sensor's
+        // vertical extent, and there is nothing there to sample. Always true when
+        // correction is off or Fit to View is on.
+        //
+        // An invalid pixel must never be presented as a temperature. getSectionMedians()
+        // drops it from the sample set; ThermalDisplay paints it black rather than running
+        // it through the palette (every int maps to a colour, so a fabricated value would
+        // read as a real -- and possibly alarming -- reading). Callers outside those two
+        // must check this before trusting frame[]/tire_frames[].
+        static bool lensPixelValid(int idx);
+
+        // Boot-time proof of the property the whole design rests on: no invalid pixel ever
+        // lands in rows 10-12, the only rows getSectionMedians() reads, at ANY field of
+        // view in range and in either fit mode. Logs a PASS/FAIL line. Cheap enough to run
+        // unconditionally (81 degrees x 2 modes x 768 pixels of pure float maths, once).
+        static bool lensSelfTest();
+
+        static constexpr uint8_t LENS_FOV_MIN = 60;
+        static constexpr uint8_t LENS_FOV_MAX = 140;
 
 };
 #endif // TEMPREADER_H

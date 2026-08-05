@@ -130,7 +130,7 @@ they do rather than the hardware they use, so each one groups a whole feature:
 4. **Mode Settings**: **Street Settings** / **Track Settings** — the per-mode default tire profile; Street also carries its own temperature window (`Override Window` + Min/Ideal/Max), and Track adds the balance and session items
 5. **Tire Profiles**: The temperature window (Min/Ideal/Max), carcass offset and lag, and per-corner camera crop offsets — the profile supplies the window on Track, and in Street unless Street's `Override Window` is on. Carcass offset, lag and crop always come from the profile, in both modes
 6. **Inflation & Camber**: The whole over/under-inflation and camber check in one place — the delta thresholds, the verdict latch, what gets painted, and the **Straight-Line Gate** (capture threshold, gate dwell, axis orientation) that decides which frames count
-7. **Display**: Night brightness, thermal image colouring, crop guide overlay, and tire redraw rate
+7. **Display**: Night brightness, thermal image colouring, crop guide overlay, tire redraw rate, and the fisheye **lens correction** (master switch, field of view, letterbox-vs-fit, and the interactive `Set Camera Degrees` tuner) — see [Lens correction](#lens-correction)
 8. **Test**: ⚠️ *temporarily* selects the display rendering path — buffered (On) vs direct (Off). See [Display rendering](#display-rendering) below. Normally: enable the raw thermal-camera image views
 9. **Save Config**: Save current settings to EEPROM
 
@@ -169,6 +169,29 @@ off either end raises a pulsing green (keep) or red (discard) border to confirm 
 leave. Corners without a camera are skipped. Edits go into the selected profile; **Save
 Config** is still what writes them to EEPROM. Full gesture map in
 [docs/SETTINGS.md](docs/SETTINGS.md#setting-offsets-interactively).
+
+### Lens correction
+
+The wide-angle MLX90640 is a ~110° lens, so straight lines bow: a tire reads as an oval and
+its circumferential grooves arc like longitude lines on a globe. **That is not only a looks
+problem.** The three temperature bands are fixed-width column slices, and fixed columns are
+equal slices of *tire* only if the projection is linear across the width — so the
+outer-vs-inner comparison behind the camber and inflation verdicts was reading bands that
+didn't match the physical thirds of the tread.
+
+Each frame is therefore re-projected to a rectilinear (pinhole) image **at the moment of
+capture**, before the medians, the thermal image, NBP or balance see it — so everything
+downstream inherits the fix. `Display → Lens Correct` is the master switch, and
+`Display → Camera Degrees` (default `110`) is the lens's field of view.
+
+That value is meant to be tuned by eye: **Display → Set Camera Degrees** hands the screen to
+the four live camera images and puts the number under your thumb — left/right nudges by a
+degree, down/down keeps, up/up discards — so you swipe until the grooves run straight and
+parallel. `Display → Fit to View` chooses what happens to the top and bottom rows the
+correction has no data for: black bands (off, the honest default) or squashed away to fill
+the frame (on). Neither can move a measurement — the band medians only sample the middle
+rows, and a boot-time self-test asserts it. Details and the tuning procedure in
+[docs/SETTINGS.md](docs/SETTINGS.md#display).
 
 ## Debugging Tools
 

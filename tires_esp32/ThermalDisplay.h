@@ -172,6 +172,13 @@ public:
     static bool   setupRightSide;  // which edge of setupCorner is armed
     static bool   setupBlinkOn;    // the armed guide's blink phase
 
+    // setupActive used to mean two things at once: "show the full uncropped frame" AND
+    // "draw the crop guides unconditionally". Set Camera Degrees (#31) wants the first
+    // without the second -- you are judging the shape of the whole frame, and a pair of
+    // magenta lines over it is clutter with nothing to say. LensSetup clears this on
+    // entry and restores it on exit; OffsetSetup leaves it alone.
+    static bool   setupGuides;
+
 };
 
 #endif // THERMALDISPLAY_H

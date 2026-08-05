@@ -34,4 +34,19 @@ void serviceProfileEditSync();
  */
 bool consumeOffsetSetupRequest();
 
+/**
+ * Poll (and clear) the "Set Camera Degrees" request raised from Display (#31).
+ *
+ * Same contract as consumeOffsetSetupRequest() above, for the same reason: the action
+ * callback cannot close the menu or hand off the screen from where it runs. Returns true
+ * exactly once per pick.
+ */
+bool consumeLensSetupRequest();
+
+/** The lens-correction settings, read by the sketch to configure TempReader (#31). */
+uint8_t getLensFovDegrees();
+void    setLensFovDegrees(uint8_t v);
+bool    getLensCorrectEnabled();
+bool    getLensFitToView();
+
 #endif // TIRE_MENU_H
