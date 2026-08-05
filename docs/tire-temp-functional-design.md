@@ -369,3 +369,49 @@ Consequence: profile edits are **live immediately**, and Save Settings controls
 globals, written to EEPROM on save), so the profile fields are now consistent with the rest
 of the menu rather than special. `TireProfile`'s layout is unchanged, so this needed no
 `PROFILE_MAGIC` bump and preserved saved profiles.
+
+### #31 — the three bands are sliced out of a *rectilinear* frame, not the raw one
+
+§5 and §3 describe the Outer / Center / Inner bands as three fixed-width column slices of
+the 32×24 camera frame. That is still how the slicing works, but the statement was
+incomplete in a way that mattered: **fixed columns are equal slices of *tire* only if the
+projection is linear across the width, and on this hardware it is not.**
+
+The MLX90640 in this rig is the wide-angle part — a ~110° × 75° lens, which is nowhere near
+rectilinear. Straight lines in the world are not straight in the frame: a tire renders as an
+oval and its circumferential grooves bow outward like longitude lines on a globe. Under that
+distortion the centre of the frame is angularly compressed and the edges are stretched, so
+the three fixed-width column bands were **not** landing on the physical thirds of the tread.
+The centre band was reading a wider swathe of tire than it should and the shoulder bands a
+narrower one — which biases the `edge − center` spread that the inflation verdict is built
+on, and the outer-vs-inner comparison behind the camber call, in a way no amount of crop-
+offset aiming can remove. Aiming moves *where* the bands sit; it cannot change the fact that
+equal pixel widths were unequal tire widths.
+
+Every frame is now re-projected to a rectilinear (pinhole) image at the moment of capture —
+inside `TempReader::readFrame()`, immediately after the horizontal flip and **before**
+`getSectionMedians()`, `fillTireFrame()`, or anything else touches it. So the medians, the
+thermal image, the NBP channels and the balance readout all derive from a frame in which a
+straight line is straight and equal column widths *are* equal slices of tread. One insertion
+point; no consumer needed changing.
+
+Two things worth carrying forward:
+
+- **The correction is calibrated, not assumed.** The lens is modelled as an equidistant
+  (`f-theta`) fisheye whose field of view spans the 32-pixel width, and that field of view is
+  a menu setting (`Display → Camera Degrees`, default 110°) with an interactive on-car tuning
+  mode, because the real lens is not exactly equidistant and the datasheet figure is not
+  exactly what the optics do. The number is found by swiping until the grooves look straight.
+  See [`SETTINGS.md`](SETTINGS.md#display).
+- **Preserving the horizontal field of view was a deliberate constraint, not a convenience.**
+  The re-projection keeps the left and right edges viewing the same angles they always did
+  (the scale works out to exactly 1.0 there), which is what allows the eight per-corner crop
+  offsets from #15 to survive the change. Any other framing choice would have silently
+  invalidated all of them, on every profile — and those are a hand-aimed calibration with a
+  whole interactive mode built to set them.
+
+The cost is confined to the top and bottom rows, which want scene content from beyond what
+the sensor captured; they are either painted black or squashed away depending on
+`Display → Fit to View`. Neither outcome can reach a measurement: `getSectionMedians()` reads
+**rows 10–12 only**, and a boot-time self-test (`TempReader::lensSelfTest()`) asserts that no
+invalid pixel lands in those rows at any field of view the menu can reach, in either mode.

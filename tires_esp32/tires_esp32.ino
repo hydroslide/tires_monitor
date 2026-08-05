@@ -28,6 +28,7 @@
 #include "QuadrantFactory.h"
 #include "ThermalDisplay.h"
 #include "OffsetSetup.h"        // Interactive camera crop-offset mode (#23)
+#include "LensSetup.h"          // Interactive camera field-of-view mode (#31)
 #include "DisplayBase.h"
 #include "StandardDisplay.h"
 #include "BufferedDisplay.h"
@@ -152,6 +153,10 @@ static void beginOffsetSetup();
 static void endOffsetSetup();
 static void checkOffsetSetupSwipes();
 static void doOffsetSetupMode(int time_delta);
+static void beginLensSetup();
+static void endLensSetup();
+static void checkLensSetupSwipes();
+static void doLensSetupMode(int time_delta);
 extern uint8_t getCurrentModeValue();
 extern bool getAutoSealStationary();
 // Street tire temp window (#27) -- file scope because resolveTireWindow(),
@@ -604,6 +609,13 @@ void setup()
   LL->isActive=false;
   LR->isActive=false;
 
+  // Prove the lens correction never eats a measurement pixel before anything reads a
+  // frame (#31). The three-band medians only ever sample rows 10-12, and the whole design
+  // rests on the correction's dead zone staying clear of them at every field of view the
+  // menu can reach. A silent invariant is one nobody notices breaking, so it says so on
+  // the console either way.
+  TempReader::lensSelfTest();
+
   // Initialize system objects
   initializeSystem();
 
@@ -718,6 +730,72 @@ static void doOffsetSetupMode(int time_delta){
 
   // F3: this mode owns the screen and did not exist in March, so without its own flush
   // the buffered path would show whatever was on the glass when it was entered.
+  display.drawScreen();
+}
+
+// -- Interactive camera field-of-view setup (#31) --
+// A fourth thing that can own the screen. Structurally identical to offset setup above --
+// same stripped read/paint loop, same suspended menu, same reason -- because it is the
+// same job: judging a number against the live camera image, which no menu field can show
+// you. What differs is that there is no guide line to arm, so LensSetup draws the value
+// as text instead.
+static bool lensSetupActive  = false;
+static bool lensSetupPending = false;   // picked in the menu, entered once the menu closes
+
+static void beginLensSetup(){
+  // All four quadrants live, whatever the running display was showing.
+  for (int i = 0; i < TIRE_COUNT; i++) thermalDisplays[i]->isActive = true;
+
+  // The left swipe is half of the nudge pair here, so it must stop meaning "open the menu".
+  menuHandler.suspendMenu(true);
+
+  display.fillScreen(ST77XX_BLACK);
+  imuGateBarInvalidate();
+
+  LensSetup::begin();
+  lensSetupActive = true;
+
+  // Paint on the very next pass instead of waiting out a read interval on a black screen.
+  millisSinceLastRead = readIntervalMillis;
+}
+
+static void endLensSetup(){
+  lensSetupActive = false;
+  menuHandler.suspendMenu(false);
+
+  // Put the quadrant activation back the way the running display had it. No repaint: the
+  // menu is about to take the whole screen, and when it closes applyMenuConfig() rebuilds
+  // the display from scratch anyway.
+  applyThermalActivation();
+  activateTires();
+
+  // Back to Display, the screen we were launched from. MenuSystem never moved, so
+  // re-opening lands on the same item with no bookkeeping.
+  menuHandler.openMenu();
+}
+
+static void checkLensSetupSwipes(){
+  if (menuHandler.SwipedLeft())  LensSetup::handleSwipe(LensSetup::NUDGE_LEFT);
+  if (menuHandler.SwipedRight()) LensSetup::handleSwipe(LensSetup::NUDGE_RIGHT);
+  if (menuHandler.SwipedUp())    LensSetup::handleSwipe(LensSetup::PREV);
+  if (menuHandler.SwipedDown())  LensSetup::handleSwipe(LensSetup::NEXT);
+
+  // A confirm was answered: tear the mode down.
+  if (!LensSetup::isActive()) endLensSetup();
+}
+
+static void doLensSetupMode(int time_delta){
+  // Blink phase and the numeric readout first, so the quadrants paint over a current
+  // border rather than a stale one.
+  LensSetup::service(display);
+
+  millisSinceLastRead += time_delta;
+  if (millisSinceLastRead < readIntervalMillis) return;
+  millisSinceLastRead = 0;
+
+  tempReader->readTemps();
+  for (int i = 0; i < TIRE_COUNT; i++) thermalDisplays[i]->updateDisplay(i);
+
   display.drawScreen();
 }
 
@@ -884,6 +962,12 @@ void loop() {
     offsetSetupPending = true;
   }
 
+  // "Set Camera Degrees" (#31), same deferral for the same reason.
+  if (consumeLensSetupRequest()){
+    menuHandler.closeMenu();
+    lensSetupPending = true;
+  }
+
   if (!menuHandler.isMenuActive()) {
     if(menuWasActive){
       menuWasActive = false;
@@ -892,11 +976,19 @@ void loop() {
         offsetSetupPending = false;
         beginOffsetSetup();
       }
+      if (lensSetupPending){
+        lensSetupPending = false;
+        beginLensSetup();
+      }
     }
     if (offsetSetupActive){
       // Offset setup owns the screen and all four swipe directions.
       checkOffsetSetupSwipes();                                 // may end the mode
       if (offsetSetupActive) doOffsetSetupMode(time_delta);
+    } else if (lensSetupActive){
+      // Lens setup likewise owns the screen and every swipe direction.
+      checkLensSetupSwipes();                                   // may end the mode
+      if (lensSetupActive) doLensSetupMode(time_delta);
     } else {
       checkForSwipes();
       serviceFeedback();
@@ -1080,6 +1172,11 @@ static void initializeSystem()
   tempReader = new TempReader();
   tempReader->autoRecoverTire = true;
   tempReader->useFarenheit = (scaleVal == 0);
+
+  // Fisheye correction (#31). Static config on TempReader, so this survives the delete/new
+  // above and the 768-entry map is only rebuilt when the field of view or the fit mode
+  // actually changed -- not on every menu close.
+  TempReader::configureLens(getLensCorrectEnabled(), getLensFovDegrees(), getLensFitToView());
 
   // Calculated (surface->carcass) mode is available in BOTH modes (#16): the Display
   // setting alone decides, and K/tau come from the active profile either way. It used to
