@@ -139,6 +139,30 @@ Every setting is documented — what it does, its range, and how to tune it — 
 
 To activate night mode, swipe right on the main display.
 
+### Main display views
+
+Swiping **up/down** on the main display cycles what it shows. With the camera-image views on
+(currently always — see [Display rendering](#display-rendering)) there are three states: the
+tire map alone, the four live camera images, and the camera images with each tire's
+temperatures drawn over the top.
+
+**Which of those the display starts in is decided by `Current Mode`**, at boot and every time
+you close the menu:
+
+| Mode | Starts in | Why |
+|---|---|---|
+| **Street** | camera images with the temperatures overlaid | You're looking *at* the tires — the picture is the point, and the numbers ride along on top. Falls back to the tire map if no corner has a camera fitted, since there'd be nothing to show. |
+| **Track** | the tire map alone | You're reading numbers between corners. The camera images are detail you have no time for at speed. |
+
+This only sets the starting point. A swipe still moves the view anywhere it could before, and
+that choice stands until the next time the display is rebuilt.
+
+Sensor detection resolves a moment *after* the display comes up — a fresh `TempReader` assumes
+every corner is a camera until `checkTireSensor()` proves otherwise — so on a board with no
+cameras Street starts on the camera view and drops back to the tire map within a read pass or
+two, once the sensors have owned up. Swiping before that happens takes the view off the
+automatic default for good, and it stays where you put it until the next boot or menu close.
+
 ### Display rendering
 
 Everything on screen is drawn through a `DisplayBase` interface with two interchangeable
