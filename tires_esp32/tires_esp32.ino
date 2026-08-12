@@ -107,6 +107,14 @@ ThermalDisplay* thermalDisplays[4] = {UL, UR, LL, LR};
 
 uint8_t thermalMode = 0; // 4 modes total
 
+// The mode's default view is resolved before the sensors have owned up to what they are
+// (#32). A fresh TempReader claims every corner is a camera and only finds out otherwise
+// when checkTireSensor() actually fails to bring one up, several read passes later -- so
+// initializeSystem() picks the default from a guess and this says the guess is still open
+// to correction. checkForWheelsReset() re-resolves while it is set; the first manual swipe
+// clears it, because from then on the view is the driver's choice and not ours to revise.
+bool defaultViewPending = false;
+
 // Keep track of time
 unsigned long previousTime = 0;
 long millisSinceLastUpdate = 0;
@@ -152,6 +160,7 @@ static void beginOffsetSetup();
 static void endOffsetSetup();
 static void checkOffsetSetupSwipes();
 static void doOffsetSetupMode(int time_delta);
+static uint8_t defaultThermalMode();
 extern uint8_t getCurrentModeValue();
 extern bool getAutoSealStationary();
 // Street tire temp window (#27) -- file scope because resolveTireWindow(),
@@ -186,12 +195,30 @@ void checkForWheelsReset(){
         oldWheels = nullptr;
         USBSerial.println("oldWheels pointer set to null");
         activateTires();
+
+        // The flags just moved, which means detection finally settled a corner -- and this is
+        // the only moment the truth about the cameras is newer than the guess the default view
+        // was picked from (#32). Re-resolve it here or the "if a camera is fitted" half of the
+        // rule can never fire: a board with no cameras would sit in Street's camera view
+        // showing four black quadrants, because at initializeSystem() time every corner still
+        // claimed to be one.
+        //
+        // Deliberately not latched to the first correction. Corners come up independently, so
+        // the "is there any camera at all" answer can change again a pass or two later; while
+        // the view is still ours it should keep tracking the truth.
+        if (defaultViewPending){
+          uint8_t want = defaultThermalMode();
+          if (want != thermalMode) setThermalMode(want);
+        }
       }
 }
 
 void switchThermalMode(bool up){
   int dir = (up)?1:-1;
   int tMode = (thermalMode + dir + THERMAL_MODES) % THERMAL_MODES;
+  // A deliberate pick outranks the mode's default (#32): late sensor detection must not
+  // yank the view back out from under the driver's thumb. Holds until the next rebuild.
+  defaultViewPending = false;
   setThermalMode(tMode);
 }
 
@@ -1152,12 +1179,17 @@ static void initializeSystem()
       wheels->setTireTemps(fl, fr, rl, rr);
   //wheels->setTireTemps(0, 0, 0, 0);
 
-  // Land the display in the current mode's default view (#32). Must come after tempReader is
-  // built, because the Street default asks whether there is a camera to show. setThermalMode()
-  // does the whole repaint this used to do inline -- clear, re-derive the quadrant flags, pick
-  // which tires the map owns, draw -- and it already knows to SKIP the full tire-map draw in
-  // the overlay view, where the map is painted text-only over the camera frames instead.
+  // Land the display in the current mode's default view (#32). setThermalMode() does the whole
+  // repaint this used to do inline -- clear, re-derive the quadrant flags, pick which tires the
+  // map owns, draw -- and it already knows to SKIP the full tire-map draw in the overlay view,
+  // where the map is painted text-only over the camera frames instead.
+  //
+  // The camera half of the answer is a GUESS at this point: tempReader was rebuilt a few lines
+  // up and a fresh one claims all four corners are cameras until checkTireSensor() proves
+  // otherwise, which happens on the read cadence once the running loop is going. So arm the
+  // correction -- checkForWheelsReset() re-resolves this the moment detection contradicts it.
   setThermalMode(defaultThermalMode());
+  defaultViewPending = true;
 
   const bool overlayView = (enableThermalTemps && thermalMode == 2);
 

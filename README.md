@@ -157,6 +157,12 @@ you close the menu:
 This only sets the starting point. A swipe still moves the view anywhere it could before, and
 that choice stands until the next time the display is rebuilt.
 
+Sensor detection resolves a moment *after* the display comes up — a fresh `TempReader` assumes
+every corner is a camera until `checkTireSensor()` proves otherwise — so on a board with no
+cameras Street starts on the camera view and drops back to the tire map within a read pass or
+two, once the sensors have owned up. Swiping before that happens takes the view off the
+automatic default for good, and it stays where you put it until the next boot or menu close.
+
 ### Display rendering
 
 Everything on screen is drawn through a `DisplayBase` interface with two interchangeable
