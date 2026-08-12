@@ -970,6 +970,40 @@ static void resolveTireWindow(float& outMin, float& outIdeal, float& outMax)
   outMax   = p.windowMax;
 }
 
+// True when at least one corner is actually reading a thermal camera. Street's default view
+// is a camera view, and landing on it with no camera would start the running display on four
+// black quadrants -- so the presence of a camera is part of the default, not an afterthought.
+static bool anyCameraPresent()
+{
+  if (!tempReader) return false;
+  for (int i = 0; i < TIRE_COUNT; i++)
+    if (tempReader->tireSensorIsCamera[i]) return true;
+  return false;
+}
+
+// -- The view a mode starts in (#32) --
+// Which view the running display lands in is a property of what the mode is FOR, so the mode
+// picks it rather than leaving you to swipe there by hand after every menu visit:
+//
+//   Street -- you are looking AT the tires. Show the camera images with the temperatures
+//             drawn over the top (the thermalMode 2 overlay view), when there is a camera.
+//   Track  -- you are reading the numbers between corners. The tire map alone; the camera
+//             images are detail you have no time for at speed.
+//
+// This only decides where the display STARTS (boot, and every menu close -- the two moments
+// initializeSystem() runs). Swipe up/down still moves the view anywhere it could before, and
+// that choice stands until the next rebuild.
+//
+// The overlay view exists only when enableThermalTemps drives all four quadrants from one
+// frame set; without it there is no mode that draws temperatures over the images, so Street
+// falls back to the all-four-cameras view (3), the closest thing on offer.
+static uint8_t defaultThermalMode()
+{
+  if (getCurrentModeValue() == 1) return 0;      // Track: tire map only
+  if (!anyCameraPresent())        return 0;      // nothing to show a camera view with
+  return enableThermalTemps ? 2 : 3;             // Street: cameras, temps over the top
+}
+
 static void initializeSystem()
 {
   cleanupObjects();
@@ -1117,15 +1151,27 @@ static void initializeSystem()
 
       wheels->setTireTemps(fl, fr, rl, rr);
   //wheels->setTireTemps(0, 0, 0, 0);
-  display.fillScreen(ST77XX_BLACK);
-  imuGateBarInvalidate();
 
-    activateTires();
+  // Land the display in the current mode's default view (#32). Must come after tempReader is
+  // built, because the Street default asks whether there is a camera to show. setThermalMode()
+  // does the whole repaint this used to do inline -- clear, re-derive the quadrant flags, pick
+  // which tires the map owns, draw -- and it already knows to SKIP the full tire-map draw in
+  // the overlay view, where the map is painted text-only over the camera frames instead.
+  setThermalMode(defaultThermalMode());
 
+  const bool overlayView = (enableThermalTemps && thermalMode == 2);
 
-  wheels->draw(true);
-  //display.fillScreen(ST77XX_BLACK);
-  forceDrawAfterInit = 2;
+  // setThermalMode() leaves the screen cleared in the overlay view. That is right mid-run --
+  // a swipe into it is followed by camera frames one read interval later -- but not here:
+  // at boot setup()'s 2 s USB grace period runs before the first read, so honouring the skip
+  // would start on two seconds of black. Paint the map once so there is something to look at;
+  // the first read replaces it with the images and their text-only overlay.
+  if (overlayView) wheels->draw(true);
+
+  // Two forced full repaints of the tire map on the way back into the running loop -- but not
+  // in the overlay view, where a full draw would blank the camera frames for those two passes
+  // and read as the images failing to come up.
+  forceDrawAfterInit = overlayView ? 0 : 2;
 }
 
 // Emit self-describing boot metadata (story 08 / #9): firmware SHA + the active config
