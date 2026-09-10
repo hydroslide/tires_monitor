@@ -77,6 +77,22 @@ The system creates its own WiFi access point:
 - Password: esp32
 - Port: 8080
 
+## NBP IMU Telemetry
+
+At the 100 ms sensor cadence, the device sends one timestamped NBP `UPDATEALL`
+packet containing both the legacy QMI8658C sensor axes and calibrated
+vehicle-frame channels:
+
+- `Accel X`, `Accel Y`, `Accel Z` in `G`
+- `Gyro X`, `Gyro Y`, `Gyro Z` in `deg/s`
+- `Longitudinal G` and `Lateral G` in `G`
+- `Yaw Rate` in `deg/s`
+
+The packet-header timestamp applies to every channel in that packet. Boot metadata
+records the IMU model, output rate, resolved longitudinal/lateral/yaw axes, and
+units. Vehicle-frame channels reuse the existing stationary boot calibration and
+orientation setting; the raw-axis channels remain unchanged for compatibility.
+
 ## Usage
 
 1. Power on the device.

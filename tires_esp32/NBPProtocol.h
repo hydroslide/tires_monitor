@@ -52,7 +52,9 @@ enum class ChannelType {
     GyroX,
     GyroY,
     GyroZ,
+    LongitudinalG,
     LateralG,
+    YawRate,
     // Session summary channels (story 01): emitted once on seal so the per-corner recap
     // is captured off-device. Per-corner peak/avg/time-in-window/overheat, plus the
     // session-level balance deltas and warm-up time.
@@ -119,10 +121,11 @@ public:
                       const Wheels::TireTemps &rl,
                       const Wheels::TireTemps &rr, bool farenheit);
 
-    // Emit the orientation-calibrated IMU sample (accel in g, gyro in deg/s) plus
-    // the gated lateral-g value as its own UPDATEALL packet.
+    // Emit the backward-compatible raw sensor axes plus calibrated vehicle-frame
+    // longitudinal/lateral acceleration and yaw rate in one timestamped packet.
     void sendIMU(float ax, float ay, float az,
-                 float gx, float gy, float gz, float lateralG);
+                 float gx, float gy, float gz,
+                 float longitudinalG, float lateralG, float yawRateDps);
 
     // Emit the sealed session summary as its own UPDATEALL packet (story 01). Overheat
     // is emitted as seconds-over; window as percent; balance/warm-up as their stored
@@ -157,6 +160,11 @@ public:
         uint8_t     leftOffset[4];
         uint8_t     rightOffset[4];
         const char* ambientSource; // e.g. "none" (no dedicated ambient sensor)
+        bool        imuPresent;
+        uint8_t     imuRateHz;
+        char        imuLongitudinalAxis;
+        char        imuLateralAxis;
+        char        imuYawAxis;
     };
     void sendBootMetadata(const BootMetadata& m);
 

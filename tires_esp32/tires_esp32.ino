@@ -365,7 +365,7 @@ void doRunningMode(int time_delta)
     if (!testMode && imuGate.isPresent()) {
       nbp.sendIMU(imuGate.accelG(0), imuGate.accelG(1), imuGate.accelG(2),
                   imuGate.gyroDps(0), imuGate.gyroDps(1), imuGate.gyroDps(2),
-                  imuGate.lateralG());
+                  imuGate.longitudinalG(), imuGate.lateralG(), imuGate.yawRateDps());
     }
 
     // Session accumulation (story 01): fold this frame's calculated working temps into
@@ -1248,6 +1248,11 @@ static void sendBootMetadata()
   // No dedicated ambient/cabin sensor on this board; report the source honestly so a
   // reader knows the ambient field is absent, not zero-valued data.
   m.ambientSource = "none";
+  m.imuPresent = imuGate.isPresent();
+  m.imuRateHz = (readIntervalMillis > 0) ? (uint8_t)(1000L / readIntervalMillis) : 0;
+  m.imuLongitudinalAxis = imuGate.longitudinalAxisName();
+  m.imuLateralAxis = imuGate.lateralAxisName();
+  m.imuYawAxis = imuGate.yawAxisName();
 
   nbp.sendBootMetadata(m);
 }

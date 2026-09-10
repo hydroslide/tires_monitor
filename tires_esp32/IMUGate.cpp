@@ -34,10 +34,15 @@ static const float DECAY_K = 0.75f;
 IMUGate::IMUGate()
 : bus(nullptr), present(false), enabled(true), trackActive(false),
   orient(ORIENT_AUTO), thresholdG(0.35f), gateDwellMs(500), dwellMs(2500),
-  dieTempC(0.0f), verticalAxis(2), lateralAxis(1),
+  dieTempC(0.0f), verticalAxis(2), lateralAxis(1), longitudinalAxis(0),
   latG(0.0f), latInit(false), zoneMs(0), capturing(true)
 {
-  for (int i = 0; i < 3; i++) { accG[i] = 0.0f; gyrDps[i] = 0.0f; restBias[i] = 0.0f; }
+  for (int i = 0; i < 3; i++) {
+    accG[i] = 0.0f;
+    gyrDps[i] = 0.0f;
+    restBias[i] = 0.0f;
+    gyroBiasDps[i] = 0.0f;
+  }
   for (int t = 0; t < TIRE_SLOTS; t++) { inflScoreMs[t] = 0; tireCond[t] = 0; }
 }
 
@@ -115,30 +120,56 @@ int IMUGate::dominantAxis(const float v[3]) const {
 }
 
 void IMUGate::resolveLateralAxis() {
-  if (orient == ORIENT_X)      { lateralAxis = 0; return; }
-  if (orient == ORIENT_Y)      { lateralAxis = 1; return; }
-  if (orient == ORIENT_Z)      { lateralAxis = 2; return; }
-  // AUTO: pick a horizontal axis (not the gravity axis). Prefer Y, then X, then Z
-  // so a level dash mount (gravity on Z) maps lateral -> Y by default.
-  for (int cand = 1; cand >= 0; cand--) {         // try Y(1) then X(0)
-    if (cand != verticalAxis) { lateralAxis = cand; return; }
+  if      (orient == ORIENT_X) lateralAxis = 0;
+  else if (orient == ORIENT_Y) lateralAxis = 1;
+  else if (orient == ORIENT_Z) lateralAxis = 2;
+  else {
+    // AUTO: pick a horizontal axis (not the gravity axis). Prefer Y, then X,
+    // then Z so a level dash mount (gravity on Z) maps lateral -> Y by default.
+    lateralAxis = -1;
+    for (int cand = 1; cand >= 0; cand--) {       // try Y(1) then X(0)
+      if (cand != verticalAxis) { lateralAxis = cand; break; }
+    }
+    if (lateralAxis < 0) lateralAxis = (verticalAxis == 2) ? 0 : 2;
   }
-  lateralAxis = (verticalAxis == 2) ? 0 : 2;
+
+  // A manual selection that points at gravity cannot describe lateral motion.
+  // Fall back to the same safe horizontal choice rather than publishing an
+  // impossible vehicle frame in NBP metadata.
+  if (lateralAxis == verticalAxis) {
+    lateralAxis = (verticalAxis != 1) ? 1 : 0;
+  }
+
+  // The remaining orthogonal axis is longitudinal.
+  longitudinalAxis = 0;
+  for (int cand = 0; cand < 3; cand++) {
+    if (cand != verticalAxis && cand != lateralAxis) {
+      longitudinalAxis = cand;
+      break;
+    }
+  }
 }
 
 void IMUGate::recalibrate() {
   if (!present) return;
   float sum[3] = {0.0f, 0.0f, 0.0f};
+  float gyroSum[3] = {0.0f, 0.0f, 0.0f};
   int taken = 0;
   for (int n = 0; n < CAL_SAMPLES; n++) {
     if (readSample()) {
-      for (int i = 0; i < 3; i++) sum[i] += accG[i];
+      for (int i = 0; i < 3; i++) {
+        sum[i] += accG[i];
+        gyroSum[i] += gyrDps[i];
+      }
       taken++;
     }
     delay(4);
   }
   if (taken > 0) {
-    for (int i = 0; i < 3; i++) restBias[i] = sum[i] / (float)taken;
+    for (int i = 0; i < 3; i++) {
+      restBias[i] = sum[i] / (float)taken;
+      gyroBiasDps[i] = gyroSum[i] / (float)taken;
+    }
   }
   verticalAxis = dominantAxis(restBias);
   resolveLateralAxis();
