@@ -145,14 +145,21 @@ void NBPProtocol::setRawTireTemps(const Wheels::TireTemps &fl,
 }
 
 void NBPProtocol::setIMU(float ax, float ay, float az,
-                          float gx, float gy, float gz, float lateralG) {
+                         float gx, float gy, float gz,
+                         float longitudinalG, float lateralG, float yawRateDps) {
+    // Raw sensor-frame fields first so existing logs/readers remain compatible.
     addChannel(ChannelType::AccelX, Unit::G, ax);
     addChannel(ChannelType::AccelY, Unit::G, ay);
     addChannel(ChannelType::AccelZ, Unit::G, az);
     addChannel(ChannelType::GyroX, Unit::DegPerSec, gx);
     addChannel(ChannelType::GyroY, Unit::DegPerSec, gy);
     addChannel(ChannelType::GyroZ, Unit::DegPerSec, gz);
+
+    // Canonical vehicle-frame fields for RaceRender/post-processing. They reuse the
+    // same IMU sample; the NBP packet header is their shared timestamp.
+    addChannel(ChannelType::LongitudinalG, Unit::G, longitudinalG);
     addChannel(ChannelType::LateralG, Unit::G, lateralG);
+    addChannel(ChannelType::YawRate, Unit::DegPerSec, yawRateDps);
 }
 
 void NBPProtocol::presetSessionSummary(bool farenheit) {
@@ -284,6 +291,16 @@ void NBPProtocol::sendBootMetadata(const BootMetadata& m) {
     }
 
     sendMetadata("AMBIENT_SOURCE", m.ambientSource);
+
+    sendMetadata("IMU_SENSOR", m.imuPresent ? "QMI8658C" : "not detected");
+    if (m.imuPresent) {
+        snprintf(buf, sizeof(buf), "%u Hz", (unsigned)m.imuRateHz);
+        sendMetadata("IMU_RATE", buf);
+        snprintf(buf, sizeof(buf), "long=%c,lateral=%c,yaw=%c",
+                 m.imuLongitudinalAxis, m.imuLateralAxis, m.imuYawAxis);
+        sendMetadata("IMU_AXES", buf);
+        sendMetadata("IMU_UNITS", "accel=G,gyro=deg/s");
+    }
 }
 
 void NBPProtocol::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit) {
@@ -360,7 +377,9 @@ const char* NBPProtocol::getChannelName(ChannelType channel) {
         case ChannelType::GyroX:         return "Gyro X";
         case ChannelType::GyroY:         return "Gyro Y";
         case ChannelType::GyroZ:         return "Gyro Z";
+        case ChannelType::LongitudinalG: return "Longitudinal G";
         case ChannelType::LateralG:      return "Lateral G";
+        case ChannelType::YawRate:       return "Yaw Rate";
         case ChannelType::SumFLPeak:     return "Summary FL Peak";
         case ChannelType::SumFRPeak:     return "Summary FR Peak";
         case ChannelType::SumRLPeak:     return "Summary RL Peak";

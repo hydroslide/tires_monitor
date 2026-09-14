@@ -86,9 +86,22 @@ public:
   unsigned long zoneDwellMs() const { return zoneMs; }  // time held in zone, ms
   unsigned long gateDwell()   const { return gateDwellMs; }
 
-  // Orientation-calibrated latest sample (accel in g, gyro in deg/s).
+  // Latest sensor-frame sample (accel in g, gyro in deg/s). These raw-axis
+  // getters are retained for backward-compatible NBP channels.
   float accelG(int axis) const { return (axis >= 0 && axis < 3) ? accG[axis] : 0.0f; }
   float gyroDps(int axis) const { return (axis >= 0 && axis < 3) ? gyrDps[axis] : 0.0f; }
+
+  // Vehicle-frame channels derived from that same sample and the existing
+  // stationary orientation calibration. No second IMU read is performed.
+  float longitudinalG() const {
+    return accG[longitudinalAxis] - restBias[longitudinalAxis];
+  }
+  float yawRateDps() const {
+    return gyrDps[verticalAxis] - gyroBiasDps[verticalAxis];
+  }
+  char longitudinalAxisName() const { return axisName(longitudinalAxis); }
+  char lateralAxisName() const { return axisName(lateralAxis); }
+  char yawAxisName() const { return axisName(verticalAxis); }
   float tempC() const { return dieTempC; }
 
 private:
@@ -102,15 +115,17 @@ private:
   unsigned long gateDwellMs;  // time held in the zone before capture starts (0 = instant)
   unsigned long dwellMs;      // sustained condition before the alert latches
 
-  // Latest calibrated sample.
-  float accG[3];          // accel, g, at-rest bias removed
+  // Latest raw sensor-frame sample.
+  float accG[3];          // accel, g
   float gyrDps[3];        // gyro, deg/s
   float dieTempC;
 
   // At-rest calibration.
   float restBias[3];      // averaged accel (g) captured while stationary
+  float gyroBiasDps[3];   // averaged gyro zero-rate offset captured at the same time
   int   verticalAxis;     // axis carrying gravity at rest
   int   lateralAxis;      // horizontal axis used for the lateral-g gate
+  int   longitudinalAxis; // remaining horizontal axis
 
   // Gate + latch running state.
   float latG;             // EMA-smoothed lateral g (minimal smoothing)
@@ -131,6 +146,7 @@ private:
   bool    readSample();   // fill accG/gyrDps/dieTempC from the chip
   int     dominantAxis(const float v[3]) const;
   void    resolveLateralAxis();
+  static char axisName(int axis) { return (axis == 0) ? 'X' : (axis == 1) ? 'Y' : 'Z'; }
 };
 
 #endif // IMU_GATE_H
