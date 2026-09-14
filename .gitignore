@@ -45,3 +45,7 @@ compile_commands.json
 *.elf
 *.map
 *.hex
+
+# Claude Code: never commit worktrees or local settings
+.claude/worktrees/
+.claude/settings.local.json

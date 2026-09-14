@@ -2,6 +2,34 @@
 
 extern HWCDC USBSerial;
 
+// "Settings written" sentinel. A VALUE_BYTE could never be persisted as 0 (nor a
+// signed value offset-encoded to 0) because loading skipped any stored byte of 0 —
+// it was overloaded to mean "erased / never written". Instead of guessing per byte,
+// we stamp a magic marker once saveToEEPROM() has run. On load: if the marker is
+// absent (never saved by this firmware), keep the compiled-in defaults; if present,
+// every byte 0..255 is a legitimate stored value and is loaded verbatim.
+//
+// Bump SETTINGS_MAGIC whenever binding addresses are removed or re-purposed: the stored
+// bytes are then meaningless for the new layout, and a stale value would be misread as a
+// different setting (#14 freed the Street/Track Min/Ideal/Max bytes and re-used two of
+// them for the per-mode default profile, so an old streetIdeal=120 would have loaded as a
+// wildly out-of-range profile index). A new magic makes the first boot after the flash
+// fall back to the compiled-in defaults and re-seed cleanly. (#15 then freed the eight
+// camera-offset bytes at 31..38 and re-purposed 31 for the inflation indicator, so an old
+// stored offset would have loaded as that toggle. #20 then claimed 32 and 33 for the
+// capture dwell and the g-bar toggle -- addresses no earlier firmware ever WROTE, so a
+// pre-#20 block holds junk there and an uncleared 0xFF would have read as a 25.5 s dwell.
+// #27 then claimed the last four bytes #14 freed -- 10, 14, 16, 18 -- for the Street
+// window and its override toggle. Same hazard in its most literal form: those bytes still
+// hold a pre-#14 save's streetMax / trackMin / trackIdeal / trackMax, so without a bump a
+// stale trackMax=180 at 18 would load as "override on" and a stale trackMin=100 at 14 as
+// the Street ideal -- plausible-looking numbers nobody typed. #31 then claimed 34, 35 and
+// 36 for the lens correction; the same hazard again, and here the stale byte is actively
+// dangerous rather than merely wrong -- an uncleared 0xFF at 34 loads as a 255-degree
+// field of view, and the re-projection degenerates as the FOV approaches 180.)
+static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 255; above all binding addrs
+static const uint8_t  SETTINGS_MAGIC      = 0xAA;
+
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);
 static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count);
@@ -98,6 +126,13 @@ void MenuSystem::increaseValue() {
       }
       break;
     }
+    case VALUE_SBYTE: {
+      int8_t* val = (int8_t*)b->valuePtr;
+      if (*val < (int8_t)b->maxByte) {
+        (*val)++;
+      }
+      break;
+    }
     case VALUE_BOOL: {
       bool* val = (bool*)b->valuePtr;
       *val = true;
@@ -130,6 +165,13 @@ void MenuSystem::decreaseValue() {
     case VALUE_BYTE: {
       uint8_t* val = (uint8_t*)b->valuePtr;
       if (*val > b->minByte) {
+        (*val)--;
+      }
+      break;
+    }
+    case VALUE_SBYTE: {
+      int8_t* val = (int8_t*)b->valuePtr;
+      if (*val > (int8_t)b->minByte) {
         (*val)--;
       }
       break;
@@ -183,6 +225,9 @@ static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
     if (item->itemType == MENU_VALUE && item->binding) {
       MenuValueBinding* b = item->binding;
       uint16_t addr = b->eepromAddress;
+      // Transient binding: runtime-only value, deliberately not persisted (and the
+      // sentinel address is outside the EEPROM anyway, so it must never reach write()).
+      if (addr == EEPROM_NO_PERSIST) continue;
       switch (b->valueType) {
         case VALUE_BYTE:
           EEPROM.write(addr, *(uint8_t*)b->valuePtr);
@@ -192,6 +237,9 @@ static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count) {
             USBSerial.print(" written to: ");
             USBSerial.println((String)addr);
           itemsSaved++;
+          break;
+        case VALUE_SBYTE:
+          EEPROM.write(addr, (uint8_t)(*(int8_t*)b->valuePtr));
           break;
         case VALUE_BOOL:
           EEPROM.write(addr, *(bool*)b->valuePtr);
@@ -222,18 +270,25 @@ static void loadMenuFromEEPROMHelper(const MenuItem* menu, uint8_t count) {
     if (item->itemType == MENU_VALUE && item->binding) {
       MenuValueBinding* b = item->binding;
       uint16_t addr = b->eepromAddress;
+      // Transient binding: nothing was persisted for it, so leave the runtime value
+      // alone (whoever owns it resolves it -- see applyModeDefaultProfile()).
+      if (addr == EEPROM_NO_PERSIST) continue;
       switch (b->valueType) {
-        case VALUE_BYTE:
-          if (EEPROM.read(addr) > 0 && EEPROM.read(addr) < 255){            
-            *(uint8_t*)b->valuePtr = EEPROM.read(addr);
-            
-            USBSerial.print(item->title);
-            USBSerial.print(": ");
-            USBSerial.print((String)*(uint8_t*)b->valuePtr);
-            USBSerial.print(" read from: ");
-            USBSerial.println((String)addr);
-            itemsLoaded++;
-          }
+        case VALUE_BYTE: {
+          // The caller only reaches the helper once the "written" sentinel is present,
+          // so any stored byte (including 0) is a real value — load it verbatim.
+          *(uint8_t*)b->valuePtr = EEPROM.read(addr);
+
+          USBSerial.print(item->title);
+          USBSerial.print(": ");
+          USBSerial.print((String)*(uint8_t*)b->valuePtr);
+          USBSerial.print(" read from: ");
+          USBSerial.println((String)addr);
+          itemsLoaded++;
+          break;
+        }
+        case VALUE_SBYTE:
+          *(int8_t*)b->valuePtr = (int8_t)EEPROM.read(addr);
           break;
         case VALUE_BOOL:
           *(bool*)b->valuePtr = EEPROM.read(addr);
@@ -263,6 +318,7 @@ void MenuSystem::saveToEEPROM() {
   // The root is always at stackDepth=0
   const MenuContext& rootCtx = menuStack[0];
   saveMenuToEEPROMHelper(rootCtx.menu, rootCtx.count);
+  EEPROM.write(SETTINGS_MAGIC_ADDR, SETTINGS_MAGIC); // mark settings as written
   EEPROM.commit();
   USBSerial.print(String(itemsSaved));
   USBSerial.println(" items saved into EEPROM");
@@ -273,6 +329,12 @@ void MenuSystem::saveToEEPROM() {
 void MenuSystem::loadFromEEPROM() {
   const MenuContext& rootCtx = menuStack[0];
   itemsLoaded=0;
+  // No saved settings by this firmware yet: keep compiled-in defaults rather than
+  // pulling in erased/garbage EEPROM contents.
+  if (EEPROM.read(SETTINGS_MAGIC_ADDR) != SETTINGS_MAGIC) {
+    USBSerial.println("No saved settings found; using defaults");
+    return;
+  }
   loadMenuFromEEPROMHelper(rootCtx.menu, rootCtx.count);
   USBSerial.print(String(itemsLoaded));
   USBSerial.println(" items loaded from EEPROM");

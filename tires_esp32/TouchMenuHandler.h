@@ -23,6 +23,21 @@ public:
     bool SwipedRight();
     bool SwipedUp();
     bool SwipedDown();
+    // GESTURE_LEFT reaches the sketch only while the menu is suspended -- normally it is
+    // swallowed to OPEN the menu (see handleGesture). Offset setup (#23) needs it as half of
+    // its nudge pair, so it suspends the menu for the duration.
+    bool SwipedLeft();
+
+    // Suspend the "a left swipe opens the menu" behavior, so a full-screen mode can own all
+    // four directions instead of three.
+    void suspendMenu(bool suspend);
+
+    // Force the menu open / closed. menuActive is otherwise reachable only through gestures,
+    // and a menu ACTION that hands the screen to another mode (#23) has to be able to leave
+    // the menu -- and to land back on the exact screen it left, which MenuSystem's own
+    // navigation stack preserves for free.
+    void openMenu();
+    void closeMenu();
 
 private:
     MenuSystem& menu;
@@ -30,7 +45,9 @@ private:
     CST816Touch& touchSensor; // from the official library
 
     bool menuActive;
+    bool menuSuspended = false;
     bool unhandledSwipeRight;
+    bool unhandledSwipeLeft;
     bool unhandledSwipeUp;
     bool unhandledSwipeDown;
     int touchDelay=200;

@@ -51,7 +51,7 @@ The following libraries are required:
 - `Tire.h/cpp` - Implements individual tire display and behavior
 - `Wheels.h/cpp` - Manages the layout of four tires on the display
 - `TempReader.h/cpp` - Handles reading temperatures from MLX90614 sensors
-- `NBPProtocol.h/cpp` - Implements the Networked Binary Protocol for remote communication
+- `NBPProtocol.h/cpp` - Numeric Broadcast Protocol (HP Tuners NBP, TrackAddict's device-data format): one `UPDATEALL` per read cycle carrying every channel
 - `WifiSerial.h/cpp` - Provides WiFi communication capabilities
 - `TireMenu.h/cpp` - Defines menu structure and configuration options
 - `MenuSystem.h/cpp` - Implements the menu navigation system
@@ -76,6 +76,23 @@ The system creates its own WiFi access point:
 - SSID: TireTempMonitor
 - Password: esp32
 - Port: 8080
+
+## NBP IMU Telemetry
+
+The IMU channels ride in the device's single per-cycle NBP `UPDATEALL` packet
+(see the root README), alongside the tire channels, at the 100 ms sensor cadence.
+Both the legacy QMI8658C sensor axes and calibrated vehicle-frame channels are
+included:
+
+- `Accel X`, `Accel Y`, `Accel Z` in `G`
+- `Gyro X`, `Gyro Y`, `Gyro Z` in `deg/s`
+- `Longitudinal G` and `Lateral G` in `G`
+- `Yaw Rate` in `deg/s`
+
+The packet-header timestamp applies to every channel in the packet. Boot metadata
+records the IMU model, output rate, resolved longitudinal/lateral/yaw axes, and
+units. Vehicle-frame channels reuse the existing stationary boot calibration and
+orientation setting; the raw-axis channels remain unchanged for compatibility.
 
 ## Usage
 

@@ -1,0 +1,152 @@
+#ifndef IMU_GATE_H
+#define IMU_GATE_H
+
+#include <Arduino.h>
+#include <Wire.h>
+
+// IMUGate -- on-board QMI8658C (accel + gyro, I2C 0x6B) capture gate and latched
+// over/under alert state machine for the tire-temp monitor (design 5.4, story 02).
+//
+// The core job: read the car's lateral g and decide whether we are "capturing"
+// (car straight and steady) so inflation/segment reads are only accumulated on the
+// straight, where the center-hot artifact is absent. It also runs a debounced,
+// LATCHED over/under verdict PER CORNER, driven by externally-supplied per-frame
+// conditions -- one signed evidence score per tire that builds on agreeing frames and
+// leaks back on neutral ones, so a verdict both earns its way in and can fall back out.
+//
+// Self-contained register-level driver on purpose: the pinned build profile ships
+// no IMU library, so we talk to the QMI8658C directly over Wire to keep compiling.
+class IMUGate {
+public:
+  // Lateral axis mapping. AUTO learns "level" (which axis is vertical) at boot and
+  // maps lateral to a horizontal axis; the explicit values are a manual fallback.
+  enum Orient { ORIENT_AUTO = 0, ORIENT_X = 1, ORIENT_Y = 2, ORIENT_Z = 3 };
+
+  // Latched alert state. OVER = center-hot (over-inflation) sustained past the dwell.
+  enum Alert { ALERT_NONE = 0, ALERT_OVER = 1, ALERT_UNDER = 2 };
+
+  IMUGate();
+
+  // Initialize the QMI8658C and run a one-shot orientation auto-calibration
+  // (learn the at-rest gravity vector; the car should be stationary at boot).
+  // Returns true if the chip answered on I2C.
+  bool begin(TwoWire &wire = Wire);
+
+  // Push menu-configured settings. thresholdG in g, both dwells in milliseconds.
+  // gateDwellMs = how long lateral g must stay inside the zone before we capture (0 =
+  // instant). dwellMs = how long an over/under condition must persist on captured frames
+  // before the alert latches. They are independent knobs; see IMUGate.cpp update().
+  void applyConfig(bool enabled, float thresholdG, unsigned long gateDwellMs,
+                   unsigned long dwellMs, Orient orient);
+
+  // Re-run the at-rest orientation calibration (car must be stationary/level).
+  void recalibrate();
+
+  // Sample the IMU and advance the gate + latch. dtMillis is the loop delta;
+  // trackMode gates the whole feature -- in Street mode the gate never suppresses
+  // and the latch is held clear, so upstream behavior is unchanged.
+  void update(long dtMillis, bool trackMode);
+
+  // Per captured-frame condition for ONE corner: +1 = over, -1 = under, 0 = ok.
+  // Ignored while cornering (not capturing) or outside Track mode. Corner order is the
+  // firmware-wide 0=FL, 1=FR, 2=RL, 3=RR.
+  void feedCondition(int tire, int cond);
+
+  // Corners the inflation latch tracks: 0=FL, 1=FR, 2=RL, 3=RR.
+  static const int TIRE_SLOTS = 4;
+
+  bool  isPresent()   const { return present; }
+  bool  isEnabled()   const { return enabled; }
+  bool  isCapturing() const { return capturing; }   // true => accumulate reads
+  bool  isCornering() const { return present && enabled && trackActive && !capturing; }
+  float lateralG()    const { return latG; }        // smoothed, gravity-removed
+
+  // Latched inflation verdict for ONE corner, derived purely from that corner's score.
+  Alert alertState(int tire) const;
+  // Rolled-up verdict across all four (majority; tie => NONE), for consumers that still
+  // want a single number.
+  Alert alertState() const;
+
+  // Raw signed evidence score for a corner, in ms: positive = toward OVER, negative =
+  // toward UNDER. Latches at +/- inflScoreLatch() and saturates at +/- inflScoreMax().
+  // Exposed so the per-tire dwell bar can show how close a corner is to latching.
+  long inflScore(int tire) const {
+    return (tire >= 0 && tire < TIRE_SLOTS) ? inflScoreMs[tire] : 0;
+  }
+  long inflScoreLatch() const { return (long)dwellMs; }
+  long inflScoreMax()   const { return (long)dwellMs * 2; }
+
+  // Gate internals, exposed for the on-screen test bar (#20). inZone() is the raw
+  // threshold test; isCapturing() is inZone() AND the capture dwell already served, so
+  // the two disagree exactly during the dwell window -- which is the state the bar paints
+  // yellow. Note isCapturing() is forced true when the feature is inert (Street mode,
+  // gate disabled, no IMU), where inZone() still reports the honest lateral-g answer.
+  bool  inZone()      const { return present && (fabsf(latG) < thresholdG); }
+  float thresholdGate() const { return thresholdG; }    // g
+  unsigned long zoneDwellMs() const { return zoneMs; }  // time held in zone, ms
+  unsigned long gateDwell()   const { return gateDwellMs; }
+
+  // Latest sensor-frame sample (accel in g, gyro in deg/s). These raw-axis
+  // getters are retained for backward-compatible NBP channels.
+  float accelG(int axis) const { return (axis >= 0 && axis < 3) ? accG[axis] : 0.0f; }
+  float gyroDps(int axis) const { return (axis >= 0 && axis < 3) ? gyrDps[axis] : 0.0f; }
+
+  // Vehicle-frame channels derived from that same sample and the existing
+  // stationary orientation calibration. No second IMU read is performed.
+  float longitudinalG() const {
+    return accG[longitudinalAxis] - restBias[longitudinalAxis];
+  }
+  float yawRateDps() const {
+    return gyrDps[verticalAxis] - gyroBiasDps[verticalAxis];
+  }
+  char longitudinalAxisName() const { return axisName(longitudinalAxis); }
+  char lateralAxisName() const { return axisName(lateralAxis); }
+  char yawAxisName() const { return axisName(verticalAxis); }
+  float tempC() const { return dieTempC; }
+
+private:
+  TwoWire* bus;
+  bool present;
+  bool enabled;
+  bool trackActive;
+
+  Orient orient;
+  float  thresholdG;          // |lateral g| below this => in the capture zone
+  unsigned long gateDwellMs;  // time held in the zone before capture starts (0 = instant)
+  unsigned long dwellMs;      // sustained condition before the alert latches
+
+  // Latest raw sensor-frame sample.
+  float accG[3];          // accel, g
+  float gyrDps[3];        // gyro, deg/s
+  float dieTempC;
+
+  // At-rest calibration.
+  float restBias[3];      // averaged accel (g) captured while stationary
+  float gyroBiasDps[3];   // averaged gyro zero-rate offset captured at the same time
+  int   verticalAxis;     // axis carrying gravity at rest
+  int   lateralAxis;      // horizontal axis used for the lateral-g gate
+  int   longitudinalAxis; // remaining horizontal axis
+
+  // Gate + latch running state.
+  float latG;             // EMA-smoothed lateral g (minimal smoothing)
+  bool  latInit;
+  unsigned long zoneMs;   // continuous time held inside the zone, ms (0 on any exit)
+  bool  capturing;
+
+  // Per-corner signed evidence, ms. Grows toward +/- while that corner reads over/under
+  // on captured frames, leaks back toward 0 on neutral ones, clamped to +/- 2*dwellMs.
+  // The latch is read off this (see alertState), so there is no separate latched flag.
+  long  inflScoreMs[TIRE_SLOTS];
+  int8_t tireCond[TIRE_SLOTS];   // last fed per-frame condition per corner (+1/0/-1)
+
+  // --- low-level QMI8658C helpers ---
+  bool    writeReg(uint8_t reg, uint8_t val);
+  uint8_t readReg(uint8_t reg);
+  bool    readBytes(uint8_t reg, uint8_t* buf, uint8_t len);
+  bool    readSample();   // fill accG/gyrDps/dieTempC from the chip
+  int     dominantAxis(const float v[3]) const;
+  void    resolveLateralAxis();
+  static char axisName(int axis) { return (axis == 0) ? 'X' : (axis == 1) ? 'Y' : 'Z'; }
+};
+
+#endif // IMU_GATE_H

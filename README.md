@@ -15,6 +15,8 @@ This project provides a complete solution for monitoring tire temperatures in pe
   - Purple: Ideal temperature range
   - Red: Overheated tires
 - Two modes: Street and Track, with different temperature thresholds
+- Straight-line capture gating from the onboard IMU, with a live lateral-g bar between the
+  tire rows showing the gate zone, current lateral g, and whether it's capturing
 - Support for both Fahrenheit and Celsius temperature scales
 - Night mode with configurable brightness (activated by right swipe gesture)
 - Touch interface for menu navigation
@@ -75,6 +77,8 @@ Development happens in **VS Code** using `arduino-cli`. The Arduino IDE is not r
 | **[docs/DEV-SETUP-MACOS.md](docs/DEV-SETUP-MACOS.md)** | First-time setup on a Mac |
 | **[docs/DEV-SETUP-WINDOWS.md](docs/DEV-SETUP-WINDOWS.md)** | First-time setup on Windows |
 | **[docs/BUILD-AND-FLASH.md](docs/BUILD-AND-FLASH.md)** | The daily build/flash/monitor loop |
+| **[docs/SETTINGS.md](docs/SETTINGS.md)** | Every menu setting — what it does, default, range, how to tune it |
+| **[docs/tire-temp-functional-design.md](docs/tire-temp-functional-design.md)** | Why the tire-temp maths works the way it does (findings + amendments) |
 
 Short version, once set up:
 
@@ -122,15 +126,101 @@ WiFi credentials are `#define`d at the top of `tires_esp32.ino`.
 
 The system can be configured through the touch interface menu. Swipe left to access the menu and use swipe up/down gestures to navigate. Swipe left to activate a setting. Swipe up/down to increase/decrease values. Swipe right to exit the setting:
 
+The root menu is nine items and fits the screen without scrolling. Menus are named for what
+they do rather than the hardware they use, so each one groups a whole feature:
+
 1. **Current Mode**: Choose between Street and Track modes
-2. **Temperature Scale**: Select Fahrenheit or Celsius
-3. **Street Settings**: Configure temperature thresholds for street driving
-4. **Track Settings**: Configure temperature thresholds for track driving
-5. **Night Brightness**: Adjust the display brightness for night mode
-6. **Hardware Settings**: Configure sensor mapping for each tire position
-7. **Save Config**: Save current settings to EEPROM
+2. **Current Tire**: The active tire profile — the same value as `Tire Profiles → Profile`, hoisted so swapping tires is one tap
+3. **Temperature**: `Source` (Raw surface vs Calculated carcass) and `Scale` (F/C). Source is a signal switch, not a display one — it changes what the device concludes, not just what it shows
+4. **Mode Settings**: **Street Settings** / **Track Settings** — the per-mode default tire profile; Street also carries its own temperature window (`Override Window` + Min/Ideal/Max), and Track adds the balance and session items
+5. **Tire Profiles**: The temperature window (Min/Ideal/Max), carcass offset and lag, and per-corner camera crop offsets — the profile supplies the window on Track, and in Street unless Street's `Override Window` is on. Carcass offset, lag and crop always come from the profile, in both modes
+6. **Inflation & Camber**: The whole over/under-inflation and camber check in one place — the delta thresholds, the verdict latch, what gets painted, and the **Straight-Line Gate** (capture threshold, gate dwell, axis orientation) that decides which frames count
+7. **Display**: Night brightness, thermal image colouring, crop guide overlay, tire redraw rate, and the fisheye **lens correction** (master switch, field of view, letterbox-vs-fit, and the interactive `Set Camera Degrees` tuner) — see [Lens correction](#lens-correction)
+8. **Test**: ⚠️ *temporarily* selects the display rendering path — buffered (On) vs direct (Off). See [Display rendering](#display-rendering) below. Normally: enable the raw thermal-camera image views
+9. **Save Config**: Save current settings to EEPROM
+
+Every setting is documented — what it does, its range, and how to tune it — in
+[docs/SETTINGS.md](docs/SETTINGS.md).
 
 To activate night mode, swipe right on the main display.
+
+### Main display views
+
+Swiping **up/down** on the main display cycles what it shows. With the camera-image views on
+(currently always — see [Display rendering](#display-rendering)) there are three states: the
+tire map alone, the four live camera images, and the camera images with each tire's
+temperatures drawn over the top.
+
+**Which of those the display starts in is decided by `Current Mode`**, at boot and every time
+you close the menu:
+
+| Mode | Starts in | Why |
+|---|---|---|
+| **Street** | camera images with the temperatures overlaid | You're looking *at* the tires — the picture is the point, and the numbers ride along on top. Falls back to the tire map if no corner has a camera fitted, since there'd be nothing to show. |
+| **Track** | the tire map alone | You're reading numbers between corners. The camera images are detail you have no time for at speed. |
+
+This only sets the starting point. A swipe still moves the view anywhere it could before, and
+that choice stands until the next time the display is rebuilt.
+
+Sensor detection resolves a moment *after* the display comes up — a fresh `TempReader` assumes
+every corner is a camera until `checkTireSensor()` proves otherwise — so on a board with no
+cameras Street starts on the camera view and drops back to the tire map within a read pass or
+two, once the sensors have owned up. Swiping before that happens takes the view off the
+automatic default for good, and it stays where you put it until the next boot or menu close.
+
+### Display rendering
+
+Everything on screen is drawn through a `DisplayBase` interface with two interchangeable
+implementations: **buffered** (the frame is composed into a 134 KB off-screen canvas in
+PSRAM, then pushed to the panel in one burst — no flicker, no visible partial frames) and
+**direct** (straight to the panel, the original behaviour, kept as an escape hatch).
+
+**The `Test` menu item currently picks between them, at runtime, applied when you close the
+menu.** That is a temporary staging measure so the two can be compared on the car by eye; it
+costs `Test` its normal meaning meanwhile (the camera-image views are pinned on). Once the
+buffered path is confirmed on the car, it becomes the default and `Test` goes back to what it
+was.
+
+Design notes, the flush map, and the reason the canvas is never cleared between frames are in
+[tires_esp32/BufferedDisplay.md](tires_esp32/BufferedDisplay.md). The one rule worth knowing
+before touching rendering code: **nothing outside the display classes may hold an
+`Adafruit_ST7789&`** — on the buffered path it paints straight to the glass and is wiped by
+the next flush, with no compile error.
+
+### Aiming the cameras
+
+The eight per-corner crop offsets decide where each camera's three temperature bands land on
+the tread, and they're a pixel aim — you can only set them against the picture. **Tire
+Profiles → Offsets → Set Offsets** hands the whole screen to the four live camera images with
+their crop guides drawn on top and walks all eight values in one pass: the armed guide blinks,
+left/right slides that line under your finger, down/up step through the values, and stepping
+off either end raises a pulsing green (keep) or red (discard) border to confirm before you
+leave. Corners without a camera are skipped. Edits go into the selected profile; **Save
+Config** is still what writes them to EEPROM. Full gesture map in
+[docs/SETTINGS.md](docs/SETTINGS.md#setting-offsets-interactively).
+
+### Lens correction
+
+The wide-angle MLX90640 is a ~110° lens, so straight lines bow: a tire reads as an oval and
+its circumferential grooves arc like longitude lines on a globe. **That is not only a looks
+problem.** The three temperature bands are fixed-width column slices, and fixed columns are
+equal slices of *tire* only if the projection is linear across the width — so the
+outer-vs-inner comparison behind the camber and inflation verdicts was reading bands that
+didn't match the physical thirds of the tread.
+
+Each frame is therefore re-projected to a rectilinear (pinhole) image **at the moment of
+capture**, before the medians, the thermal image, NBP or balance see it — so everything
+downstream inherits the fix. `Display → Lens Correct` is the master switch, and
+`Display → Camera Degrees` (default `110`) is the lens's field of view.
+
+That value is meant to be tuned by eye: **Display → Set Camera Degrees** hands the screen to
+the four live camera images and puts the number under your thumb — left/right nudges by a
+degree, down/down keeps, up/up discards — so you swipe until the grooves run straight and
+parallel. `Display → Fit to View` chooses what happens to the top and bottom rows the
+correction has no data for: black bands (off, the honest default) or squashed away to fill
+the frame (on). Neither can move a measurement — the band medians only sample the middle
+rows, and a boot-time self-test asserts it. Details and the tuning procedure in
+[docs/SETTINGS.md](docs/SETTINGS.md#display).
 
 ## Debugging Tools
 
@@ -140,7 +230,16 @@ To activate night mode, swipe right on the main display.
 
 ## Communication Protocol
 
-The system uses a custom NBP (Networked Binary Protocol) for wireless communication with external devices. This allows for remote monitoring of tire temperatures via WiFi or Bluetooth.
+The device broadcasts its data over HP Tuners' **Numeric Broadcast Protocol (NBP)** — the
+text protocol TrackAddict reads from external devices — on WiFi. Every read cycle
+(10 Hz) it sends **one `UPDATEALL` packet carrying every channel it knows**: the twelve
+active tire temperatures (`Front Left Tire O/C/I (degF)` …), the twelve raw surface
+temperatures (`… Tire Raw …`), the IMU sample, the per-corner inflation
+delta/threshold/verdict, the per-band fill and delta colors as integer `0xRRGGBB`
+values, and the session-summary channels (−1 until a session is sealed). The packet
+always has the same shape because an NBP client fixes its channel list on the first
+`UPDATEALL` it sees; the earlier firmware sent each group as its own `UPDATEALL`, so which
+columns TrackAddict logged was a race per session.
 
 ## License
 

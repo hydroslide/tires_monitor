@@ -1,5 +1,6 @@
 #include "Wheels.h"
-extern Adafruit_ST7789 tft;  // your global display
+#include "DisplayBase.h"
+extern DisplayBase& display;
 
 Wheels::Wheels(int _bufferPix,
                uint16_t _outlineColor,
@@ -22,8 +23,8 @@ Wheels::Wheels(int _bufferPix,
     lowTempTextColor(_lowTempTextColor), normalTempTextColor(_normalTempTextColor),
     idealTempTextColor(_idealTempTextColor), highTempTextColor(_highTempTextColor)
 {
-    int tireW  = (tft.width()  - bufferPix*3) / 2;
-    int tireH  = (tft.height() - bufferPix*3) / 2;
+    int tireW  = (display.width()  - bufferPix*3) / 2;
+    int tireH  = (display.height() - bufferPix*3) / 2;
     int x0 = bufferPix, x1 = x0 + tireW + bufferPix;
     int y0 = bufferPix, y1 = y0 + tireH + bufferPix;
 
@@ -144,6 +145,50 @@ void Wheels::setTireTemps(const TireTemps &fl,
                     lowTempTextColor, normalTempTextColor,
                     idealTempTextColor, highTempTextColor);
     }
+}
+
+// Resolve a corner index to its ThreeSectionTire, or nullptr for a single-sensor corner.
+// The fl3/fr3/rl3/rr3 flags stand in for RTTI, which this build doesn't have.
+ThreeSectionTire* Wheels::cameraCorner(int corner) const {
+    Tire* t;
+    bool three;
+    switch (corner) {
+      case 0: t = frontLeft;  three = fl3; break;
+      case 1: t = frontRight; three = fr3; break;
+      case 2: t = rearLeft;   three = rl3; break;
+      case 3: t = rearRight;  three = rr3; break;
+      default: return nullptr;
+    }
+    return three ? static_cast<ThreeSectionTire*>(t) : nullptr;
+}
+
+void Wheels::setInflationVerdict(int corner, int8_t verdict) {
+    ThreeSectionTire* ts = cameraCorner(corner);
+    if (ts) ts->setInflationVerdict(verdict);
+}
+
+void Wheels::setDwellProgress(int corner, long score, long latch, long max) {
+    ThreeSectionTire* ts = cameraCorner(corner);
+    if (ts) ts->setDwellProgress(score, latch, max);
+}
+
+bool Wheels::cornerColors(int corner, uint16_t fill[3], uint16_t delta[3]) const {
+    Tire* t;
+    bool three;
+    switch (corner) {
+      case 0: t = frontLeft;  three = fl3; break;
+      case 1: t = frontRight; three = fr3; break;
+      case 2: t = rearLeft;   three = rl3; break;
+      case 3: t = rearRight;  three = rr3; break;
+      default: return false;
+    }
+    if (!three) return false;
+    ThreeSectionTire* ts = static_cast<ThreeSectionTire*>(t);
+    for (int i = 0; i < 3; i++) {
+      fill[i]  = ts->sectionFillColor(i);
+      delta[i] = ts->sectionDeltaColor(i);
+    }
+    return true;
 }
 
     char Wheels::getTempUnit(){ return

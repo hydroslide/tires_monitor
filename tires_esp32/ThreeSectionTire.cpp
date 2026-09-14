@@ -1,6 +1,7 @@
 #include "ThreeSectionTire.h"
 #include <Arduino.h>          // for round()
-extern Adafruit_ST7789 tft;   // from your main sketch
+#include "DisplayBase.h"
+extern DisplayBase& display;
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
@@ -10,6 +11,7 @@ extern Adafruit_ST7789 tft;   // from your main sketch
 #include <Fonts/FreeMonoBold18pt7b.h>
 
 extern HWCDC USBSerial;
+extern bool getShowGateBar();   // TireMenu -- shared toggle for the IMU gate tuning aids
 
 void ThreeSectionTire::setSectionTemps(const float temps[3],
                                        bool isFahrenheit,
@@ -75,12 +77,20 @@ bool ThreeSectionTire::anySectionColorChanged(){
       if (sectionFillColors[i] != lastSectionFillColors[i])
         return true;
     }
+    return false;
 }
 
 void ThreeSectionTire::draw(bool force, bool textOnly) {
 
+  // initialize() is a virtual override that the base Tire constructor cannot reach
+  // (the vtable is still Tire's during base construction), so run it once here on the
+  // first draw to seed lastDeltaColors[]/currentDeltaColors[]/lastSectionFillColors[].
+  if (!deltaColorsInitialized) {
+    initialize();
+    deltaColorsInitialized = true;
+  }
 
-    // if (drawsSinceForce>= forceInterval){      
+    // if (drawsSinceForce>= forceInterval){
     //   force=true;
     // }
     // drawsSinceForce++;
@@ -93,7 +103,7 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     int lastTemp = lastTemps[i];
     int temperature = sectionTemps[i];
     if (temperature > 300 || temperature < -30)
-      return; // F
+      continue; // out-of-range band: skip just this section, keep drawing the rest
     if (lastTemp != temperature) {
       changed = true;
       sectionChanged[i]=true;
@@ -103,6 +113,15 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
     }
   }
 
+  // The inflation verdict is no longer derived from these temperatures (#21) -- it is
+  // pushed in from the IMU gate's latch, which can flip while the rounded integer temps
+  // sit still (evidence decaying on neutral frames, or a corner latching just as its
+  // reading settles). Without this the delta bars would keep painting a stale verdict.
+  if (latchedInflation != lastLatchedInflation) {
+    changed = true;
+    lastLatchedInflation = latchedInflation;
+  }
+
       bool rectsDrawn = false;
     int bandW = width / 3;
 
@@ -110,46 +129,57 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
 
 
     if (((!textOnly) && (force || crossedThreshold)) || (textOnly && crossedThreshold)){
-      tft.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
+      display.fillRect(x-bufferPix, y-bufferPix, width+(bufferPix*2), height+(bufferPix*2), ST77XX_BLACK);
 
       // fill three vertical bands
       for (int i = 0; i < 3; i++) {
           int bx = x + i * bandW;
           int bw = bandW; 
           lastSectionFillColors[i] = sectionFillColors[i];
-          tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+          display.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+          //display.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
       }       
 
       // draw outer outline
-      //tft.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
+      //display.drawRoundRect(x, y, width, height, 8, ST77XX_WHITE);
       rectsDrawn=true;
       drawsSinceForce=0;
     }
 
      
-    if (showSegmentDeltas){
-      int outer = 2; 
+    // Segment-delta classification (story 08 / issue #9): compute the per-band delta
+    // color unconditionally so the NBP instrumentation stream can ship the real,
+    // displayed over/under/alignment color for the renderer even when the on-screen
+    // overlay toggle is off. Only the painting of the delta rects stays gated by
+    // showSegmentDeltas below.
+    {
+      int outer = 2;
       int inner = 0;
       if (tireIndex == 0 || tireIndex == 2){
         outer = 0;
         inner = 2;
-      }      
+      }
       int center = 1;
       float avgEdge = (float)(sectionTemps[outer]+sectionTemps[inner]) / 2.0f;
-      float delta = avgEdge-sectionTemps[center]; // First measure for inflation delta
-      float minInflationDelta = avgEdge * (minInflationDeltaPct/100.0f);
-      if (delta >= minInflationDelta){
+      float delta;
+      // Inflation verdict comes from the IMU gate's per-tire latch now (#21), not from a
+      // fresh comparison here. Same underlying test (edge vs centre against Inflation
+      // Delta %), but evaluated only on captured straight-line frames and held until the
+      // evidence decays -- so these bars stop flipping every time the car loads up.
+      // -1 = edges hot (under-inflation), +1 = centre hot (over-inflation).
+      if (latchedInflation < 0){
         currentDeltaColors[outer] = highDeltaColor;
         currentDeltaColors[center] = lowDeltaColor;
         currentDeltaColors[inner] = highDeltaColor;
-      }else if (delta <= minInflationDelta*-1)
+      }else if (latchedInflation > 0)
       {
         currentDeltaColors[outer] = lowDeltaColor;
         currentDeltaColors[center] = highDeltaColor;
         currentDeltaColors[inner] = lowDeltaColor;
       }else{
-        // If no inflation delta tripped, measure for alignment delta
+        // No inflation verdict latched: fall back to the alignment check, which stays
+        // instantaneous. It has no dwell model of its own, and camber wear is a slow
+        // steady signal rather than something a single corner can manufacture.
         delta = sectionTemps[outer] - sectionTemps[inner];
         float minAlignmentDelta = avgEdge * (minAlignmentDeltaPct/100.0f);
         if (delta >= minAlignmentDelta){
@@ -166,44 +196,107 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
           currentDeltaColors[inner] = normalDeltaColor;
         }
       }
-      for (int i = 0; i < 3; i++) {
-        if (rectsDrawn || currentDeltaColors[i] != lastDeltaColors[i]){
-          lastDeltaColors[i] = currentDeltaColors[i];
-          int bx = x + i * bandW;
-          int bw = bandW; 
-          int bandH = height/8;
-          int startY = (y+height) - (bandH *2);
-          tft.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
-          //tft.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
-          //tft.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+      if (showSegmentDeltas){
+        for (int i = 0; i < 3; i++) {
+          if (rectsDrawn || currentDeltaColors[i] != lastDeltaColors[i]){
+            lastDeltaColors[i] = currentDeltaColors[i];
+            int bx = x + i * bandW;
+            int bw = bandW;
+            int bandH = height/8;
+            int startY = (y+height) - (bandH *2);
+            display.fillRect(bx, startY, bw, bandH,  currentDeltaColors[i]);
+            //display.fillRoundRect(bx, y, bw, height, 8, sectionFillColors[i]);
+            //display.drawRoundRect(bx, y, bw, height, 8, sectionTextColors[i]);
+          }
         }
-      }       
+      }
     }
   
 
     // draw each temperature string center-aligned in its band
     
-    tft.setFont(&FreeMonoBold18pt7b);
-    tft.setTextSize(1);
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setTextSize(1);
 
     for (int i = 0; i < 3; i++) {
       if (sectionChanged[i] || true){
         char buf[8];
 
         if (!rectsDrawn && !textOnly){
-          // Redraw the last temp with background color
-          tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);    
-          printTemp(lastTemps[i], i, bandW, textOnly);
+          // Erase the previous reading by repainting it in the band fill colour. The
+          // shadow has to be erased too, at the same +2/+2 offset it was drawn at --
+          // otherwise every reading that changes without crossing a colour threshold
+          // (the common case at 1 Hz) leaves black specks trailing the old digits.
+          //
+          // Repainting is the only way to erase here: FreeMonoBold18pt7b is a GFXfont,
+          // and Adafruit_GFX::drawChar ignores the background colour for custom fonts --
+          // it draws set pixels only. There is no opaque-background shortcut available.
+          printTemp(lastTemps[i], i, bandW, sectionFillColors[i], sectionFillColors[i], true);
         }
 
-        uint16_t textColor = (textOnly) ? ST77XX_BLACK : sectionTextColors[i];
-        tft.setTextColor(textColor, sectionFillColors[i]);    
-        String tempString = printTemp(sectionTemps[i], i, bandW, false);
+        String tempString = printTemp(sectionTemps[i], i, bandW,
+                                      sectionTextColors[i], ST77XX_BLACK, true);
 
         lastTemps[i] = sectionTemps[i];
       }     
     }
   }
+
+  // Per-tire dwell bar (#21). Shows how much evidence this corner has accumulated toward
+  // an inflation verdict, so the dwell is tunable by eye instead of by guesswork: the fill
+  // grows from the centre while the corner reads over/under on captured frames, freezes
+  // mid-corner (the gate stops feeding it), and leaks back on neutral ones. Reaching a
+  // tick latches the verdict and colours the segment bars above.
+  //
+  // Drawn OUTSIDE the `changed || force` block on purpose -- the score moves continuously
+  // while the temperatures may sit still for many seconds, and a frozen bar would be
+  // read as "no evidence" rather than "not repainted".
+  {
+    const int dbH  = 4;
+    // Hug the edge facing the IMU g bar in the centre gutter, so all five bars read as one
+    // instrument: FRONT tires put it at the BOTTOM of the tile, REAR tires at the TOP.
+    // Both land 2 px from that edge, mirrored about the gutter. Anchoring both to the
+    // bottom left the rear bars stranded a whole tile-height from the thing they relate to.
+    // Corner order is 0=FL, 1=FR, 2=RL, 3=RR, so <2 is the front axle.
+    //
+    // The clearance is real rather than lucky: 18pt bold digits are 23 px of ink and the
+    // outer bands are shifted up by textHeight+7, putting their text at y+12..y+35, while
+    // the delta bars occupy y+79..y+91. The first 12 and last 13 rows of the tile are free.
+    const bool isFront = (tireIndex < 2);
+    const int dbY  = isFront ? (y + height - 6) : (y + 2);
+    const int half = width / 2;
+    const int dbCx = x + half;
+
+    if (dwellMax > 0 && getShowGateBar()) {
+      if (rectsDrawn || !dwellBarDrawn || dwellScore != lastDwellScore) {
+        // Black track repainted every time, which also erases the previous fill -- the
+        // background here is the band colour, so there is nothing simpler to restore to.
+        display.fillRect(x, dbY, width, dbH, ST77XX_BLACK);
+
+        long mag = (dwellScore < 0) ? -dwellScore : dwellScore;
+        int  len = (int)(((long)half * mag) / dwellMax);
+        if (len > half) len = half;
+        if (len > 0) {
+          if (dwellScore > 0) display.fillRect(dbCx, dbY, len, dbH, highDeltaColor);
+          else                display.fillRect(dbCx - len, dbY, len, dbH, lowDeltaColor);
+        }
+
+        // Latch marks last so they stay legible once the fill passes them.
+        int tick = (int)(((long)half * dwellLatch) / dwellMax);
+        display.drawFastVLine(dbCx - tick, dbY, dbH, 0x7BEF);
+        display.drawFastVLine(dbCx + tick, dbY, dbH, 0x7BEF);
+
+        lastDwellScore = dwellScore;
+        dwellBarDrawn  = true;
+      }
+    } else if (dwellBarDrawn) {
+      // Turned off (or no gate data): give the strip back to the band colours.
+      for (int i = 0; i < 3; i++)
+        display.fillRect(x + i * bandW, dbY, bandW, dbH, sectionFillColors[i]);
+      dwellBarDrawn = false;
+    }
+  }
+
   if (shouldResetThreshold){
     shouldResetThreshold=false;
     if (initialized) crossedThreshold = false;
@@ -212,7 +305,15 @@ void ThreeSectionTire::draw(bool force, bool textOnly) {
   //USBSerial.println("");
 }
 
-String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline){
+// Draw one band's reading, optionally with a drop shadow offset +2/+2.
+//
+// Colours are explicit parameters rather than pre-set by the caller, because this is used
+// both to draw a reading and to erase the previous one, and the erase pass needs the shadow
+// painted in the band fill colour while the draw pass needs it black. The older shape --
+// caller calls setTextColor(), this function overrides it inside the shadow branch -- could
+// not express the erase case at all.
+String ThreeSectionTire::printTemp(int temp, int i, int bandW,
+                                   uint16_t glyphColor, uint16_t shadowColor, bool drawShadow){
       
     String tempString = String(temp) ;//+ (char)0xF7 + tempUnit;
     uint16_t textWidth, textHeight;    
@@ -220,7 +321,7 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int extraYBuffer = 7;
     int extraXBuffer = -3;
 
-    tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
+    display.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
     int xShift = 0;
     int xShiftDir = 0;
@@ -241,15 +342,15 @@ String ThreeSectionTire::printTemp(int temp, int i, int bandW, bool drawOutline)
     int yMod = (i==0 || i==2)? ((textHeight+extraYBuffer)*yDir):0;
     int startY = (y + ((height+textHeight) / 2))+yMod;// - (textHeight / 2);
 
-    if (drawOutline){
-      tft.setTextColor(sectionFillColors[i], sectionFillColors[i]);   
-      tft.setCursor(startX+2, startY+2);
-      tft.println(tempString);
-      tft.setTextColor(sectionTextColors[i], sectionFillColors[i]);   
+    if (drawShadow){
+      display.setTextColor(shadowColor, sectionFillColors[i]);
+      display.setCursor(startX+2, startY+2);
+      display.println(tempString);
     }
 
-    tft.setCursor(startX, startY);
-    tft.println(tempString);
+    display.setTextColor(glyphColor, sectionFillColors[i]);
+    display.setCursor(startX, startY);
+    display.println(tempString);
     return tempString;
 }
 

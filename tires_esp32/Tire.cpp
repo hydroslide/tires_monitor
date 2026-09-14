@@ -1,7 +1,8 @@
 #include "Tire.h"
+#include "DisplayBase.h"
 #include <Fonts/FreeMonoBold24pt7b.h>
 
-extern Adafruit_ST7789 tft;
+extern DisplayBase& display;
 extern HWCDC USBSerial;
 
 Tire::Tire() {}
@@ -18,11 +19,11 @@ void Tire::draw(bool force, bool textOnly) {
 
         int radius = 20;
         //USBSerial.println("Before fillRect");        
-        if ((!textOnly) && (force || crossedThreshold)) tft.fillRoundRect(x, y, width, height, radius, fillColor);
+        if ((!textOnly) && (force || crossedThreshold)) display.fillRoundRect(x, y, width, height, radius, fillColor);
         //USBSerial.println("Before printTemp");
         printTemp();
         //USBSerial.println("Before drawRoundRect");
-        if ((!textOnly) && (force || crossedThreshold)) tft.drawRoundRect(x, y, width, height, radius, outlineColor);
+        if ((!textOnly) && (force || crossedThreshold)) display.drawRoundRect(x, y, width, height, radius, outlineColor);
     }
 }
 
@@ -35,21 +36,21 @@ void Tire::printTemp() {
     uint16_t textWidth, textHeight;
     int16_t c_x, c_y;
     
-    tft.setFont(nullptr);
-    tft.setTextSize(4);
-    tft.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
+    display.setFont(nullptr);
+    display.setTextSize(4);
+    display.getTextBounds(tempString, 0, 0, &c_x, &c_y, &textWidth, &textHeight);
 
     int startX = x + (width - textWidth) / 2;
     int startY = y + (height / 2) - (textHeight / 2);
-    tft.setCursor(startX, startY);
-    tft.setTextColor(textColor, fillColor);
+    display.setCursor(startX, startY);
+    display.setTextColor(textColor, fillColor);
 
     // tft.setFont(&FreeMonoBold24pt7b);
     // tft.setTextSize(1);
     // tft.fillRect(startX, startY, textWidth, textHeight, fillColor);
     // tft.println(tempString);
 
-    tft.println(tempString);
+    display.println(tempString);
 
     lastTemp = temperature;
 }

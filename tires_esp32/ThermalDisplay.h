@@ -2,7 +2,7 @@
 #define THERMALDISPLAY_H
 
 #include <Arduino.h>
-#include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 #include <Arduino_GFX_Library.h>
 #include "TempReader.h"
 #include "Wheels.h"
@@ -16,7 +16,7 @@
  * of a ST7789 display.
  *
  * Constructor parameters:
- *  - displayTFT: reference to an initialized Adafruit_ST7789 object
+ *  - displayTFT: reference to an initialized DisplayBase object
  *  - areaX, areaY: upper‐left corner (in pixels) of the region on the 280×240 screen
  *  - areaW, areaH: width and height (in pixels) of the region to update (e.g. 240×180)
  *
@@ -50,7 +50,7 @@ private:
     
     static constexpr uint16_t OFFSET_LINE_COLOR = 0xF81F;
 
-    Adafruit_ST7789 &tft;   // reference to the TFT display object
+    DisplayBase &display;   // reference to the display object
     static uint16_t *framebuf;     // dynamically allocated areaW×areaH RGB565 buffer
     int areaX, areaY;       // upper-left origin of the update region
     int areaW, areaH;       // width/height of the update region
@@ -92,6 +92,10 @@ private:
     static uint16_t interpolate565(uint16_t c1, uint16_t c2, float t);
 
     void drawPixelOffsets(int _tempIndex);
+    // Draw one crop guide at screen x, clamped into the image rectangle. `armed` marks the
+    // value under edit in offset-setup mode: it is drawn wider, and skipped entirely on the
+    // blink's dark half.
+    void drawOffsetGuide(int x, bool armed);
 
         // ---- HSV/RGB helpers (keep interpolation saturated) ----
     static inline void rgb565_to_888(uint16_t c, uint8_t& r,uint8_t& g,uint8_t& b) {
@@ -118,13 +122,13 @@ public:
     /**
      * Constructor
      *
-     * @param displayTFT   Reference to an already-initialized Adafruit_ST7789 instance
+     * @param displayTFT   Reference to an already-initialized DisplayBase instance
      * @param areaX        X coordinate of upper-left corner of update region
      * @param areaY        Y coordinate of upper-left corner of update region
      * @param areaW        Width (in pixels) of update region (e.g. 240)
      * @param areaH        Height (in pixels) of update region (e.g. 180)
      */
-    ThermalDisplay(Adafruit_ST7789 &displayTFT, int areaX, int areaY, int areaW, int areaH);
+    ThermalDisplay(DisplayBase &displayTFT, int areaX, int areaY, int areaW, int areaH);
 
     /** Destructor frees the allocated frame buffer. */
     ~ThermalDisplay();
@@ -154,6 +158,26 @@ public:
     static void setTemperatureRangeF(int minTemp, int idealTemp, int maxTemp);
     static bool useGradient;
     static bool showPixelOffsets;
+
+    // ─── interactive crop-offset setup (#23) ────────────
+    // Set by OffsetSetup while that mode owns the screen. Public statics rather than a
+    // setter pair to match showPixelOffsets / useGradient above -- this class has always
+    // taken its display-wide configuration that way.
+    //
+    // While setupActive, every instance: never stretch-crops (a guide drawn over an
+    // already-cropped image tells you nothing), draws BOTH guides even at offset 0, and
+    // blinks the one value being edited.
+    static bool   setupActive;
+    static int8_t setupCorner;     // armed corner 0..3, or -1 for "nothing armed"
+    static bool   setupRightSide;  // which edge of setupCorner is armed
+    static bool   setupBlinkOn;    // the armed guide's blink phase
+
+    // setupActive used to mean two things at once: "show the full uncropped frame" AND
+    // "draw the crop guides unconditionally". Set Camera Degrees (#31) wants the first
+    // without the second -- you are judging the shape of the whole frame, and a pair of
+    // magenta lines over it is clutter with nothing to say. LensSetup clears this on
+    // entry and restores it on exit; OffsetSetup leaves it alone.
+    static bool   setupGuides;
 
 };
 

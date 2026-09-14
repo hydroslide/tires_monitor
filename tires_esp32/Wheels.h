@@ -1,7 +1,7 @@
 #ifndef WHEELS_H
 #define WHEELS_H
 
-#include <Adafruit_ST7789.h>
+#include "DisplayBase.h"
 #include <Adafruit_GFX.h>
 #include "Tire.h"
 #define PURPLE 0xE01F
@@ -90,7 +90,27 @@ struct TireTemps {
     bool rlIsActive = true;
     bool rrIsActive = true;
 
+    // Instrumentation accessor (story 08 / issue #9). For a 3-section (camera) corner,
+    // fills fill[3]/delta[3] with the per-band RGB565 colors the display computed and
+    // returns true; returns false for a single-sensor corner (no bands). Corner order
+    // matches the firmware: 0=FL, 1=FR, 2=RL, 3=RR. Uses the fl3/fr3/rl3/rr3 flags to
+    // decide the concrete type (no RTTI on this build).
+    bool cornerColors(int corner, uint16_t fill[3], uint16_t delta[3]) const;
+
+    // Latched per-corner inflation verdict from the IMU gate (#21): +1 over, -1 under,
+    // 0 none. Replaces the instantaneous comparison ThreeSectionTire used to run for
+    // itself, so the segment delta bars show the gated, dwelled answer.
+    void setInflationVerdict(int corner, int8_t verdict);
+
+    // Raw signed evidence score for the per-corner dwell bar: |score| climbs toward
+    // `latch` to trip the verdict and saturates at `max`. Both bounds are passed in
+    // rather than assumed so the bar rescales when the Dwell setting changes.
+    void setDwellProgress(int corner, long score, long latch, long max);
+
 private:
+    // Corner index -> ThreeSectionTire, or nullptr if that corner is single-sensor.
+    ThreeSectionTire* cameraCorner(int corner) const;
+
     Tire *frontLeft, *frontRight, *rearLeft, *rearRight;
 
 
