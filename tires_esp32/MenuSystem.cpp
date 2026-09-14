@@ -23,9 +23,12 @@ extern HWCDC USBSerial;
 // window and its override toggle. Same hazard in its most literal form: those bytes still
 // hold a pre-#14 save's streetMax / trackMin / trackIdeal / trackMax, so without a bump a
 // stale trackMax=180 at 18 would load as "override on" and a stale trackMin=100 at 14 as
-// the Street ideal -- plausible-looking numbers nobody typed.)
+// the Street ideal -- plausible-looking numbers nobody typed. #31 then claimed 34, 35 and
+// 36 for the lens correction; the same hazard again, and here the stale byte is actively
+// dangerous rather than merely wrong -- an uncleared 0xFF at 34 loads as a 255-degree
+// field of view, and the re-projection degenerates as the FOV approaches 180.)
 static const uint16_t SETTINGS_MAGIC_ADDR = EEPROM_SIZE - 1; // 255; above all binding addrs
-static const uint8_t  SETTINGS_MAGIC      = 0xA9;
+static const uint8_t  SETTINGS_MAGIC      = 0xAA;
 
 // Forward declarations of recursive helpers
 static void saveMenuToEEPROMHelper(const MenuItem* menu, uint8_t count);

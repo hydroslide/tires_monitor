@@ -51,6 +51,7 @@ bool   ThermalDisplay::setupActive    = false;
 int8_t ThermalDisplay::setupCorner    = -1;
 bool   ThermalDisplay::setupRightSide = false;
 bool   ThermalDisplay::setupBlinkOn   = true;
+bool   ThermalDisplay::setupGuides    = true;   // cleared by LensSetup only (#31)
 
 uint16_t ThermalDisplay::camPalette[256];
 int      ThermalDisplay::lenCold;
@@ -501,9 +502,21 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
         for (int camX = xBegin; camX < xFinal; camX++) {
             const int idxFlat = camY * CAMERA_WIDTH + camX;
 
-            int raw = temps[idxFlat];
-            uint8_t  ci    = getColorIndexForTemp(raw);
-            uint16_t color = camPalette[ci];
+            // A pixel the lens correction has no source data for is painted BLACK, never
+            // run through the palette (#31). getColorIndexForTemp() clamps its input into
+            // the threshold range, so every possible int comes back as a real temperature
+            // colour -- a placeholder value would render as a confident reading. Cold-end
+            // navy would read as "cold background"; hot-end (0xFF9F, near-white) would
+            // read as a scorching tire. Black is already this display's "nothing here"
+            // (it is what a corner with no camera shows), and it is in no palette.
+            uint16_t color;
+            if (!TempReader::lensPixelValid(idxFlat)) {
+                color = ST77XX_BLACK;
+            } else {
+                int raw = temps[idxFlat];
+                uint8_t ci = getColorIndexForTemp(raw);
+                color = camPalette[ci];
+            }
 
             // Compute scaled block in areaW×areaH
             // If stretching, remap localX (camX - leftOff) across cropW → full areaW.
@@ -526,8 +539,9 @@ void ThermalDisplay::updateDisplay(const int temps[CAMERA_WIDTH * CAMERA_HEIGHT]
     display.pushPixels(areaX, areaY, areaW, areaH, framebuf, areaW * areaH);
 
     // When not stretching (i.e., showPixelOffsets == true, or offset setup owns the screen),
-    // draw the guide lines on top.
-    if (showPixelOffsets || setupActive)
+    // draw the guide lines on top. setupGuides is the one exception: Set Camera Degrees
+    // (#31) borrows setupActive for its full-frame view but wants no guides over it.
+    if ((showPixelOffsets || setupActive) && setupGuides)
         drawPixelOffsets(_tempIndex);
 }
 

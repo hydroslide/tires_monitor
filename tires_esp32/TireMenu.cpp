@@ -3,10 +3,11 @@
 #include "TireProfiles.h"
 #include "TempReader.h"
 #include "OffsetSetup.h"
+#include "LensSetup.h"
 
 extern MenuRenderer menuRenderer;
-// The live reader, owned by the sketch. Only "Set Offsets" reads it here, and only to ask
-// whether any corner has a camera worth aiming (#23).
+// The live reader, owned by the sketch. Only "Set Offsets" (#23) and "Set Camera Degrees"
+// (#31) read it here, and only to ask whether any corner has a camera worth aiming.
 extern TempReader* tempReader;
 
 // ----------------------------------------------------
@@ -87,6 +88,23 @@ static bool useThermalGradient = true;
 static bool testEnabled = true;
 static bool showPixelOffsets = true;
 static bool highFrequencyUpdates = false;
+
+// -- Fisheye lens correction (#31) --
+// Device-wide, not per-profile: this describes the LENS, one rig with four identical
+// ones, so it has nothing to do with which tire is fitted.
+//
+// lensFovDegrees is the field of view across the 32-pixel width, fed straight into the
+// re-projection. 110 is the wide-angle MLX90640's datasheet figure and the right place to
+// start, but the real lens is not exactly equidistant -- which is why the value is tunable
+// from the car via "Set Camera Degrees" rather than being a constant.
+//
+// lensFitToView chooses what happens to the rows the correction has no data for: off
+// letterboxes them black (honest, and it shows you what the correction is costing), on
+// squashes the image vertically to fill the frame (keeps lines straight, drops aspect
+// ratio). Defaults OFF so the cost is visible while you are still finding the FOV.
+static bool    lensCorrectEnabled = true;
+static uint8_t lensFovDegrees     = 110;
+static bool    lensFitToView      = false;
 static bool showSegmentDeltas = false;
 static uint8_t minInflationDeltaPct = 10;
 static uint8_t minAlignmentDeltaPct = 15;
@@ -284,6 +302,43 @@ static MenuValueBinding showPixelOffsetsBinding = {
     0,
     0,
     39,
+    nullptr,
+    0
+};
+
+// Lens correction (#31). EEPROM 34/35/36, out of the run of bytes #15 freed and #20 took
+// 32/33 from. No earlier firmware ever WROTE these, and loadMenuFromEEPROMHelper() copies
+// stored bytes in verbatim with no min/max clamping -- a stale 0xFF at 34 would land as a
+// 255-degree field of view and build a degenerate map on the first boot. SETTINGS_MAGIC is
+// bumped alongside so the block re-seeds from the compiled-in defaults instead.
+static MenuValueBinding lensCorrectEnabledBinding = {
+    VALUE_BOOL,
+    &lensCorrectEnabled,
+    nullptr,
+    0,
+    0,
+    35,
+    nullptr,
+    0
+};
+static MenuValueBinding lensFovDegreesBinding = {
+    VALUE_BYTE,
+    &lensFovDegrees,
+    nullptr,
+    60,    // below this the correction is doing nothing worth the resample
+    140,   // above this the centre is de-magnified >2.2x and a fifth of the frame is dead;
+           // the map degenerates entirely at 180 (rectilinear focal length -> 0)
+    34,
+    nullptr,
+    0
+};
+static MenuValueBinding lensFitToViewBinding = {
+    VALUE_BOOL,
+    &lensFitToView,
+    nullptr,
+    0,
+    0,
+    36,
     nullptr,
     0
 };
@@ -575,11 +630,28 @@ static MenuItem inflationCamberMenu[] = {
 // have moved to Inflation & Camber. What genuinely remains is presentation: how bright the
 // screen is at night, how the thermal image is coloured, whether the crop guides are drawn
 // over it, and how often the tire display repaints.
+// Interactive lens setup action (#31), defined in section 6.
+static void doSetCameraDegrees();
+
+// The four lens items (#31) join it on the same "device-wide, so it lives here" rule that
+// already put Show Offsets here rather than next to the per-profile offset values. They
+// are not purely presentation -- the correction changes measured band temperatures, not
+// just the picture -- but the root menu is an exact 9/9 fit against MenuRenderer's
+// viewport and a 10th root item brings the scrollbar back, so a "Camera" root submenu
+// would have to displace something.
+//
+// This menu is now 8 of 9 rows. The NEXT item added here brings the scrollbar back, at
+// which point the four lens items should nest into a "Lens" submenu rather than anything
+// being displaced.
 static MenuItem displayMenu[] = {
     { "Night Brightness", MENU_VALUE, nullptr, nullptr, 0, &nightBrightnessBinding      },
     { "Thermal Gradient", MENU_VALUE, nullptr, nullptr, 0, &useThermalGradientBinding   },
     { "Show Offsets",     MENU_VALUE, nullptr, nullptr, 0, &showPixelOffsetsBinding     },
-    { "Hi Freq Updates",  MENU_VALUE, nullptr, nullptr, 0, &highFrequencyUpdatesBinding }
+    { "Hi Freq Updates",  MENU_VALUE, nullptr, nullptr, 0, &highFrequencyUpdatesBinding },
+    { "Lens Correct",     MENU_VALUE, nullptr, nullptr, 0, &lensCorrectEnabledBinding   },
+    { "Camera Degrees",   MENU_VALUE, nullptr, nullptr, 0, &lensFovDegreesBinding       },
+    { "Fit to View",      MENU_VALUE, nullptr, nullptr, 0, &lensFitToViewBinding        },
+    { "Set Camera Degrees", MENU_ACTION, doSetCameraDegrees, nullptr, 0, nullptr        }
 };
 
 // Per-profile camera crop offsets (#15). Mirrors the corner / Left-Right shape the old
@@ -861,6 +933,43 @@ bool consumeOffsetSetupRequest()
     offsetSetupRequested = false;
     return requested;
 }
+
+// -- Interactive camera field-of-view setup (#31) --
+// Same request/consume shape as Set Offsets above, and for the same reason: an action
+// callback runs several frames deep inside the gesture handler, where it can neither close
+// the menu nor start a mode that draws over the screen the handler is about to re-render.
+static bool lensSetupRequested = false;
+
+static void doSetCameraDegrees()
+{
+    // Nothing to judge without a camera image -- every corner is a single-point sensor, so
+    // there are no grooves to straighten. Say so rather than opening a black screen.
+    if (!LensSetup::hasEditableTargets(tempReader)) {
+        menuRenderer.setStatusMessage("No cameras");
+        return;
+    }
+    // Tuning a correction that is switched off would be swiping at a raw image and
+    // wondering why nothing moves.
+    if (!lensCorrectEnabled) {
+        menuRenderer.setStatusMessage("Lens Correct off");
+        return;
+    }
+    lensSetupRequested = true;
+}
+
+bool consumeLensSetupRequest()
+{
+    bool requested = lensSetupRequested;
+    lensSetupRequested = false;
+    return requested;
+}
+
+// The interactive mode is another editor for the same byte the "Camera Degrees" field
+// edits, so it reads and writes it through here rather than keeping a copy.
+uint8_t getLensFovDegrees()   { return lensFovDegrees; }
+void    setLensFovDegrees(uint8_t v) { lensFovDegrees = v; }
+bool    getLensCorrectEnabled() { return lensCorrectEnabled; }
+bool    getLensFitToView()      { return lensFitToView; }
 
 // -- Balance summary action (story 05) --
 static void doShowBalance()
