@@ -202,7 +202,16 @@ Config** is still what writes them to EEPROM. Full gesture map in
 
 ## Communication Protocol
 
-The system uses a custom NBP (Networked Binary Protocol) for wireless communication with external devices. This allows for remote monitoring of tire temperatures via WiFi or Bluetooth.
+The device broadcasts its data over HP Tuners' **Numeric Broadcast Protocol (NBP)** — the
+text protocol TrackAddict reads from external devices — on WiFi. Every read cycle
+(10 Hz) it sends **one `UPDATEALL` packet carrying every channel it knows**: the twelve
+active tire temperatures (`Front Left Tire O/C/I (degF)` …), the twelve raw surface
+temperatures (`… Tire Raw …`), the IMU sample, the per-corner inflation
+delta/threshold/verdict, the per-band fill and delta colors as integer `0xRRGGBB`
+values, and the session-summary channels (−1 until a session is sealed). The packet
+always has the same shape because an NBP client fixes its channel list on the first
+`UPDATEALL` it sees; the earlier firmware sent each group as its own `UPDATEALL`, so which
+columns TrackAddict logged was a race per session.
 
 ## License
 

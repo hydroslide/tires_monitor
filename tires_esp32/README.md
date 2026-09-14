@@ -51,7 +51,7 @@ The following libraries are required:
 - `Tire.h/cpp` - Implements individual tire display and behavior
 - `Wheels.h/cpp` - Manages the layout of four tires on the display
 - `TempReader.h/cpp` - Handles reading temperatures from MLX90614 sensors
-- `NBPProtocol.h/cpp` - Implements the Networked Binary Protocol for remote communication
+- `NBPProtocol.h/cpp` - Numeric Broadcast Protocol (HP Tuners NBP, TrackAddict's device-data format): one `UPDATEALL` per read cycle carrying every channel
 - `WifiSerial.h/cpp` - Provides WiFi communication capabilities
 - `TireMenu.h/cpp` - Defines menu structure and configuration options
 - `MenuSystem.h/cpp` - Implements the menu navigation system

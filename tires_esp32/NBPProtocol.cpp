@@ -1,15 +1,56 @@
 #include "NBPProtocol.h"
 #include "Wheels.h"
 #include "SessionManager.h"
+#include <string.h>
 
 // Constructor: Initialize with the provided Stream object
-NBPProtocol::NBPProtocol(Stream &serial) 
-    : serial(serial), lastTime(0) {}
+NBPProtocol::NBPProtocol(Stream &serial)
+    : serial(serial), lastTime(0), lastPublishMs(0), nChannels(0) {}
 
-// Sends an UPDATEALL packet containing all channels
+int NBPProtocol::findChannel(const char* name) const {
+    for (int i = 0; i < nChannels; i++)
+        if (strcmp(channels[i].name, name) == 0) return i;
+    return -1;
+}
+
+// Register on first sight, update thereafter. The registry is never reordered, so the
+// packet keeps one shape for the life of the session.
+void NBPProtocol::upsert(const char* name, const char* unit, float value, uint8_t decimals) {
+    int i = findChannel(name);
+    if (i < 0) {
+        if (nChannels >= MAX_CHANNELS) return;      // silently full; raise MAX_CHANNELS
+        i = nChannels++;
+        channels[i].name = name;
+        channels[i].unit = unit;
+    }
+    channels[i].value = value;
+    channels[i].decimals = decimals;
+}
+
+// One UPDATEALL for everything, rate-limited. Callers may invoke this from more than
+// one place per cycle; only the first within minIntervalMs sends.
+void NBPProtocol::publish(unsigned long minIntervalMs) {
+    if (nChannels == 0) return;
+    unsigned long now = millis();
+    if (lastPublishMs != 0 && (now - lastPublishMs) < minIntervalMs) return;
+    lastPublishMs = now;
+    sendUpdateAll();
+}
+
+// Writes one UPDATEALL packet carrying every registered channel.
 void NBPProtocol::sendUpdateAll() {
+    String data;
+    data.reserve(48 * nChannels);
+    for (int i = 0; i < nChannels; i++) {
+        const Channel& c = channels[i];
+        if (i) data += '\n';
+        data += '"'; data += c.name; data += '"';
+        if (c.unit[0]) { data += ",\""; data += c.unit; data += '"'; }
+        data += ':';
+        data += String(c.value, (unsigned int)c.decimals);
+    }
     sendPacketHeader("UPDATEALL");
-    sendData();
+    serial.println(data);
     sendPacketFooter();
 }
 
@@ -21,25 +62,15 @@ void NBPProtocol::sendMetadata(const char* type, const char* value) {
     serial.println(value);
 }
 
-// Adds a data channel with name, unit, and value
+// Registers or updates a data channel with name, unit, and value
 void NBPProtocol::addChannel(ChannelType channel, Unit unit, float value) {
-    if (data.length() > 0) data += "\n";
-    
-    const char* channelName = getChannelName(channel);
-    const char* unitName = getUnitName(unit);
-    
-    if (unit != Unit::None) {
-        data += "\"" + String(channelName) + "\",\"" + String(unitName) + "\":" + String(value, 2);
-    } else {
-        data += "\"" + String(channelName) + "\":" + String(value, 2);
-    }
+    upsert(getChannelName(channel), getUnitName(unit), value, 2);
 }
 
 void NBPProtocol::setAllTireTemps(const Wheels::TireTemps &fl,
                       const Wheels::TireTemps &fr,
                       const Wheels::TireTemps &rl,
                       const Wheels::TireTemps &rr, bool farenheit){
-    clearChannels();
     Unit tempUnit = (farenheit)? Unit::DegreesF:Unit::DegreesC;
     // Use the explicit section count to decide single- vs three-channel emission.
     // Previously a value of 0 in the middle band was overloaded as "single sensor",
@@ -73,15 +104,12 @@ void NBPProtocol::setAllTireTemps(const Wheels::TireTemps &fl,
         addChannel(ChannelType::RearRightTireC, tempUnit, rr.values[1]);
         addChannel(ChannelType::RearRightTireO, tempUnit, rr.values[2]);
     }
-    
-    sendUpdateAll();
 }
 
 void NBPProtocol::setRawTireTemps(const Wheels::TireTemps &fl,
                       const Wheels::TireTemps &fr,
                       const Wheels::TireTemps &rl,
                       const Wheels::TireTemps &rr, bool farenheit){
-    clearChannels();
     Unit tempUnit = (farenheit)? Unit::DegreesF:Unit::DegreesC;
     // Same single- vs three-channel decision and O/C/I ordering as the active set,
     // just under the distinct "... Raw" labels so both coexist in one log.
@@ -114,12 +142,10 @@ void NBPProtocol::setRawTireTemps(const Wheels::TireTemps &fl,
         addChannel(ChannelType::RearRightTireRawO, tempUnit, rr.values[2]);
     }
 
-    sendUpdateAll();
 }
 
-void NBPProtocol::sendIMU(float ax, float ay, float az,
+void NBPProtocol::setIMU(float ax, float ay, float az,
                           float gx, float gy, float gz, float lateralG) {
-    clearChannels();
     addChannel(ChannelType::AccelX, Unit::G, ax);
     addChannel(ChannelType::AccelY, Unit::G, ay);
     addChannel(ChannelType::AccelZ, Unit::G, az);
@@ -127,12 +153,27 @@ void NBPProtocol::sendIMU(float ax, float ay, float az,
     addChannel(ChannelType::GyroY, Unit::DegPerSec, gy);
     addChannel(ChannelType::GyroZ, Unit::DegPerSec, gz);
     addChannel(ChannelType::LateralG, Unit::G, lateralG);
-    sendUpdateAll();
 }
 
-void NBPProtocol::sendSessionSummary(const SessionSummary& s) {
+void NBPProtocol::presetSessionSummary(bool farenheit) {
+    Unit tempUnit = farenheit ? Unit::DegreesF : Unit::DegreesC;
+    static const ChannelType temps[] = {
+        ChannelType::SumFLPeak, ChannelType::SumFRPeak, ChannelType::SumRLPeak, ChannelType::SumRRPeak,
+        ChannelType::SumFLAvg,  ChannelType::SumFRAvg,  ChannelType::SumRLAvg,  ChannelType::SumRRAvg };
+    static const ChannelType pcts[] = {
+        ChannelType::SumFLWindow, ChannelType::SumFRWindow, ChannelType::SumRLWindow, ChannelType::SumRRWindow };
+    static const ChannelType plain[] = {
+        ChannelType::SumFLOver, ChannelType::SumFROver, ChannelType::SumRLOver, ChannelType::SumRROver,
+        ChannelType::SumWarmup, ChannelType::SumLength };
+    for (ChannelType c : temps) if (findChannel(getChannelName(c)) < 0) addChannel(c, tempUnit, -1.0f);
+    for (ChannelType c : pcts)  if (findChannel(getChannelName(c)) < 0) addChannel(c, Unit::Percent, -1.0f);
+    for (ChannelType c : plain) if (findChannel(getChannelName(c)) < 0) addChannel(c, Unit::None, -1.0f);
+    if (findChannel(getChannelName(ChannelType::SumFrontRear)) < 0) addChannel(ChannelType::SumFrontRear, tempUnit, -1.0f);
+    if (findChannel(getChannelName(ChannelType::SumLeftRight)) < 0) addChannel(ChannelType::SumLeftRight, tempUnit, -1.0f);
+}
+
+void NBPProtocol::setSessionSummary(const SessionSummary& s) {
     if (!s.valid) return;
-    clearChannels();
     Unit tempUnit = (s.unit == 'C') ? Unit::DegreesC : Unit::DegreesF;
 
     addChannel(ChannelType::SumFLPeak, tempUnit, (float)s.peak[0]);
@@ -162,36 +203,28 @@ void NBPProtocol::sendSessionSummary(const SessionSummary& s) {
                (s.warmupSec == 0xFFFF) ? -1.0f : (float)s.warmupSec);
     addChannel(ChannelType::SumLength, Unit::None, (float)s.durationSec);
 
-    sendUpdateAll();
 }
 
-// Append a raw "name":value line, matching addChannel's newline separator handling.
-void NBPProtocol::addNamedChannel(const char* name, const String& value) {
-    if (data.length() > 0) data += "\n";
-    data += "\"" + String(name) + "\":" + value;
-}
-
-// Convert an RGB565 color to a quoted "#RRGGBB" hex string channel. The 5/6/5 fields are
-// expanded to 8 bits (replicate the high bits) so full-scale reads as FF, not F8/FC.
-void NBPProtocol::addHexChannel(const char* name, uint16_t rgb565) {
+// Register an RGB565 color as an integer 0xRRGGBB channel. NBP values must be numeric
+// (a quoted "#RRGGBB" string is dropped by TrackAddict); 0xRRGGBB < 2^24 is exact in a
+// float, and RaceRender's enhanced objects take it as a color directly. The 5/6/5 fields
+// are expanded to 8 bits (replicate the high bits) so full-scale reads as FF, not F8/FC.
+void NBPProtocol::addColorChannel(const char* name, uint16_t rgb565) {
     uint8_t r5 = (rgb565 >> 11) & 0x1F;
     uint8_t g6 = (rgb565 >> 5)  & 0x3F;
     uint8_t b5 =  rgb565        & 0x1F;
-    uint8_t r = (r5 << 3) | (r5 >> 2);
-    uint8_t g = (g6 << 2) | (g6 >> 4);
-    uint8_t b = (b5 << 3) | (b5 >> 2);
-    char buf[10];
-    snprintf(buf, sizeof(buf), "\"#%02X%02X%02X\"", r, g, b);
-    addNamedChannel(name, String(buf));
+    uint32_t r = (r5 << 3) | (r5 >> 2);
+    uint32_t g = (g6 << 2) | (g6 >> 4);
+    uint32_t b = (b5 << 3) | (b5 >> 2);
+    upsert(name, "", (float)((r << 16) | (g << 8) | b), 0);
 }
 
-void NBPProtocol::sendInstrumentation(const float delta[4], const float threshold[4],
+void NBPProtocol::setInstrumentation(const float delta[4], const float threshold[4],
                                       const int8_t verdict[4], int8_t overall,
                                       const bool cornerIsCamera[4],
                                       const uint16_t fillColors[4][3],
                                       const uint16_t deltaColors[4][3],
                                       bool farenheit) {
-    clearChannels();
     Unit tempUnit = (farenheit) ? Unit::DegreesF : Unit::DegreesC;
 
     // Per-corner numeric verdict channels, enum-ordered FL/FR/RL/RR.
@@ -219,15 +252,14 @@ void NBPProtocol::sendInstrumentation(const float delta[4], const float threshol
         if (!cornerIsCamera[c]) continue;        // single-sensor corner: no band data
         addChannel(dCh[c], tempUnit, delta[c]);
         addChannel(tCh[c], tempUnit, threshold[c]);
-        addChannel(vCh[c], Unit::None, (float)verdict[c]);
+        upsert(getChannelName(vCh[c]), "", (float)verdict[c], 0);
         for (int i = 0; i < 3; i++) {
-            addHexChannel(fillNames[c][i], fillColors[c][i]);
-            addHexChannel(deltaNames[c][i], deltaColors[c][i]);
+            addColorChannel(fillNames[c][i], fillColors[c][i]);
+            addColorChannel(deltaNames[c][i], deltaColors[c][i]);
         }
     }
 
-    addChannel(ChannelType::OverallVerdict, Unit::None, (float)overall);
-    sendUpdateAll();
+    upsert(getChannelName(ChannelType::OverallVerdict), "", (float)overall, 0);
 }
 
 void NBPProtocol::sendBootMetadata(const BootMetadata& m) {
@@ -256,18 +288,16 @@ void NBPProtocol::sendBootMetadata(const BootMetadata& m) {
 
 void NBPProtocol::setTireTemps(float frontLeftTemp, float frontRightTemp, float rearLeftTemp, float rearRightTemp, bool farenheit) {
     
-    clearChannels();
     Unit tempUnit = (farenheit)? Unit::DegreesF:Unit::DegreesC;
     addChannel(ChannelType::FrontLeftTire, tempUnit, frontLeftTemp);
     addChannel(ChannelType::FrontRightTire, tempUnit, frontRightTemp);
     addChannel(ChannelType::RearLeftTire, tempUnit, rearLeftTemp);
     addChannel(ChannelType::RearRightTire, tempUnit, rearRightTemp);
-    sendUpdateAll();
 }
 
-// Clears all added data channels
+// Drops every registered channel
 void NBPProtocol::clearChannels() {
-    data = "";
+    nChannels = 0;
 }
 
 // Sends the packet header
@@ -278,11 +308,6 @@ void NBPProtocol::sendPacketHeader(const char* packetType) {
     serial.print(packetType);
     serial.print(",");
     serial.println(timestamp, 3);
-}
-
-// Sends the data
-void NBPProtocol::sendData() {
-    serial.println(data);
 }
 
 // Sends the packet footer

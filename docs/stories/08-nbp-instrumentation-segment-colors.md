@@ -26,7 +26,7 @@ SHA) so a log is interpretable months later (§3.3).
 - **Temps logged both ways (story 03):** the active value (calculated when enabled)
   under the **original channel labels**, and raw as a **new, separate channel set**.
 - **Per-segment colors:** emit the segment fill color (temp/window) and the
-  over/under/alignment delta color per band as **hex** values the renderer applies
+  over/under/alignment delta color per band as **integer 0xRRGGBB** values the renderer applies
   directly — no re-derivation.
 - **IMU stream (story 02):** emit orientation-calibrated **accelerometer + gyro**
   data over NBP.
@@ -45,7 +45,7 @@ SHA) so a log is interpretable months later (§3.3).
 - [ ] Track-only channels (verdict / colors) follow Track mode; raw median / temp logging stays on in all modes.
 - [ ] Per-corner Delta/Threshold/Verdict + overall over/under channels present in the dump.
 - [ ] Temps logged both ways: calculated under original labels + raw as a separate channel set.
-- [ ] Per-segment colors emitted as **hex**, directly renderable.
+- [ ] Per-segment colors emitted as **integer 0xRRGGBB** (NBP values must be numeric; a quoted hex string is dropped by TrackAddict), directly renderable.
 - [ ] Orientation-calibrated accel + gyro emitted; sealed session summary emitted.
 - [ ] Boot metadata (offsets, thresholds, profile, ambient, firmware SHA) emitted.
 - [ ] Raw medians still present; existing `racerender.py` parsing not broken.

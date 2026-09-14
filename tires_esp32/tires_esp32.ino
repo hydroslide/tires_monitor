@@ -363,7 +363,7 @@ void doRunningMode(int time_delta)
     if (trackMode) computeInflationVotes(inflVotes);
     for (int t = 0; t < TIRE_COUNT; t++) imuGate.feedCondition(t, inflVotes[t]);
     if (!testMode && imuGate.isPresent()) {
-      nbp.sendIMU(imuGate.accelG(0), imuGate.accelG(1), imuGate.accelG(2),
+      nbp.setIMU(imuGate.accelG(0), imuGate.accelG(1), imuGate.accelG(2),
                   imuGate.gyroDps(0), imuGate.gyroDps(1), imuGate.gyroDps(2),
                   imuGate.lateralG());
     }
@@ -405,7 +405,7 @@ void doRunningMode(int time_delta)
                    fabsf(imuGate.gyroDps(0)) < 3.0f && fabsf(imuGate.gyroDps(1)) < 3.0f &&
                    fabsf(imuGate.gyroDps(2)) < 3.0f;
       if (sessionManager.pollAutoSeal(readDelta, getAutoSealStationary(), still)) {
-        if (!testMode) nbp.sendSessionSummary(sessionManager.summary());
+        if (!testMode) nbp.setSessionSummary(sessionManager.summary());
         fbState = FB_END; fbSetMs = millis();
       }
     }
@@ -513,9 +513,19 @@ void doRunningMode(int time_delta)
         }
         int8_t overall = (imuGate.alertState() == IMUGate::ALERT_OVER)  ?  1
                        : (imuGate.alertState() == IMUGate::ALERT_UNDER) ? -1 : 0;
-        nbp.sendInstrumentation(insDelta, insThresh, insVerdict, overall,
+        nbp.setInstrumentation(insDelta, insThresh, insVerdict, overall,
                                 insCam, fillCols, deltaCols,
                                 (wheels->getTempUnit() == 'F'));
+      }
+
+      // One UPDATEALL per read cycle carrying every channel the device knows (temps,
+      // raw temps, IMU, instrumentation, summary). TrackAddict fixes its channel list on
+      // the first UPDATEALL it sees, so the packet must always be the complete set; the
+      // per-set packets this replaced made the logged columns a race per session.
+      if (!testMode) {
+        static bool summaryPreset = false;
+        if (!summaryPreset) { nbp.presetSessionSummary(wheels->getTempUnit() == 'F'); summaryPreset = true; }
+        nbp.publish();
       }
 
           // WifiSerial
@@ -659,7 +669,7 @@ void setup()
 static void toggleSession(){
   if (sessionManager.isRunning()){
     sessionManager.end();
-    if (!testMode) nbp.sendSessionSummary(sessionManager.summary());
+    if (!testMode) nbp.setSessionSummary(sessionManager.summary());
     fbState = FB_END; fbSetMs = millis();
   } else {
     sessionManager.start(wheels->getTempUnit(),
